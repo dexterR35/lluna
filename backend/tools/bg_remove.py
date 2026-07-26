@@ -134,6 +134,7 @@ class BackgroundRemover:
         output_path: str,
         progress: ProgressCb = None,
         protect_mask_path: Optional[str] = None,
+        log: Optional[Callable[[str], None]] = None,
     ) -> str:
         """Image-only: remove BG and write transparent PNG."""
         def _p(v: int):
@@ -142,7 +143,12 @@ class BackgroundRemover:
 
         result = self.remove(input_path, progress=progress)
         if protect_mask_path:
-            result = apply_protect_mask(result, protect_mask_path)
+            result = apply_protect_mask(
+                result,
+                protect_mask_path,
+                source=input_path,
+                log=log,
+            )
             _p(97)
         out_dir = os.path.dirname(os.path.abspath(output_path))
         if out_dir:
@@ -155,12 +161,17 @@ class BackgroundRemover:
 def apply_protect_mask(
     rgba: Image.Image,
     mask: Union[str, np.ndarray, Image.Image],
+    source: Union[str, Image.Image, np.ndarray, None] = None,
+    log: Optional[Callable[[str], None]] = None,
 ) -> Image.Image:
     """
     Force-keep painted regions after rembg.
 
-    Painted pixels (mask > 0) are blended toward fully opaque so soft brush
-    edges stay natural. Mask is resized to the cutout size if needed.
+    BiRefNet/rembg never sees the mask — they cut the whole image first.
+    This step runs after cutout: where the keep-mask is white, restore the
+    original photo RGB and raise alpha so those pixels stay visible.
+
+    Soft brush edges blend RGB and alpha naturally.
     """
     out = rgba.convert("RGBA")
     arr = np.asarray(out).copy()
@@ -183,10 +194,25 @@ def apply_protect_mask(
     if not np.any(strength):
         return out
 
+    keep = strength > 1.0 / 255.0
+    if source is not None:
+        src_pil = BackgroundRemover._to_pil_rgb(source)
+        if src_pil.size != (w, h):
+            src_pil = src_pil.resize((w, h), Image.Resampling.LANCZOS)
+        src_rgb = np.asarray(src_pil, dtype=np.float32)
+        s3 = strength[..., np.newaxis]
+        rgb = arr[:, :, :3].astype(np.float32)
+        arr[:, :, :3] = np.clip(rgb * (1.0 - s3) + src_rgb * s3, 0.0, 255.0).astype(
+            np.uint8
+        )
+
     alpha = arr[:, :, 3].astype(np.float32)
     arr[:, :, 3] = np.clip(alpha + (255.0 - alpha) * strength, 0.0, 255.0).astype(
         np.uint8
     )
+    if log is not None:
+        pixels = int(np.count_nonzero(keep))
+        log(f"Protect mask applied: {pixels:,} px kept from original ({w}x{h})")
     return Image.fromarray(arr, "RGBA")
 
 
@@ -249,10 +275,11 @@ def run_bg_remove_job(
     if log:
         log(f"Device: {remover.device_label} | Model: {remover.mode.value}")
         if protect_mask_path:
-            log("Protect mask: keep painted areas opaque after cutout")
+            log("Protect mask: rembg first, then restore kept areas from original")
     return remover.process_to_file(
         input_path,
         output_path,
         progress=progress,
         protect_mask_path=protect_mask_path,
+        log=log,
     )

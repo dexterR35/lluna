@@ -419,6 +419,41 @@ def install_packages(py: Path, mode: str, torch_tag: str) -> None:
     pip_install(py, ["-r", str(ROOT / "requirements.txt")])
     # Ensure rembg is present (also listed in requirements.txt)
     pip_install(py, ["rembg>=2.0.60"])
+    # Select Object (SAM2 + Grounding DINO via Hugging Face transformers)
+    pip_install(py, ["transformers>=4.48.0", "huggingface_hub>=0.26.0"])
+
+
+def verify_python_packages(py: Path) -> None:
+    """Import-check runtime deps (including Select Object transformers APIs)."""
+    log("\nVerifying Python packages…")
+    script = r"""
+checks = [
+    ("torch", "import torch"),
+    ("transformers", "import transformers"),
+    ("huggingface_hub", "import huggingface_hub"),
+    ("Sam2Model", "from transformers import Sam2Model, Sam2Processor"),
+    (
+        "Grounding DINO",
+        "from transformers import AutoModelForZeroShotObjectDetection, AutoProcessor",
+    ),
+    ("rembg", "import rembg"),
+    ("onnxruntime", "import onnxruntime"),
+    ("cv2", "import cv2"),
+    ("PIL", "from PIL import Image"),
+]
+failed = []
+for name, stmt in checks:
+    try:
+        exec(stmt, {})
+        print(f"  OK {name}")
+    except Exception as e:
+        print(f"  FAIL {name}: {e}")
+        failed.append(name)
+if failed:
+    raise SystemExit("Missing or broken packages: " + ", ".join(failed))
+print("  All package checks passed.")
+"""
+    run([str(py), "-c", script])
 
 
 def verify_models() -> None:
@@ -548,6 +583,37 @@ else:
     run([str(py), "-c", script, str(ROOT)])
 
 
+def prefetch_select_object_defaults(py: Path) -> None:
+    """Install missing Select Object defaults only; skip models already on disk."""
+    log("\nSelect Object models (install missing only)…")
+    script = r"""
+import sys
+sys.path.insert(0, sys.argv[1])
+from backend.tools.select_object_models import (
+    PAIR_CATALOG,
+    PAIR_MEMBERS,
+    SelectObjectPairId,
+    is_pair_installed,
+    model_dir,
+    prefetch_on_install,
+)
+
+for info in PAIR_CATALOG:
+    pid = info.pair_id
+    if is_pair_installed(pid):
+        sam2, dino = PAIR_MEMBERS[pid]
+        print(f"  OK already present: {model_dir(sam2)} + {model_dir(dino)}")
+
+if not is_pair_installed(SelectObjectPairId.FAST):
+    print("  Downloading standard pair (SAM2 Tiny + DINO Tiny) …")
+prefetch_on_install()
+if is_pair_installed(SelectObjectPairId.FAST):
+    sam2, dino = PAIR_MEMBERS[SelectObjectPairId.FAST]
+    print(f"  OK {model_dir(sam2)} + {model_dir(dino)}")
+"""
+    run([str(py), "-c", script, str(ROOT)])
+
+
 def write_runtime(mode: str, torch_tag: str, gpu_name: str, compute_cap: str = "", total_vram_mb: float = 0.0) -> None:
     data = {
         "product": "Midgard",
@@ -628,6 +694,7 @@ def main() -> int:
         raise SystemExit(f"venv python missing: {py}")
 
     install_packages(py, mode, torch_tag or "cu118")
+    verify_python_packages(py)
     merge_script = (
         "import sys; sys.path.insert(0, %r); "
         "from install import verify_models; verify_models()"
@@ -641,6 +708,7 @@ def main() -> int:
 
     # Real-ESRGAN ×2 is mandatory on first install (×4 remains Settings-only)
     prefetch_enhance_x2(py)
+    prefetch_select_object_defaults(py)
 
     write_runtime(
         mode,

@@ -16,6 +16,7 @@ from backend.tools.concurrent import TaskExecutor
 from ui.component.utils.confirm_dialog import ask_confirm
 from ui.component.cards.bg_remove_model_manager import BgRemoveModelManager
 from ui.component.cards.enhance_model_manager import EnhanceModelManager
+from ui.component.cards.select_object_model_manager import SelectObjectModelManager
 from ui.component.cards.midgard_setting_cards import (
     MidgardCardGroup,
     MidgardHyperlinkCard,
@@ -99,6 +100,11 @@ class AdvancedSettingInterface(ScrollArea):
             self.enhance_models_group.addSettingCard(card)
         self.expandLayout.addWidget(self.enhance_models_group)
 
+        for card in self.select_object_model_manager.cards:
+            self.select_object_models_group.addSettingCard(card)
+        self.select_object_models_group.addSettingCard(self.select_object_more_complex)
+        self.expandLayout.addWidget(self.select_object_models_group)
+
         self.advanced_group.addSettingCard(self.save_directory)
         self.advanced_group.addSettingCard(self.check_update_on_startup)
         self.expandLayout.addWidget(self.advanced_group)
@@ -154,6 +160,35 @@ class AdvancedSettingInterface(ScrollArea):
         self.enhance_model_manager = EnhanceModelManager(self.enhance_models_group)
         self.enhance_model_manager.status_message.connect(self._on_enhance_model_status)
 
+        self.select_object_models_group = MidgardCardGroup(
+            tr["Setting"]["SelectObjectModelsSetting"],
+            self.contentColumn,
+            resettable=True,
+            subtitle=tr["Setting"]["SelectObjectModelsSettingDesc"],
+        )
+        self.select_object_model_manager = SelectObjectModelManager(
+            self.select_object_models_group
+        )
+        self.select_object_model_manager.status_message.connect(
+            self._on_select_object_model_status
+        )
+        self.select_object_model_manager.models_changed.connect(
+            self._sync_more_complex_switch
+        )
+        self.select_object_model_manager.busy_changed.connect(
+            self._on_select_object_install_busy
+        )
+        self.select_object_more_complex = MidgardSwitchCard(
+            configItem=config.selectObjectMoreComplex,
+            icon=FluentIcon.IOT,
+            title=tr["Setting"]["SelectObjectMoreComplex"],
+            content=tr["Setting"]["SelectObjectMoreComplexDesc"],
+            parent=self.select_object_models_group,
+        )
+        self.select_object_more_complex.checkedChanged.connect(
+            self._on_select_object_more_complex_changed
+        )
+
         self.advanced_group = MidgardCardGroup(
             tr["Setting"]["AdvancedSetting"],
             self.contentColumn,
@@ -172,6 +207,11 @@ class AdvancedSettingInterface(ScrollArea):
         )
         self._wire_section_reset(
             self.enhance_models_group, "enhance_models", "EnhanceModelsSetting"
+        )
+        self._wire_section_reset(
+            self.select_object_models_group,
+            "select_object_models",
+            "SelectObjectModelsSetting",
         )
         self._wire_section_reset(self.advanced_group, "advanced", "AdvancedSetting")
 
@@ -331,6 +371,9 @@ class AdvancedSettingInterface(ScrollArea):
             self.bg_remove_model_manager.refresh()
         elif section_id == "enhance_models":
             self.enhance_model_manager.refresh()
+        elif section_id == "select_object_models":
+            config.set(config.selectObjectMoreComplex, False)
+            self.select_object_model_manager.refresh()
         InfoBar.success(
             title=section_name,
             content=tr["Setting"]["ResetSectionDone"],
@@ -380,6 +423,59 @@ class AdvancedSettingInterface(ScrollArea):
         super().showEvent(event)
         self.bg_remove_model_manager.refresh()
         self.enhance_model_manager.refresh()
+        self.select_object_model_manager.refresh()
+        self._sync_more_complex_switch()
+
+    def _on_select_object_install_busy(self, busy: bool):
+        self.select_object_more_complex.switchButton.setEnabled(
+            not busy and self._complex_pair_ready()
+        )
+
+    def _complex_pair_ready(self) -> bool:
+        from backend.tools.select_object_models import is_complex_pair_installed
+
+        return is_complex_pair_installed()
+
+    def _sync_more_complex_switch(self):
+        from backend.tools.select_object_models import is_complex_pair_installed
+
+        self.select_object_more_complex.setContent(
+            tr["Setting"]["SelectObjectMoreComplexDesc"]
+        )
+
+        ready = is_complex_pair_installed()
+        enabled = ready and not self.select_object_model_manager.is_busy
+        self.select_object_more_complex.switchButton.setEnabled(enabled)
+        if not ready and config.selectObjectMoreComplex.value:
+            config.set(config.selectObjectMoreComplex, False)
+            self.select_object_more_complex.setChecked(False)
+
+    def _on_select_object_more_complex_changed(self, checked: bool):
+        from backend.tools.select_object_models import is_complex_pair_installed
+
+        if checked and not is_complex_pair_installed():
+            config.set(config.selectObjectMoreComplex, False)
+            self.select_object_more_complex.blockSignals(True)
+            self.select_object_more_complex.setChecked(False)
+            self.select_object_more_complex.blockSignals(False)
+            InfoBar.warning(
+                title=tr["Setting"]["SelectObjectModelsSetting"],
+                content=tr["SelectObject"].get(
+                    "ComplexNeedsInstall",
+                    "Install the More complex models first.",
+                ),
+                duration=config.infoBarDurationMs,
+                parent=self,
+            )
+
+    def _on_select_object_model_status(self, message: str):
+        InfoBar.info(
+            title=tr["Setting"]["SelectObjectModelsSetting"],
+            content=message,
+            duration=config.infoBarDurationMs,
+            parent=self,
+        )
+        self._sync_more_complex_switch()
 
     def _on_bg_model_status(self, message: str):
         InfoBar.info(

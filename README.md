@@ -42,7 +42,7 @@ Everything runs locally. Output keeps the source resolution. Video jobs keep the
   - **Enhance** with Real-ESRGAN (2× default, 4× optional)
   - Multiple rembg / ONNX models (BiRefNet, U2-Net, IS-Net, …)
 - **Hardware acceleration** - CUDA (NVIDIA) when available; CPU otherwise; DirectML on Windows packages
-- **GUI** (Fluent / PySide6) + **CLI** for subtitle removal
+- **GUI** (Fluent / PySide6) + **CLI** for subtitle removal and image background cutouts
 - **Installer** (`install.py`) creates `midgardEnv`, picks CUDA/CPU, merges model parts, prefetches default BG/Enhance weights
 
 ---
@@ -178,10 +178,41 @@ midgardEnv\Scripts\python.exe backend\main.py -i input.mp4 -o output.mp4
 Options:
 
 ```text
+-t / --task remove-text                 (default)
 -i / --input PATH
 -o / --output PATH
 -c / --subtitle-area-coords YMIN YMAX XMIN XMAX   (repeatable)
 --inpaint-mode {sttn-auto,sttn-det,lama,propainter,opencv}
+```
+
+### CLI (image background removal)
+
+Images only. Writes a transparent PNG.
+
+```shell
+midgardEnv/bin/python backend/main.py -t remove-bg -i input.png -o output.png
+midgardEnv\Scripts\python.exe backend\main.py -t remove-bg -i input.png -o output.png
+```
+
+Options:
+
+```text
+-t / --task remove-bg
+-i / --input PATH
+-o / --output PATH                      (default: <stem>_nobg.png)
+--bg-model {birefnet-general,u2net_human_seg,isnet-anime,...}
+--protect-mask PATH                     (optional grayscale keep-mask)
+```
+
+Examples:
+
+```shell
+# Default BiRefNet general model
+midgardEnv/bin/python backend/main.py -t remove-bg -i photo.jpg -o cutout.png
+
+# People / anime / clothes models
+midgardEnv/bin/python backend/main.py -t remove-bg -i person.jpg -o out.png --bg-model u2net_human_seg
+midgardEnv/bin/python backend/main.py -t remove-bg -i anime.png -o out.png --bg-model isnet-anime
 ```
 
 ---

@@ -1,0 +1,193 @@
+"""Select Object model pairs in Settings (SAM2 + Grounding DINO)."""
+
+from __future__ import annotations
+
+import threading
+from typing import List, Optional
+
+from PySide6.QtCore import QObject, QTimer, Qt, Signal
+from qfluentwidgets import FluentIcon
+
+from backend.config import config, tr
+from backend.tools.select_object_models import (
+    PAIR_CATALOG,
+    SelectObjectPairId,
+    SelectObjectPairInfo,
+    install_pair,
+    is_complex_pair_installed,
+    is_pair_installed,
+    pair_install_state,
+)
+from ui.component.cards.midgard_card import MidgardSettingCard
+from ui.component.controls.button_styles import make_button
+from ui.theme import CARD
+
+
+class SelectObjectPairCard(MidgardSettingCard):
+    install_requested = Signal(object)
+
+    def __init__(self, info: SelectObjectPairInfo, parent=None):
+        title = tr["SelectObjectPair"].get(info.desc_key, info.pair_id.value)
+        content = tr["SelectObjectPairDesc"].get(info.desc_key, "")
+        super().__init__(FluentIcon.IOT, title, content, parent, detailed=True)
+        self.info = info
+        self._busy = False
+        self._installing = False
+
+        gap = CARD["trailing_gap"]
+        self.installButton = make_button(
+            tr["BgRemove"]["ActionInstall"],
+            "primary",
+            self,
+            FluentIcon.DOWNLOAD,
+        )
+        self.installButton.clicked.connect(
+            lambda checked=False, pid=self.info.pair_id: self.install_requested.emit(pid)
+        )
+        self.hBoxLayout.addWidget(self.installButton, 0, Qt.AlignRight)
+        self.hBoxLayout.addSpacing(gap)
+        self.refresh()
+
+    def set_controls_enabled(self, enabled: bool):
+        self._busy = not enabled
+        if not self._installing:
+            installed = is_pair_installed(self.info.pair_id)
+            self.installButton.setEnabled(enabled and not installed)
+
+    def set_pair_installing(self, installing: bool):
+        self._installing = installing
+        br = tr["BgRemove"]
+        if installing:
+            self.installButton.show()
+            self.installButton.setEnabled(False)
+            self.installButton.setText(br["ActionInstalling"])
+        else:
+            self._installing = False
+            self.refresh()
+
+    def _set_status_tooltip(self, tooltip: str):
+        self.contentLabel.setToolTip(tooltip or "")
+
+    def refresh(self):
+        if self._installing:
+            return
+
+        so = tr["SelectObject"]
+        br = tr["BgRemove"]
+        desc = tr["SelectObjectPairDesc"].get(self.info.desc_key, "")
+        state = pair_install_state(self.info.pair_id)
+
+        self.setContent(desc)
+
+        if state == "installed":
+            tip = so.get("StatusInstalled", br["StatusInstalled"])
+            if self.info.is_default:
+                tip = f"{tip} · {so.get('StatusDefault', br['StatusDefault'])}"
+            self._set_status_tooltip(tip)
+            self.installButton.hide()
+        elif state == "partial":
+            self._set_status_tooltip(
+                so.get(
+                    "StatusPairPartial",
+                    "Partial install — tap Install to complete this pair.",
+                )
+            )
+            self.installButton.show()
+            self.installButton.setEnabled(not self._busy)
+            self.installButton.setText(tr["BgRemove"]["ActionInstall"])
+        else:
+            self._set_status_tooltip(desc)
+            self.installButton.show()
+            self.installButton.setEnabled(not self._busy)
+            self.installButton.setText(tr["BgRemove"]["ActionInstall"])
+
+
+class SelectObjectModelManager(QObject):
+    models_changed = Signal()
+    busy_changed = Signal(bool)
+    status_message = Signal(str)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._installing = False
+        self._installing_pair_id: Optional[SelectObjectPairId] = None
+        self.cards: List[SelectObjectPairCard] = []
+        for info in PAIR_CATALOG:
+            card = SelectObjectPairCard(info, parent)
+            card.install_requested.connect(self._start_install)
+            self.cards.append(card)
+        self.refresh()
+
+    @property
+    def is_busy(self) -> bool:
+        return self._installing
+
+    def refresh(self):
+        for card in self.cards:
+            if card.info.pair_id != self._installing_pair_id:
+                card.refresh()
+        self._apply_lock()
+        self.models_changed.emit()
+
+    def _apply_lock(self):
+        for card in self.cards:
+            active = (
+                self._installing
+                and card.info.pair_id == self._installing_pair_id
+            )
+            card.set_controls_enabled(not self._installing)
+            card.set_pair_installing(active)
+
+    def _start_install(self, pair_id: SelectObjectPairId):
+        if self._installing:
+            return
+        self._installing = True
+        self._installing_pair_id = pair_id
+        self._apply_lock()
+        self.busy_changed.emit(True)
+
+        def work():
+            err = None
+            try:
+                install_pair(pair_id)
+            except Exception as e:
+                err = e
+            QTimer.singleShot(0, lambda: self._finish_install(pair_id, err))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _finish_install(self, pair_id: SelectObjectPairId, err: Optional[BaseException]):
+        self._installing = False
+        self._installing_pair_id = None
+        for card in self.cards:
+            card.set_pair_installing(False)
+        self.refresh()
+        self.busy_changed.emit(False)
+        so = tr["SelectObject"]
+        br = tr["BgRemove"]
+        name = tr["SelectObjectPair"].get(
+            _pair_desc_key(pair_id), pair_id.value
+        )
+        if err:
+            self.status_message.emit(
+                so.get("InstallFailed", br["InstallFailed"]).format(str(err))
+            )
+        else:
+            self.status_message.emit(
+                so.get("InstallDone", br["InstallDone"]).format(name)
+            )
+            if (
+                pair_id == SelectObjectPairId.COMPLEX
+                and is_complex_pair_installed()
+                and not config.selectObjectMoreComplex.value
+            ):
+                self.status_message.emit(
+                    so.get("ComplexReady", "More complex models are ready to enable.")
+                )
+
+
+def _pair_desc_key(pair_id: SelectObjectPairId) -> str:
+    for info in PAIR_CATALOG:
+        if info.pair_id == pair_id:
+            return info.desc_key
+    return pair_id.value

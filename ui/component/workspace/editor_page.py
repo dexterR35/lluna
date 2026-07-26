@@ -105,9 +105,18 @@ class EditorPage(QWidget):
         self.rail_layout.setSpacing(WORKSPACE["rail_spacing"])
         root.addWidget(self.right_rail, 0)
 
-    def add_section(self, title: str, content: Union[QWidget, QLayout], *, stretch: int = 0) -> SectionCard:
+    def add_section(
+        self,
+        title: str,
+        content: Union[QWidget, QLayout],
+        *,
+        stretch: int = 0,
+        compact_title: bool = True,
+    ) -> SectionCard:
         """Append a titled SectionCard to the right rail."""
-        card = SectionCard(self.right_rail, title=title)
+        card = SectionCard(
+            self.right_rail, title=title, compact_title=compact_title
+        )
         card.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
         card.set_content(content)
         self.rail_layout.addWidget(card, stretch)

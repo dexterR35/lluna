@@ -248,10 +248,65 @@ def _report_workers() -> None:
         diag.warn(f"process manager check failed  {e}")
 
 
+def _check_transformers_stack() -> None:
+    try:
+        import transformers
+        from transformers import (
+            AutoModelForZeroShotObjectDetection,
+            AutoProcessor,
+            Sam2Model,
+            Sam2Processor,
+        )
+
+        _ = (Sam2Model, Sam2Processor, AutoModelForZeroShotObjectDetection, AutoProcessor)
+        ver = getattr(transformers, "__version__", "?")
+        _line("transformers (Select Object)", "OK", f"v{ver}")
+    except Exception as e:
+        _line("transformers (Select Object)", "MISSING", str(e).split("\n")[0][:60])
+
+
+def _report_select_object_models() -> None:
+    diag.start("── models: select object (SAM2 + DINO) ──")
+    try:
+        from backend.config import config, tr
+        from backend.tools import select_object_models as som
+
+        ok_n = miss_n = 0
+        for info in som.PAIR_CATALOG:
+            installed = som.is_pair_installed(info.pair_id)
+            if installed:
+                ok_n += 1
+            else:
+                miss_n += 1
+            name = tr["SelectObjectPair"].get(info.desc_key, info.pair_id.value)
+            state = som.pair_install_state(info.pair_id)
+            flags = []
+            if info.is_default:
+                flags.append("default")
+            if state == "partial":
+                flags.append("partial")
+            sam2_id, dino_id = som.PAIR_MEMBERS[info.pair_id]
+            _line(
+                name,
+                "OK" if installed else "MISSING",
+                f"[{', '.join(flags) or 'optional'}]  {sam2_id.value} + {dino_id.value}",
+            )
+        diag.model(f"{'select-object summary':<28}  {ok_n} OK / {miss_n} MISSING")
+        try:
+            more_complex = bool(config.selectObjectMoreComplex.value)
+            diag.model(f"{'selectObjectMoreComplex':<28}  {more_complex}")
+        except Exception:
+            pass
+        _check_transformers_stack()
+    except Exception as e:
+        diag.warn(f"select object model check failed  {e}")
+
+
 def _report_runtime_errors() -> None:
     diag.start("── quick dependency checks ──")
     deps = [
         ("torch", "torch"),
+        ("huggingface_hub", "huggingface_hub"),
         ("rembg", "rembg"),
         ("onnxruntime", "onnxruntime"),
         ("cv2", "cv2"),
@@ -275,6 +330,7 @@ def report_startup(*, include_deps: bool = True) -> None:
     _report_hardware()
     _report_bg_remove_models()
     _report_enhance_models()
+    _report_select_object_models()
     _report_video_models()
     if include_deps:
         _report_runtime_errors()

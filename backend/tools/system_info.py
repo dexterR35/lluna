@@ -166,12 +166,13 @@ class AppResourceSample:
     """Live app RAM + CPU/GPU usage for the sidebar meter."""
 
     ram_mb: float
-    cpu_percent: float | None
+    cpu_percent: float | None  # 0–100% of total CPU capacity (all cores)
     gpu_used_mb: float | None
     gpu_total_mb: float | None
 
 
 _cpu_sample: tuple[float, float] | None = None  # (monotonic_s, cpu_seconds)
+_cpu_display_ema: float | None = None  # smoothed 0–100% for sidebar
 
 
 def _rss_mb_for_pid(pid: int) -> float:
@@ -293,8 +294,8 @@ def _process_cpu_seconds(pid: int) -> float | None:
 
 
 def _app_cpu_percent() -> float | None:
-    """Approx. total CPU % across tracked processes (100% = one core)."""
-    global _cpu_sample
+    """CPU use by tracked Midgard processes as 0–100% of all cores combined."""
+    global _cpu_sample, _cpu_display_ema
     import time
 
     total_cpu = 0.0
@@ -306,16 +307,28 @@ def _app_cpu_percent() -> float | None:
         total_cpu += sec
         any_ok = True
     if not any_ok:
-        return None
+        return _cpu_display_ema
+
     now = time.monotonic()
     prev = _cpu_sample
     _cpu_sample = (now, total_cpu)
     if prev is None:
         return None
+
     dt = now - prev[0]
     if dt <= 0.05:
-        return None
-    return max(0.0, (total_cpu - prev[1]) / dt * 100.0)
+        return _cpu_display_ema
+
+    # Linux/ps: 100% = one full core; PyTorch/workers often exceed 100% on multi-core CPUs.
+    raw_one_core_basis = max(0.0, (total_cpu - prev[1]) / dt * 100.0)
+    cores = os.cpu_count() or 1
+    normalized = min(100.0, raw_one_core_basis / cores)
+
+    if _cpu_display_ema is None:
+        _cpu_display_ema = normalized
+    else:
+        _cpu_display_ema = 0.55 * _cpu_display_ema + 0.45 * normalized
+    return _cpu_display_ema
 
 
 def _gpu_used_mb() -> tuple[float | None, float | None]:

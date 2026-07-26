@@ -495,16 +495,56 @@ class SubtitleRemover:
         return obj
 
 
-if __name__ == '__main__':
-    multiprocessing.set_start_method("spawn")
-    from backend.tools.args_handler import parse_args
-    args = parse_args()
+def _run_bg_remove_cli(args):
+    from backend.tools.bg_remove import run_bg_remove_job
+
+    if not is_image_file(args.input):
+        print(f'Error: {args.input} is not a supported image file.')
+        raise SystemExit(-1)
+    if not os.path.isfile(args.input):
+        print(f'Error: input file not found: {args.input}')
+        raise SystemExit(-1)
+    if args.protect_mask and not os.path.isfile(args.protect_mask):
+        print(f'Error: protect mask not found: {args.protect_mask}')
+        raise SystemExit(-1)
+
+    out_path = args.output
+    if not out_path.lower().endswith('.png'):
+        # Transparent cutouts need PNG
+        stem, _ = os.path.splitext(out_path)
+        out_path = f'{stem}.png'
+        print(f'Note: remove-bg writes PNG; using {out_path}')
+
+    print(f'Removing background: {args.input}')
+    print(f'Model: {args.bg_model.value}')
+    result = run_bg_remove_job(
+        args.input,
+        out_path,
+        mode=args.bg_model,
+        progress=lambda p: print(f'Progress: {p}%', flush=True),
+        log=print,
+        protect_mask_path=args.protect_mask,
+    )
+    print(f'Done: {result}')
+
+
+def _run_subtitle_cli(args):
     sr = SubtitleRemover(args.input)
     if not is_video_or_image(args.input):
-        sr.append_output(f'Error: {video_path} is not supported not corrupted.')
-        exit(-1)
+        sr.append_output(f'Error: {args.input} is not supported or corrupted.')
+        raise SystemExit(-1)
     sr.sub_areas = args.subtitle_area_coords
     sr.video_out_path = args.output
     config.inpaintMode.value = args.inpaint_mode
     sr.run()
-        
+
+
+if __name__ == '__main__':
+    multiprocessing.set_start_method("spawn")
+    from backend.tools.args_handler import parse_args
+    args = parse_args()
+    if args.task == 'remove-bg':
+        _run_bg_remove_cli(args)
+    else:
+        _run_subtitle_cli(args)
+

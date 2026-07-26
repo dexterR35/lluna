@@ -17,19 +17,22 @@ subtitle.ini
 backend/tools/train/release_model/
 backend/test.py
 
-# Model weights (keep small configs / manifests tracked)
-backend/models/**/*.pth
+# Core STTN / LaMa parts / ProPainter parts / OCR / ffmpeg are tracked in git
+# (clone + install.py merge). Keep these install-only / regenerable out of git:
+
+# Merged from split parts on install / first run (not downloaded; rebuild locally)
+backend/models/big-lama/big-lama.pt
+backend/models/propainter/ProPainter.pth
 backend/models/**/*.pth.part
-backend/models/**/*.pt
-backend/models/**/*.pdiparams
+
+# Downloaded by install.py / Settings (not shipped in git)
+backend/models/realesrgan/
+backend/models/select_object/
 backend/models/**/*.ckpt
 backend/models/**/*.onnx
+backend/models/**/*.safetensors
+backend/models/**/*.bin
 inference.onnx
-
-# Bundled ffmpeg binaries (keep fs_manifest.csv)
-backend/ffmpeg/**/ffmpeg
-backend/ffmpeg/**/ffmpeg.exe
-backend/ffmpeg/**/ffmpeg_*.exe
 
 # Sample / output media
 test/**/*.mp4

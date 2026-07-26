@@ -14,6 +14,8 @@ _ENHANCE_TILE_ACT_PER_PX = 0.00012  # MB per input tile pixel (incl. pad/scale s
 _REMBG_SESSION_MB = 900.0
 _LAMA_WEIGHTS_MB = 200.0
 _LAMA_PER_MPX = 180.0
+_SELECT_OBJECT_TINY_MB = 4500.0
+_SELECT_OBJECT_COMPLEX_MB = 12000.0
 _STTN_BASE_MB = 400.0
 _STTN_PER_FRAME_MPX = 90.0
 _PROPAINTER_BASE_MB = 800.0
@@ -140,6 +142,22 @@ def preflight_lama(h: int, w: int) -> GenericBudget:
         raise VramBudgetError(
             f"Not enough GPU memory for LAMA retouch "
             f"(need ~{_with_headroom(est):.0f} MB free, have {free:.0f} MB)."
+        )
+    return GenericBudget(estimated_mb=est, free_mb=free)
+
+
+def preflight_select_subject(h: int, w: int, *, complex_pair: bool = False) -> GenericBudget:
+    if not _has_cuda_budget():
+        return GenericBudget(estimated_mb=0.0, free_mb=0.0)
+    free, _ = _free_total_mb()
+    mpx = (h * w) / 1_000_000.0
+    base = _SELECT_OBJECT_COMPLEX_MB if complex_pair else _SELECT_OBJECT_TINY_MB
+    est = base + 80.0 * mpx
+    if _with_headroom(est) > free:
+        raise VramBudgetError(
+            f"Not enough GPU memory for Select Object "
+            f"(need ~{_with_headroom(est):.0f} MB free, have {free:.0f} MB). "
+            f"Turn off More complex in Settings or use a smaller image."
         )
     return GenericBudget(estimated_mb=est, free_mb=free)
 

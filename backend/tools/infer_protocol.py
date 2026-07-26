@@ -11,6 +11,7 @@ class JobType(str, Enum):
     ENHANCE = "enhance"
     BG_REMOVE = "bg_remove"
     LAMA_RETOUCH = "lama_retouch"
+    SELECT_SUBJECT = "select_subject"
     SUBTITLE = "subtitle"
 
 

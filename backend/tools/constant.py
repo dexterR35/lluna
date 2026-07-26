@@ -52,3 +52,13 @@ class EnhanceMode(Enum):
 
     X2PLUS = "RealESRGAN_x2plus"
     X4PLUS = "RealESRGAN_x4plus"
+
+
+@unique
+class SelectObjectModelId(str, Enum):
+    """SAM2 + Grounding DINO weights for Select Object (Protect keep mask)."""
+
+    SAM2_TINY = "sam2_hiera_tiny"
+    SAM2_LARGE = "sam2_hiera_large"
+    DINO_TINY = "grounding_dino_tiny"
+    DINO_BASE = "grounding_dino_base"

@@ -107,6 +107,7 @@ class InferClient:
         JobType.BG_REMOVE.value,
         JobType.SUBTITLE.value,
         JobType.LAMA_RETOUCH.value,
+        JobType.SELECT_SUBJECT.value,
     }
 
     def __init__(self):

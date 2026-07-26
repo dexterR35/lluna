@@ -58,6 +58,10 @@ def reset_enhance_models() -> None:
     )
 
 
+def reset_select_object_models() -> None:
+    reset_config_items(config.selectObjectMoreComplex)
+
+
 def reset_advanced() -> None:
     reset_config_items(
         config.saveDirectory,
@@ -71,6 +75,7 @@ SECTION_RESETTERS: dict[str, Callable[[], None]] = {
     "propainter": reset_propainter,
     "bg_remove_models": reset_bg_remove_models,
     "enhance_models": reset_enhance_models,
+    "select_object_models": reset_select_object_models,
     "advanced": reset_advanced,
 }
 

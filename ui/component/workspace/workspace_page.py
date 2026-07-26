@@ -30,9 +30,17 @@ class SectionCard(CardWidget):
     Look comes from ``theme.SECTION``.
     """
 
-    def __init__(self, parent=None, *, title: Optional[str] = None, bordered: bool = True):
+    def __init__(
+        self,
+        parent=None,
+        *,
+        title: Optional[str] = None,
+        bordered: bool = True,
+        compact_title: bool = False,
+    ):
         # Must set before super() - CardWidget reads background color during init
         self._bordered = bordered
+        self._compact_title = compact_title
         super().__init__(parent)
         self.setObjectName("SectionCard")
         s = SECTION
@@ -42,7 +50,7 @@ class SectionCard(CardWidget):
             self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
 
         self._root = QVBoxLayout(self)
-        pad = s["pad"]
+        pad = s["rail_pad"] if compact_title else s["pad"]
         if bordered:
             self._root.setContentsMargins(pad, pad, pad, pad)
         elif title:
@@ -60,10 +68,16 @@ class SectionCard(CardWidget):
                 QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Preferred
             )
             font = QFont(self.title_label.font())
-            font.setPointSize(s["title_size"])
+            if compact_title:
+                font.setPointSize(s["rail_title_size"])
+                font.setWeight(QFont.Weight.Medium)
+                title_color = s["rail_title_color"]
+            else:
+                font.setPointSize(s["title_size"])
+                title_color = s["title"]
             self.title_label.setFont(font)
             self.title_label.setStyleSheet(
-                f"color: {s['title']}; background: transparent; border: none;"
+                f"color: {title_color}; background: transparent; border: none;"
             )
             title_row.addWidget(self.title_label, 0)
             title_row.addStretch(1)

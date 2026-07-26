@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
     QSizePolicy,
 )
 from qfluentwidgets import (
-    BodyLabel, SubtitleLabel, FluentIcon, ProgressBar,
+    BodyLabel, FluentIcon, ProgressBar,
 )
 
 from backend.config import BASE_DIR, config, tr
@@ -28,6 +28,13 @@ from ui.component.controls.slider_styles import PrimarySlider
 from ui.component.workspace.editor_page import EditorPage
 from ui.component.preview.retouch_canvas import RetouchCanvas, RetouchTool
 from ui.theme import DIALOG, FORM, PRIMARY, SECTION, TEXT, TEXT_SECONDARY, BG
+
+
+def _rail_label(text: str, parent: QWidget) -> BodyLabel:
+    """Small secondary label — matches Settings rail field headers."""
+    lbl = BodyLabel(text, parent)
+    lbl.setStyleSheet(f"color:{TEXT_SECONDARY}; font-size:9px;")
+    return lbl
 
 
 def _lama_model_path() -> str:
@@ -50,6 +57,8 @@ class BgRetouchDialog(QDialog):
       2. For selection tools: draw a closed region, then Remove or Fill (LAMA)
       3. Brush paints freely (Eraser / Restore / Mask) with size + hardness
       Space+drag pans · Ctrl+wheel zooms · Ctrl+Z undo
+
+    Select Object (SAM2) is only in Protect areas — not here.
     """
 
     finished_image = Signal(object)  # PIL RGBA
@@ -69,7 +78,6 @@ class BgRetouchDialog(QDialog):
         self.setModal(True)
         self.resize(config.retouchWindowW, config.retouchWindowH)
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        # Scope to QDialog so bare props don't cascade onto SectionCard children.
         self.setStyleSheet(
             f"QDialog {{ background-color: {BG}; color: {TEXT}; border: none; }}"
         )
@@ -82,15 +90,13 @@ class BgRetouchDialog(QDialog):
         self._mask_paint_mode = RetouchTool.MASK  # MASK or ERASE_MASK
 
         self.canvas = RetouchCanvas(self)
-        # Defer set_image until after show - window appears instantly
         self._pending_rgba = rgba
         self._pending_original = original
 
-        # Same shell as tool pages: preview SectionCard + right rail (shared width)
         self.editor = EditorPage(
             self.canvas,
             self,
-            preview_title=tr["BgRetouch"].get("Canvas", tr["BgRetouch"]["Title"]),
+            preview_title=None,
         )
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -101,7 +107,6 @@ class BgRetouchDialog(QDialog):
         gap = DIALOG["tool_gap"]
 
         def _grid_buttons(parent: QWidget, items, columns: int):
-            """items: list of (key, label) → (dict key→btn, wrap widget)."""
             wrap = QWidget(parent)
             grid = QGridLayout(wrap)
             grid.setContentsMargins(0, 0, 0, 0)
@@ -138,6 +143,7 @@ class BgRetouchDialog(QDialog):
         for kind, btn in self._kind_buttons.items():
             self._kind_group.addButton(btn)
             btn.clicked.connect(lambda checked=False, k=kind: self._select_kind(k))
+
         self.editor.add_section(tr["BgRetouch"]["Tools"], tools_body)
 
         # --- Brush (modes + size / hardness + mask actions) ---
@@ -146,7 +152,7 @@ class BgRetouchDialog(QDialog):
         brush_layout.setContentsMargins(0, 0, 0, 0)
         brush_layout.setSpacing(SECTION["spacing"])
 
-        self.brush_mode_label = SubtitleLabel(tr["BgRetouch"]["BrushMode"], brush_body)
+        self.brush_mode_label = _rail_label(tr["BgRetouch"]["BrushMode"], brush_body)
         brush_layout.addWidget(self.brush_mode_label)
 
         self._mode_group = QButtonGroup(self)
@@ -167,7 +173,7 @@ class BgRetouchDialog(QDialog):
                 lambda checked=False, m=mode: self._select_brush_mode(m)
             )
 
-        self.mask_actions_label = SubtitleLabel(tr["BgRetouch"]["MaskActions"], brush_body)
+        self.mask_actions_label = _rail_label(tr["BgRetouch"]["MaskActions"], brush_body)
         brush_layout.addWidget(self.mask_actions_label)
 
         self._mask_paint_group = QButtonGroup(self)
@@ -185,15 +191,15 @@ class BgRetouchDialog(QDialog):
             btn.clicked.connect(
                 lambda checked=False, m=mode: self._select_mask_paint_mode(m)
             )
+        paint_tip = tr["BgRetouch"].get("ToolMaskPaintTip", "")
+        erase_tip = tr["BgRetouch"].get("ToolEraseMaskTip", "")
+        if paint_tip:
+            self._mask_paint_buttons[RetouchTool.MASK].setToolTip(paint_tip)
+        if erase_tip:
+            self._mask_paint_buttons[RetouchTool.ERASE_MASK].setToolTip(erase_tip)
 
         mask_act_row = QHBoxLayout()
         mask_act_row.setSpacing(gap)
-        self.btn_mask_delete = make_button(
-            tr["BgRetouch"]["ActionRemove"], "secondary", brush_body
-        )
-        self.btn_mask_delete.setToolTip(tr["BgRetouch"]["MaskDeleteTip"])
-        self.btn_mask_delete.clicked.connect(self._on_delete_mask)
-        mask_act_row.addWidget(self.btn_mask_delete)
         self.btn_mask_clear = make_button(
             tr["BgRetouch"]["ClearMask"], "secondary", brush_body
         )
@@ -214,7 +220,7 @@ class BgRetouchDialog(QDialog):
         size_col.setContentsMargins(0, 0, 0, 0)
         size_col.setSpacing(FORM["tight_spacing"])
         size_header = QHBoxLayout()
-        size_header.addWidget(SubtitleLabel(tr["BgRetouch"]["BrushSize"], size_wrap))
+        size_header.addWidget(_rail_label(tr["BgRetouch"]["BrushSize"], size_wrap))
         self.radius_label = BodyLabel("20 px", size_wrap)
         self.radius_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         size_header.addWidget(self.radius_label, 1)
@@ -231,7 +237,7 @@ class BgRetouchDialog(QDialog):
         hard_col.setContentsMargins(0, 0, 0, 0)
         hard_col.setSpacing(FORM["tight_spacing"])
         hard_header = QHBoxLayout()
-        hard_header.addWidget(SubtitleLabel(tr["BgRetouch"]["BrushHardness"], hard_wrap))
+        hard_header.addWidget(_rail_label(tr["BgRetouch"]["BrushHardness"], hard_wrap))
         self.hardness_label = BodyLabel("60%", hard_wrap)
         self.hardness_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         hard_header.addWidget(self.hardness_label, 1)
@@ -283,7 +289,7 @@ class BgRetouchDialog(QDialog):
         sel_layout.addLayout(undo_row)
         self.editor.add_section(tr["BgRetouch"]["Selection"], sel_body)
 
-        # --- Status / progress / Done-Cancel (footer, ActionBar-like) ---
+        # --- Footer ---
         footer = QWidget(rail)
         footer_layout = QVBoxLayout(footer)
         footer_layout.setContentsMargins(0, 0, 0, 0)
@@ -319,10 +325,7 @@ class BgRetouchDialog(QDialog):
         footer_layout.addWidget(self.btn_cancel)
 
         self.editor.add_rail_stretch(1)
-        self.editor.add_section(
-            tr["BgRetouch"].get("Actions", tr["SubtitleExtractorGUI"].get("Setting", "Actions")),
-            footer,
-        )
+        self.editor.add_section(tr["BgRetouch"].get("Actions", "Actions"), footer)
 
         self._lama_done.connect(self._on_lama_done)
         self._status.connect(self.status.setText)
@@ -331,7 +334,6 @@ class BgRetouchDialog(QDialog):
         self.canvas.selection_changed.connect(self._refresh_selection_buttons)
         self.canvas.image_changed.connect(self._refresh_mask_buttons)
 
-        # Default: Brush + Eraser
         self._kind_buttons[_KIND_BRUSH].setChecked(True)
         self._mode_buttons[RetouchTool.ERASE_ALPHA].setChecked(True)
         self._mask_paint_buttons[RetouchTool.MASK].setChecked(True)
@@ -345,7 +347,6 @@ class BgRetouchDialog(QDialog):
         self._progress_timer.timeout.connect(self._tick_progress)
 
         self._image_size = rgba.size
-        # Caller presents the window (present_editor_dialog) - do not show here
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -402,10 +403,9 @@ class BgRetouchDialog(QDialog):
         for m, btn in self._mode_buttons.items():
             btn.setChecked(m == mode)
             paint_toggle_button(btn)
-        show_mask = (
+        self._set_mask_actions_visible(
             self._tool_kind == _KIND_BRUSH and mode == RetouchTool.MASK
         )
-        self._set_mask_actions_visible(show_mask)
         if self._tool_kind == _KIND_BRUSH:
             self._apply_brush_tool()
 
@@ -431,11 +431,9 @@ class BgRetouchDialog(QDialog):
         has = self.canvas.has_selection() and not self._busy
         self.btn_remove.setEnabled(has)
         self.btn_clear_sel.setEnabled(has)
-        # Fill stays enabled when not busy (selection or painted mask)
 
     def _refresh_mask_buttons(self):
         has_mask = self.canvas.has_painted_mask() and not self._busy
-        self.btn_mask_delete.setEnabled(has_mask)
         self.btn_mask_clear.setEnabled(has_mask)
 
     def _on_remove_selection(self):
@@ -445,15 +443,6 @@ class BgRetouchDialog(QDialog):
         diag.run("Retouch remove selection")
         self.canvas.remove_selection()
         self.status.setText(tr["BgRetouch"]["RemovedSelection"])
-
-    def _on_delete_mask(self):
-        if not self.canvas.has_painted_mask():
-            self.status.setText(tr["BgRetouch"]["NoMask"])
-            return
-        diag.run("Retouch erase masked pixels")
-        self.canvas.remove_painted_mask()
-        self.status.setText(tr["BgRetouch"]["RemovedMask"])
-        self._refresh_mask_buttons()
 
     def _on_clear_mask(self):
         diag.run("Retouch clear mask")
@@ -482,7 +471,6 @@ class BgRetouchDialog(QDialog):
         self.progress_panel.setVisible(True)
 
     def _tick_progress(self):
-        """Creep toward 90% while inference is blocked in the worker."""
         if not self._busy:
             self._progress_timer.stop()
             return
@@ -492,7 +480,6 @@ class BgRetouchDialog(QDialog):
                 self._on_progress(self._progress_value + step)
 
     def _set_busy(self, busy: bool):
-        """Lock tools/canvas while Fill runs - only Stop is available until done."""
         self._busy = busy
         self.canvas.set_interaction_enabled(not busy)
 
@@ -501,7 +488,6 @@ class BgRetouchDialog(QDialog):
         self.btn_done.setEnabled(editable)
         self.btn_remove.setEnabled(editable and self.canvas.has_selection())
         self.btn_clear_sel.setEnabled(editable and self.canvas.has_selection())
-        self.btn_mask_delete.setEnabled(editable and self.canvas.has_painted_mask())
         self.btn_mask_clear.setEnabled(editable and self.canvas.has_painted_mask())
         self.radius_slider.setEnabled(editable)
         self.hardness_slider.setEnabled(editable)
@@ -516,7 +502,6 @@ class BgRetouchDialog(QDialog):
             self._refresh_selection_buttons()
             self._refresh_mask_buttons()
 
-        # Cancel closes dialog when idle; Stop cancels Fill when busy
         if busy:
             self.btn_cancel.setText(tr["BgRetouch"].get("StopFill", "Stop"))
             self.progress_panel.setVisible(True)
@@ -542,14 +527,12 @@ class BgRetouchDialog(QDialog):
             InferClient.instance().cancel()
         except Exception:
             traceback.print_exc()
-            # Force unlock if cancel plumbing fails
             self._pending_lama_mask = None
             self._set_busy(False)
             self.progress_panel.setVisible(False)
 
     def reject(self):
         if self._busy:
-            # Closing while Fill runs → cancel job first, then close after unlock
             self._close_after_cancel = True
             self._cancel_lama()
             return
@@ -568,15 +551,10 @@ class BgRetouchDialog(QDialog):
         if self._busy:
             return
         img = self.canvas.get_image()
-        sel = self.canvas.selection_as_mask()
-        painted = self.canvas.get_mask()
+        mask = self.canvas.mask_for_fill()
 
-        if sel is not None and np.any(sel):
-            mask = sel
-        elif painted is not None and painted.any():
-            mask = painted
-        else:
-            self.status.setText(tr["BgRetouch"]["NoSelection"])
+        if mask is None or not np.any(mask):
+            self.status.setText(tr["BgRetouch"]["NoMask"])
             return
 
         path = _lama_model_path()
@@ -591,8 +569,7 @@ class BgRetouchDialog(QDialog):
         self._set_busy(True)
         self.status.setText(tr["BgRetouch"]["LamaRunning"])
         self._progress.emit(5)
-        src = "selection" if sel is not None and np.any(sel) else "painted_mask"
-        diag.run(f"LAMA fill START  mask={src}  model={os.path.basename(path)}")
+        diag.run(f"LAMA fill START  mask=fill_region  model={os.path.basename(path)}")
         diag.model(f"LAMA  {_lama_model_path()}")
         diag.progress("lama_retouch", 0, "LAMA fill", force=True)
 

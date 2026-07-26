@@ -67,6 +67,13 @@ def _release_all_except(keep: Optional[str] = None) -> None:
             release_retouch_lama()
         except Exception:
             pass
+    if keep != JobType.SELECT_SUBJECT.value:
+        try:
+            from backend.tools.grounded_sam2 import release_select_object_models
+
+            release_select_object_models(blocking=True, timeout=5.0)
+        except Exception:
+            traceback.print_exc()
     empty_cuda_cache()
 
 
@@ -116,6 +123,8 @@ def infer_worker_main(cmd_queue, evt_queue, hardware_accel: bool = True) -> None
                 _job_bg_remove(run_id, payload, on_progress, heartbeat_log, evt_queue)
             elif job_type == JobType.LAMA_RETOUCH.value:
                 _job_lama_retouch(run_id, payload, on_progress, heartbeat_log, evt_queue)
+            elif job_type == JobType.SELECT_SUBJECT.value:
+                _job_select_subject(run_id, payload, on_progress, heartbeat_log, evt_queue)
             elif job_type == JobType.SUBTITLE.value:
                 _job_subtitle(run_id, payload, cancel_event, on_progress, heartbeat_log, evt_queue)
             else:
@@ -332,6 +341,80 @@ def _job_lama_retouch(run_id, payload, on_progress, heartbeat_log, evt_queue) ->
     out_arr = np.asarray(out).copy()
     out_arr[:, :, 3] = arr[:, :, 3]
     Image.fromarray(out_arr, "RGBA").save(output_path, format="PNG")
+    on_progress(run_id, 100)
+    _emit(evt_queue, result(run_id, output_path))
+
+
+def _job_select_subject(run_id, payload, on_progress, heartbeat_log, evt_queue) -> None:
+    from backend.tools.grounded_sam2 import (
+        run_select_object,
+        select_object_models_ready,
+    )
+    from backend.tools.job_config import apply_hardware_from_payload
+    from backend.tools.select_object_models import (
+        ensure_active_pair_installed,
+        resolve_pair,
+    )
+    from backend.tools.vram_budget import VramBudgetError, preflight_select_subject
+    from PIL import Image
+
+    apply_hardware_from_payload(payload)
+
+    image_path = payload["image_path"]
+    output_path = payload.get("output_mask_path") or _temp_png("select_mask")
+    points = payload.get("points") or None
+    labels = payload.get("labels") or None
+    text = payload.get("text") or None
+    box_threshold = float(payload.get("box_threshold") or 0.25)
+    text_threshold = float(payload.get("text_threshold") or 0.25)
+    more_complex = payload.get("more_complex")
+    if more_complex is not None:
+        more_complex = bool(more_complex)
+
+    if not points and not (text and str(text).strip()):
+        _emit(evt_queue, error(run_id, "Select Object needs a click or object name."))
+        return
+
+    sam2_id, dino_id = resolve_pair(more_complex)
+    heartbeat_log(run_id, f"Select Object: {sam2_id.value} + {dino_id.value}")
+    on_progress(run_id, 5)
+
+    try:
+        with Image.open(image_path) as im:
+            w, h = im.size
+        preflight_select_subject(h, w, complex_pair=sam2_id.value.endswith("large"))
+    except VramBudgetError as e:
+        _emit(evt_queue, error(run_id, str(e)))
+        return
+
+    try:
+        ensure_active_pair_installed(more_complex)
+    except Exception as e:
+        _emit(evt_queue, error(run_id, f"Select Object models missing: {e}"))
+        return
+
+    on_progress(run_id, 15)
+    need_dino = bool(text and str(text).strip())
+    if select_object_models_ready(sam2_id, dino_id, need_dino=need_dino):
+        heartbeat_log(run_id, "Running Select Object…")
+    else:
+        heartbeat_log(run_id, "Loading Select Object models…")
+    try:
+        run_select_object(
+            image_path,
+            output_path,
+            points=points,
+            labels=labels,
+            text=text,
+            box_threshold=box_threshold,
+            text_threshold=text_threshold,
+            more_complex=more_complex,
+        )
+    except Exception as e:
+        traceback.print_exc()
+        _emit(evt_queue, error(run_id, str(e)))
+        return
+
     on_progress(run_id, 100)
     _emit(evt_queue, result(run_id, output_path))
 

@@ -34,6 +34,9 @@ class NavResourceMeter(QtWidgets.QWidget):
             QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
         )
         self.label.setWordWrap(True)
+        self.label.setToolTip(
+            "Midgard app + worker load. CPU is share of all cores (0–100%)."
+        )
         root.addWidget(self.label, 1)
 
         self._timer = QtCore.QTimer(self)

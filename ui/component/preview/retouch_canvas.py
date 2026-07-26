@@ -30,12 +30,14 @@ class RetouchTool(Enum):
     LASSO = "lasso"
     PEN = "pen"
     RECT = "rect"
+    SELECT_OBJECT = "select_object"
 
 
 _SELECT_TOOLS = frozenset({
     RetouchTool.LASSO,
     RetouchTool.PEN,
     RetouchTool.RECT,
+    RetouchTool.SELECT_OBJECT,
 })
 
 _ALPHA_TOOLS = frozenset({
@@ -83,6 +85,7 @@ class RetouchCanvas(QWidget):
     image_changed = Signal()
     history_changed = Signal()  # undo/redo availability changed
     selection_changed = Signal()
+    select_object_clicked = Signal(int, int)  # image x, y
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -239,6 +242,46 @@ class RetouchCanvas(QWidget):
     def has_painted_mask(self) -> bool:
         return self._mask is not None and bool(np.any(self._mask))
 
+    def _normalize_mask_to_canvas(self, mask: np.ndarray) -> np.ndarray | None:
+        if self._mask is None or mask is None:
+            return None
+        h, w = self._mask.shape[:2]
+        arr = np.asarray(mask)
+        if arr.ndim != 2:
+            return None
+        if arr.shape[:2] != (h, w):
+            arr = np.asarray(
+                Image.fromarray(arr.astype(np.uint8), mode="L").resize(
+                    (w, h), Image.Resampling.BILINEAR
+                )
+            )
+        return (arr > 32).astype(np.uint8) * 255
+
+    def union_object_mask(self, mask: np.ndarray):
+        """Add SAM2 / Select Object result to the working mask layer (overlay only)."""
+        arr = self._normalize_mask_to_canvas(mask)
+        if arr is None:
+            return
+        self._push_undo()
+        np.maximum(self._mask, arr, out=self._mask)
+        self.clear_selection()
+        self._refresh_display(immediate=True)
+        self.image_changed.emit()
+
+    def mask_for_fill(self) -> np.ndarray | None:
+        """Object mask layer for LAMA (SAM2 layer + optional lasso selection)."""
+        painted = self.get_mask()
+        sel = self.selection_as_mask()
+        if painted is None and sel is None:
+            return None
+        if painted is None:
+            return sel if sel is not None and np.any(sel) else None
+        if sel is None or not np.any(sel):
+            return painted if np.any(painted) else None
+        combined = painted.copy()
+        np.maximum(combined, sel, out=combined)
+        return combined if np.any(combined) else None
+
     def clear_selection(self):
         had = self.has_selection() or bool(self._sel_points) or self._rect_origin is not None
         self._selection = None
@@ -254,15 +297,6 @@ class RetouchCanvas(QWidget):
         if not self.has_selection():
             return None
         return self._selection.copy()
-
-    def apply_selection_as_lama_mask(self) -> np.ndarray | None:
-        """Copy closed selection into paint mask for LAMA; return that mask copy."""
-        sel = self.selection_as_mask()
-        if sel is None or self._mask is None:
-            return None
-        self._mask = sel.copy()
-        self._refresh_display(immediate=True)
-        return sel.copy()
 
     def remove_selection(self):
         """Erase alpha inside closed selection, then clear selection."""
@@ -282,23 +316,6 @@ class RetouchCanvas(QWidget):
         self._selecting = False
         self._refresh_display(immediate=True)
         self.selection_changed.emit()
-        self.image_changed.emit()
-
-    def remove_painted_mask(self):
-        """Erase alpha under painted mask (Delete), then clear the mask."""
-        if not self.has_painted_mask() or self._rgba is None or self._mask is None:
-            return
-        self._commit_rgba_arr()
-        self._push_undo()
-        arr = np.asarray(self._rgba).copy()
-        strength = self._mask.astype(np.float32) / 255.0
-        a = arr[:, :, 3].astype(np.float32) * (1.0 - strength)
-        arr[:, :, 3] = np.clip(a, 0, 255).astype(np.uint8)
-        self._rgba = Image.fromarray(arr, "RGBA")
-        self._rgba_arr = None
-        self._mask.fill(0)
-        self._base_checker = None
-        self._refresh_display(immediate=True)
         self.image_changed.emit()
 
     def set_image(self, rgba: Image.Image, original: Image.Image | None = None):
@@ -616,6 +633,11 @@ class RetouchCanvas(QWidget):
                 return True
 
             if self.is_select_tool():
+                if self._tool == RetouchTool.SELECT_OBJECT:
+                    pt = self._label_to_image(pos)
+                    if pt is not None:
+                        self.select_object_clicked.emit(pt[0], pt[1])
+                    return True
                 return self._select_press(pos)
 
             # Brush stroke - snapshot once before painting
@@ -676,6 +698,8 @@ class RetouchCanvas(QWidget):
                     self.image_changed.emit()
                 return True
             if was_select and self.is_select_tool():
+                if self._tool == RetouchTool.SELECT_OBJECT:
+                    return True
                 pos = self._event_label_pos(obj, event)
                 self._select_release(pos)
                 return True
@@ -1263,7 +1287,10 @@ class RetouchCanvas(QWidget):
             cur = QCursor(Qt.CursorShape.OpenHandCursor)
             self._cursor_cache_key = None
         elif self.is_select_tool():
-            cur = self._select_tool_cursor()
+            if self._tool == RetouchTool.SELECT_OBJECT:
+                cur = QCursor(Qt.CursorShape.CrossCursor)
+            else:
+                cur = self._select_tool_cursor()
         else:
             cur = self._brush_cursor()
         self.image_label.setCursor(cur)

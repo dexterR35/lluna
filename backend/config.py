@@ -115,6 +115,14 @@ class Config(QConfig):
     )
     enhanceMaxLongEdge = ConfigItem("Enhance", "MaxLongEdge", 5000)
 
+    # Select Object (SAM2 + Grounding DINO) - hidden pair; More complex in Settings
+    selectObjectMoreComplex = ConfigItem(
+        "SelectObject",
+        "MoreComplex",
+        False,
+        BoolValidator(),
+    )
+
     # Shared inference worker
     jobWatchdogSec = ConfigItem("Infer", "JobWatchdogSec", 90)
     inferIdleReleaseSec = ConfigItem("Infer", "IdleReleaseSec", 60)
