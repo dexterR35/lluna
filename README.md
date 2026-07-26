@@ -123,6 +123,18 @@ python install.py --mode cpu --yes
 python install.py --mode cuda --yes
 ```
 
+CUDA wheel is chosen automatically from GPU series + driver (clamped to what the driver can load):
+
+| Series | Examples | Preferred Torch wheel |
+|--------|----------|------------------------|
+| **1xxx** | GTX 1080, 1070 | `cu118` |
+| **2xxx** | RTX 2080, 2060 | `cu118` |
+| **3xxx** | RTX 3060, 3080 | `cu126` |
+| **4xxx** | RTX 4090, 4070 | `cu128` |
+| **5xxx** | RTX 5090, 5080 | `cu128` (required) |
+
+Override if needed: `python install.py --mode cuda --cuda-tag cu126 --yes`
+
 Skip rembg prefetch (install those later from Settings):
 
 ```shell

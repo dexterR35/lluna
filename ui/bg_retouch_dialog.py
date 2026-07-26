@@ -600,7 +600,8 @@ class BgRetouchDialog(QDialog):
             err = None
             try:
                 rgba = Image.open(result_path).convert("RGBA")
-                rgb_out = np.asarray(rgba.convert("RGB"))
+                # Keep RGB as written by LAMA (do not re-composite via convert("RGB")).
+                rgb_out = np.asarray(rgba)[:, :, :3].copy()
             except Exception as e:
                 traceback.print_exc()
                 err = str(e)

@@ -294,6 +294,29 @@ def _job_bg_remove(run_id, payload, on_progress, heartbeat_log, evt_queue) -> No
     _emit(evt_queue, result(run_id, output_path))
 
 
+def _lama_rgb_context(rgba_arr):
+    """
+    Build RGB for LaMa on a cutout (post Remove BG).
+
+    Transparent pixels are usually RGB=0. Never composite onto white (that made
+    Fill paint white), and never bring back the pre-rembg photo background —
+    LaMa should only see the subject. Voids are filled with the subject mean
+    so the model treats removed BG as empty, not as a real scene.
+    """
+    import numpy as np
+
+    rgb = rgba_arr[:, :, :3].astype(np.uint8, copy=True)
+    opaque = rgba_arr[:, :, 3] > 32
+    if not np.any(~opaque):
+        return rgb
+    if np.any(opaque):
+        mean = np.round(rgb[opaque].mean(axis=0)).astype(np.uint8)
+    else:
+        mean = np.array([128, 128, 128], dtype=np.uint8)
+    rgb[~opaque] = mean
+    return rgb
+
+
 def _job_lama_retouch(run_id, payload, on_progress, heartbeat_log, evt_queue) -> None:
     import numpy as np
     from PIL import Image
@@ -321,8 +344,8 @@ def _job_lama_retouch(run_id, payload, on_progress, heartbeat_log, evt_queue) ->
 
     mask = np.array(Image.open(mask_path).convert("L"))
     arr = np.asarray(rgba)
-    alpha = arr[:, :, 3:4].astype(np.float32) / 255.0
-    rgb = (arr[:, :, :3].astype(np.float32) * alpha + 255.0 * (1.0 - alpha)).astype(np.uint8)
+    # Cutout-aware: subject only — do not use original photo BG.
+    rgb = _lama_rgb_context(arr)
     lama_mask = (mask > 32).astype(np.uint8) * 255
 
     on_progress(run_id, 40)
@@ -336,10 +359,12 @@ def _job_lama_retouch(run_id, payload, on_progress, heartbeat_log, evt_queue) ->
         _emit(evt_queue, error(run_id, str(e)))
         return
 
-    out = Image.fromarray(out_rgb, "RGB").convert("RGBA")
-    # restore alpha from source where not masked
-    out_arr = np.asarray(out).copy()
+    out_arr = np.zeros((h, w, 4), dtype=np.uint8)
+    out_arr[:, :, :3] = out_rgb
+    # Keep source alpha outside the fill; filled region becomes opaque.
     out_arr[:, :, 3] = arr[:, :, 3]
+    fill = lama_mask > 0
+    out_arr[fill, 3] = 255
     Image.fromarray(out_arr, "RGBA").save(output_path, format="PNG")
     on_progress(run_id, 100)
     _emit(evt_queue, result(run_id, output_path))

@@ -39,7 +39,7 @@ jobs:
         python-version: '3.12'
         cache: 'pip' # caching pip dependencies
     - name: Disable hardware acceleration
-      run: sed -i 's/HARDWARD_ACCELERATION_OPTION *= *.*/HARDWARD_ACCELERATION_OPTION = False/g' backend/config.py
+      run: sed -i 's/HARDWARE_ACCELERATION_OPTION *= *.*/HARDWARE_ACCELERATION_OPTION = False/g' backend/config.py
       shell: bash
     - run: pip install paddlepaddle==3.0.0
     - run: pip install torch==2.7.0 torchvision==0.22.0

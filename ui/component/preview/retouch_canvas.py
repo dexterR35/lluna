@@ -354,6 +354,10 @@ class RetouchCanvas(QWidget):
         self._commit_rgba_arr()
         return self._rgba.copy() if self._rgba else None
 
+    def get_original(self) -> Image.Image | None:
+        """Pre-retouch / pre-rembg source used for Restore and LAMA context."""
+        return self._original.copy() if self._original is not None else None
+
     def get_mask(self) -> np.ndarray | None:
         return None if self._mask is None else self._mask.copy()
 

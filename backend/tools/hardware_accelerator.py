@@ -91,7 +91,11 @@ class HardwareAccelerator:
     def onnx_providers(self):
         if not self.__enabled:
             return ["CPUExecutionProvider"]
-        return self.__onnx_providers
+        # GPU search skips CPU; always keep it as the fallback provider.
+        providers = list(self.__onnx_providers)
+        if "CPUExecutionProvider" not in providers:
+            providers.append("CPUExecutionProvider")
+        return providers
 
     def get_onnx_execution_providers(self):
         """

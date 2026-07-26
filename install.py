@@ -42,6 +42,11 @@ ORT_CUDA11_INDEX = (
 )
 
 
+# PyTorch CUDA wheel tags Midgard ships (see TORCH_INDEX). Highest first.
+TORCH_CUDA_TAGS = ("cu128", "cu126", "cu118")
+_TAG_RANK = {t: i for i, t in enumerate(reversed(TORCH_CUDA_TAGS))}
+
+
 class CudaInfo:
     def __init__(
         self,
@@ -52,6 +57,8 @@ class CudaInfo:
         message: str = "",
         compute_cap: str = "",
         total_vram_mb: float = 0.0,
+        tag_reason: str = "",
+        warning: str = "",
     ):
         self.available = available
         self.gpu_name = gpu_name
@@ -60,6 +67,8 @@ class CudaInfo:
         self.message = message
         self.compute_cap = compute_cap
         self.total_vram_mb = total_vram_mb
+        self.tag_reason = tag_reason
+        self.warning = warning
 
 
 def log(msg: str = "") -> None:
@@ -174,16 +183,20 @@ def detect_cuda() -> CudaInfo:
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
         pass
 
-    torch_tag = map_cuda_tag(driver_cuda)
+    torch_tag, tag_reason, warning = map_cuda_tag(
+        driver_cuda, compute_cap=compute_cap, gpu_name=gpu_name
+    )
     msg = f"Detected GPU: {gpu_name}"
     if driver_cuda:
-        msg += f" (driver CUDA {driver_cuda} → {torch_tag})"
+        msg += f" (driver CUDA {driver_cuda} → torch {torch_tag})"
     else:
-        msg += f" (CUDA version unknown → {torch_tag})"
+        msg += f" (CUDA version unknown → torch {torch_tag})"
     if compute_cap:
         msg += f" [cc {compute_cap}]"
     if total_vram_mb:
         msg += f" {total_vram_mb:.0f}MB"
+    if tag_reason:
+        msg += f"\n  → {tag_reason}"
     return CudaInfo(
         True,
         gpu_name=gpu_name,
@@ -192,24 +205,185 @@ def detect_cuda() -> CudaInfo:
         message=msg,
         compute_cap=compute_cap,
         total_vram_mb=total_vram_mb,
+        tag_reason=tag_reason,
+        warning=warning,
     )
 
 
-def map_cuda_tag(driver_cuda: str) -> str:
-    """Map driver-reported max CUDA version to a supported PyTorch wheel tag."""
+def _parse_driver_cuda(driver_cuda: str) -> float:
     if not driver_cuda:
-        return "cu118"
+        return 0.0
     try:
-        major_minor = float(".".join(driver_cuda.split(".")[:2]))
+        return float(".".join(driver_cuda.split(".")[:2]))
     except ValueError:
-        return "cu118"
-    if major_minor >= 12.8:
+        return 0.0
+
+
+def _parse_compute_cap(compute_cap: str) -> float:
+    if not compute_cap:
+        return 0.0
+    try:
+        return float(str(compute_cap).strip())
+    except ValueError:
+        return 0.0
+
+
+def infer_compute_cap_from_name(gpu_name: str) -> float:
+    """
+    Best-effort compute capability from marketing name when nvidia-smi
+    omits compute_cap. Examples: GTX 1080→6.1, RTX 3060→8.6, RTX 5090→12.0.
+    """
+    name = (gpu_name or "").lower().replace("-", " ")
+    m = re.search(r"\brtx\s*(\d{4})\b", name)
+    if m:
+        n = int(m.group(1))
+        if 5000 <= n < 6000:  # Blackwell (sm_120)
+            return 12.0
+        if 4000 <= n < 5000:  # Ada (sm_89)
+            return 8.9
+        if 3000 <= n < 4000:  # Ampere (sm_86)
+            return 8.6
+        if 2000 <= n < 3000:  # Turing (sm_75)
+            return 7.5
+    m = re.search(r"\bgtx\s*(\d{4})\b", name)
+    if m:
+        n = int(m.group(1))
+        if 1600 <= n < 1700:  # Turing
+            return 7.5
+        if 1000 <= n < 1100:  # Pascal (1080, 1070, …)
+            return 6.1
+        if 900 <= n < 1000:  # Maxwell
+            return 5.2
+    if "blackwell" in name:
+        return 12.0
+    if "ada" in name:
+        return 8.9
+    if "ampere" in name:
+        return 8.6
+    if "turing" in name:
+        return 7.5
+    if "pascal" in name:
+        return 6.1
+    return 0.0
+
+
+def driver_max_torch_tag(driver_cuda: str) -> str:
+    """Highest PyTorch CUDA tag this NVIDIA driver can load."""
+    ver = _parse_driver_cuda(driver_cuda)
+    if ver >= 12.8:
         return "cu128"
-    if major_minor >= 12.6:
+    if ver >= 12.6:
         return "cu126"
-    if major_minor >= 11.8:
+    if ver >= 11.8:
         return "cu118"
+    # Unknown / very old: still try cu118 (needs a current Game Ready / Studio driver)
     return "cu118"
+
+
+def gpu_series_label(cap: float) -> str:
+    """Human label for GeForce/RTX generations Midgard maps."""
+    if cap >= 12.0:
+        return "5xxx (Blackwell)"
+    if cap >= 8.9:
+        return "4xxx (Ada)"
+    if cap >= 8.0:
+        return "3xxx (Ampere)"
+    if cap >= 7.5:
+        return "2xxx (Turing)"
+    if cap >= 6.0:
+        return "1xxx (Pascal)"
+    if cap > 0:
+        return "pre-1xxx"
+    return "unknown"
+
+
+def preferred_torch_tag_for_series(cap: float) -> str:
+    """
+    Preferred Torch CUDA wheel per GPU series (before driver clamp):
+
+      1xxx (GTX 1080, …)  → cu118
+      2xxx (RTX 2080, …)  → cu118
+      3xxx (RTX 3060, …)  → cu126
+      4xxx (RTX 4090, …)  → cu128
+      5xxx (RTX 5090, …)  → cu128  (required)
+    """
+    if cap >= 12.0:  # 5xxx
+        return "cu128"
+    if cap >= 8.9:  # 4xxx
+        return "cu128"
+    if cap >= 8.0:  # 3xxx
+        return "cu126"
+    if cap >= 7.5:  # 2xxx / GTX 16xx
+        return "cu118"
+    if cap > 0:  # 1xxx / older
+        return "cu118"
+    return ""  # unknown — fall back to driver max
+
+
+def _clamp_tag_to_driver(preferred: str, driver_tag: str) -> str:
+    """Never install a wheel newer than the driver can load."""
+    if not preferred:
+        return driver_tag
+    if _TAG_RANK[preferred] <= _TAG_RANK[driver_tag]:
+        return preferred
+    return driver_tag
+
+
+def map_cuda_tag(
+    driver_cuda: str,
+    compute_cap: str = "",
+    gpu_name: str = "",
+) -> tuple[str, str, str]:
+    """
+    Pick the PyTorch CUDA wheel for this GPU series + driver.
+
+    Returns (tag, reason, warning).
+
+      1xxx → cu118 (clamped to driver)
+      2xxx → cu118 (clamped to driver)
+      3xxx → cu126 (clamped to driver)
+      4xxx → cu128 (clamped to driver)
+      5xxx → cu128 required (sm_120); warns if driver < 12.8
+    """
+    driver_tag = driver_max_torch_tag(driver_cuda)
+    cap = _parse_compute_cap(compute_cap)
+    cap_source = "compute_cap"
+    if cap <= 0:
+        cap = infer_compute_cap_from_name(gpu_name)
+        cap_source = "gpu name" if cap > 0 else ""
+
+    warning = ""
+    series = gpu_series_label(cap)
+    preferred = preferred_torch_tag_for_series(cap)
+
+    # 5xxx / Blackwell: cu128 is mandatory
+    if cap >= 12.0:
+        reason = (
+            f"{series} (cc {cap:g} via {cap_source or 'detect'}) "
+            f"→ torch cu128 (required)"
+        )
+        if _parse_driver_cuda(driver_cuda) < 12.8:
+            warning = (
+                "RTX 50-series needs an NVIDIA driver that reports CUDA 12.8+. "
+                f"Driver currently reports CUDA {driver_cuda or 'unknown'}. "
+                "Update the driver, then re-run install.py."
+            )
+        return "cu128", reason, warning
+
+    if preferred:
+        tag = _clamp_tag_to_driver(preferred, driver_tag)
+        reason = (
+            f"{series} (cc {cap:g} via {cap_source}) "
+            f"→ torch {tag} (pref {preferred}, driver max {driver_tag})"
+        )
+        return tag, reason, warning
+
+    # Unknown GPU: newest the driver supports
+    reason = (
+        f"GPU series unknown → torch {driver_tag} "
+        f"(driver CUDA {driver_cuda or 'unknown'})"
+    )
+    return driver_tag, reason, warning
 
 
 def choose_mode_gui(default_cuda: bool, detect_msg: str) -> str:
@@ -275,25 +449,47 @@ def choose_mode_cli(default_cuda: bool, detect_msg: str, allow_cuda: bool) -> st
         log("Please enter 1 or 2.")
 
 
-def choose_mode(cuda: CudaInfo, forced: Optional[str], yes: bool) -> tuple[str, str]:
+def choose_mode(
+    cuda: CudaInfo,
+    forced: Optional[str],
+    yes: bool,
+    cuda_tag_override: Optional[str] = None,
+) -> tuple[str, str]:
     """Return (mode, torch_tag). mode is 'cuda' or 'cpu'."""
     default_cuda = cuda.available
     detect_msg = cuda.message
+    if cuda.warning:
+        detect_msg = f"{detect_msg}\n  WARNING: {cuda.warning}"
+
+    def resolve_tag(mode: str) -> str:
+        if mode != "cuda":
+            return ""
+        if cuda_tag_override:
+            if cuda_tag_override not in TORCH_INDEX:
+                raise SystemExit(
+                    f"Unknown --cuda-tag {cuda_tag_override!r}. "
+                    f"Use one of: {', '.join(TORCH_CUDA_TAGS)}"
+                )
+            log(f"Using forced CUDA tag: {cuda_tag_override}")
+            return cuda_tag_override
+        return cuda.torch_tag or "cu118"
 
     if forced in {"cuda", "cpu"}:
         mode = forced
         if mode == "cuda" and not cuda.available:
             log("CUDA was requested but not detected. Falling back to CPU.")
             return "cpu", ""
-        tag = cuda.torch_tag if mode == "cuda" else ""
-        return mode, tag
+        if cuda.warning and mode == "cuda":
+            log(f"WARNING: {cuda.warning}")
+        return mode, resolve_tag(mode)
 
     if yes:
         mode = "cuda" if default_cuda else "cpu"
-        tag = cuda.torch_tag if mode == "cuda" else ""
         log(detect_msg)
-        log(f"Non-interactive: installing {mode.upper()}" + (f" ({tag})" if tag else ""))
-        return mode, tag
+        if cuda.warning and mode == "cuda":
+            log(f"WARNING: {cuda.warning}")
+        log(f"Non-interactive: installing {mode.upper()}" + (f" ({resolve_tag(mode)})" if mode == "cuda" else ""))
+        return mode, resolve_tag(mode)
 
     mode = None
     try:
@@ -308,8 +504,9 @@ def choose_mode(cuda: CudaInfo, forced: Optional[str], yes: bool) -> tuple[str, 
         log("CUDA selected but not available. Falling back to CPU.")
         return "cpu", ""
 
-    tag = cuda.torch_tag if mode == "cuda" else ""
-    return mode, tag
+    if cuda.warning and mode == "cuda":
+        log(f"WARNING: {cuda.warning}")
+    return mode, resolve_tag(mode)
 
 
 def venv_python(venv_dir: Path) -> Path:
@@ -351,6 +548,10 @@ def pip_install(py: Path, args: list[str]) -> None:
 
 def install_packages(py: Path, mode: str, torch_tag: str) -> None:
     if mode == "cuda":
+        if torch_tag not in TORCH_INDEX or torch_tag == "cpu":
+            raise SystemExit(
+                f"Invalid CUDA tag {torch_tag!r}. Expected one of: {', '.join(TORCH_CUDA_TAGS)}"
+            )
         # Prefer paddle GPU for cu118; for newer CUDA use CPU paddle + CUDA torch
         # (matches Docker/CI practice for 12.x).
         if torch_tag == "cu118":
@@ -661,6 +862,13 @@ def parse_args() -> argparse.Namespace:
         help="Force install mode (default: auto-detect then prompt)",
     )
     p.add_argument(
+        "--cuda-tag",
+        choices=list(TORCH_CUDA_TAGS),
+        default=None,
+        help="Force PyTorch CUDA wheel (cu128/cu126/cu118). Default: auto by GPU series "
+        "(1xxx/2xxx→cu118, 3xxx→cu126, 4xxx/5xxx→cu128), clamped to the driver",
+    )
+    p.add_argument(
         "--yes",
         "-y",
         action="store_true",
@@ -682,11 +890,15 @@ def main() -> int:
 
     cuda = detect_cuda()
     forced = None if args.mode == "auto" else args.mode
-    mode, torch_tag = choose_mode(cuda, forced, args.yes)
+    mode, torch_tag = choose_mode(
+        cuda, forced, args.yes, cuda_tag_override=args.cuda_tag
+    )
 
     python_bin = find_python()
     log(f"\nPython: {python_bin}")
     log(f"Install mode: {mode.upper()}" + (f" ({torch_tag})" if torch_tag else ""))
+    if mode == "cuda" and cuda.tag_reason and not args.cuda_tag:
+        log(f"  {cuda.tag_reason}")
 
     venv_dir = ensure_venv(python_bin)
     py = venv_python(venv_dir)
