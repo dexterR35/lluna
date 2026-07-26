@@ -103,6 +103,7 @@ class BgRemoveInterface(ContentPage):
         self.current_image_path = None
         self._installing = False
         self._processing = False
+        self._external_gpu_busy = False
         self._run_mode = _MODE_AUTOMATIC
         self._active_run_id: int | None = None
 
@@ -118,7 +119,6 @@ class BgRemoveInterface(ContentPage):
         self.task_error_signal.connect(self._on_task_error)
         self.save_enabled_signal.connect(self.action_bar.set_save_enabled)
         self.save_enabled_signal.connect(self.action_bar.set_retouch_enabled)
-        self.save_enabled_signal.connect(self.action_bar.set_enhance_enabled)
         self.alert_signal.connect(self._show_alert)
         self.append_output(tr["BgRemove"]["EmptyStateHint"])
         self._refresh_model_combo()
@@ -206,7 +206,6 @@ class BgRemoveInterface(ContentPage):
                 empty_list_hint=bg["EmptyListHint"],
                 save_text=bg["Save"],
                 retouch_text=bg["Retouch"],
-                enhance_text=bg["Enhance"],
                 settings_title=tr["SubtitleExtractorGUI"]["Setting"],
                 progress_label=bg.get("ProgressLabel", "Processing {}%"),
             ),
@@ -222,7 +221,6 @@ class BgRemoveInterface(ContentPage):
         self.action_bar.stop_confirmed.connect(self._on_stop_confirmed)
         self.action_bar.save_clicked.connect(self.save_button_clicked)
         self.action_bar.retouch_clicked.connect(self.retouch_button_clicked)
-        self.action_bar.enhance_clicked.connect(self.enhance_button_clicked)
         self.action_bar.reset_confirmed.connect(self.reset_workspace)
         self.task_list_component.task_selected.connect(self.on_task_selected)
         self.task_list_component.task_deleted.connect(self.on_task_deleted)
@@ -430,13 +428,22 @@ class BgRemoveInterface(ContentPage):
         if modes:
             config.set(config.bgRemoveMode, modes[select])
         self.model_combo.setEnabled(
-            bool(modes) and not self._installing and not self._processing
+            bool(modes)
+            and not self._installing
+            and not self._processing
+            and not self._external_gpu_busy
         )
+
+    def set_external_gpu_busy(self, busy: bool):
+        """Another tool owns the shared infer worker — block Run/Open."""
+        self._external_gpu_busy = bool(busy)
+        self._apply_app_lock()
 
     def _apply_app_lock(self):
         installing = self._installing
         processing = self._processing
-        idle = not installing and not processing
+        external = self._external_gpu_busy
+        idle = not installing and not processing and not external
         self.action_bar.set_open_enabled(idle)
         self.action_bar.set_run_enabled(idle)
         self.action_bar.set_reset_enabled(idle)
@@ -444,9 +451,6 @@ class BgRemoveInterface(ContentPage):
             idle and self._current_has_unsaved_preview()
         )
         self.action_bar.set_retouch_enabled(
-            idle and self._current_has_unsaved_preview()
-        )
-        self.action_bar.set_enhance_enabled(
             idle and self._current_has_unsaved_preview()
         )
         self.model_combo.setEnabled(idle and self.model_combo.count() > 0)
@@ -531,9 +535,6 @@ class BgRemoveInterface(ContentPage):
         self.action_bar.set_retouch_enabled(
             not self._processing and not self._installing and self._current_has_unsaved_preview()
         )
-        self.action_bar.set_enhance_enabled(
-            not self._processing and not self._installing and self._current_has_unsaved_preview()
-        )
         self._update_protect_controls()
 
     def on_task_deleted(self, index, task):
@@ -554,7 +555,6 @@ class BgRemoveInterface(ContentPage):
             self.preview.show_empty(tr["BgRemove"].get("SelectImageTitle", tr["BgRemove"]["UploadImage"]))
             self.action_bar.set_save_enabled(False)
             self.action_bar.set_retouch_enabled(False)
-            self.action_bar.set_enhance_enabled(False)
             self._update_protect_controls()
             self.append_output(tr["TaskList"]["TaskRemovedEmpty"])
             return
@@ -684,7 +684,6 @@ class BgRemoveInterface(ContentPage):
             self.append_output(tr["BgRemove"]["SaveDone"].format(path))
             self.action_bar.set_save_enabled(True)
             self.action_bar.set_retouch_enabled(True)
-            self.action_bar.set_enhance_enabled(True)
         except Exception as e:
             diag.error(f"save failed  {e}")
             self.append_output(tr["BgRemove"]["SaveFailed"].format(str(e)))
@@ -742,68 +741,12 @@ class BgRemoveInterface(ContentPage):
                 self.preview.show_after_rgba(img)
                 self.action_bar.set_save_enabled(True)
                 self.action_bar.set_retouch_enabled(True)
-                self.action_bar.set_enhance_enabled(True)
                 self.append_output(tr["BgRetouch"]["LamaDone"])
             except Exception as e:
                 self.append_output(tr["BgRemove"]["SaveFailed"].format(str(e)))
 
         dlg.finished_image.connect(on_done)
         dlg.exec()
-
-    def enhance_button_clicked(self):
-        if self._processing or self._installing:
-            return
-        diag.event("Enhance dialog requested")
-        from ui.bg_enhance_dialog import BgEnhanceDialog
-        from backend.tools.image_enhance import is_enhance_busy
-
-        # Prevent opening a second enhance while one is already running.
-        if BgEnhanceDialog.is_open() or is_enhance_busy():
-            return
-        idx = self.task_list_component.get_current_task_index()
-        task = self.task_list_component.get_task(idx)
-        if not task or not task.preview_temp_path or not os.path.isfile(task.preview_temp_path):
-            self.append_output(tr["BgRemove"]["EnhanceNothing"])
-            return
-        try:
-            rgba = Image.open(task.preview_temp_path).convert("RGBA")
-        except Exception as e:
-            self.append_output(tr["BgRemove"]["SaveFailed"].format(str(e)))
-            return
-
-        dlg = BgEnhanceDialog(rgba, parent=self.window())
-
-        def on_done(img: Image.Image):
-            try:
-                img.save(task.preview_temp_path, format="PNG", optimize=True)
-                task.saved = False
-                self.preview.show_after_rgba(img)
-                self.action_bar.set_save_enabled(True)
-                self.action_bar.set_retouch_enabled(True)
-                self.action_bar.set_enhance_enabled(True)
-                w, h = img.size
-                self.append_output(tr["BgEnhance"]["Done"].format(w, h))
-            except Exception as e:
-                self.append_output(tr["BgRemove"]["SaveFailed"].format(str(e)))
-
-        dlg.finished_image.connect(on_done)
-        try:
-            dlg.exec()
-        finally:
-            # Cancel any leftover queue, wait for the worker, free weights.
-            try:
-                from backend.tools.infer_client import InferClient
-                from backend.tools.image_enhance import release_enhance_models
-
-                InferClient.instance().cancel()
-                dlg.wait_worker(timeout=60.0)
-                release_enhance_models(blocking=True, timeout=10.0)
-            except Exception:
-                pass
-            try:
-                dlg.finished_image.disconnect(on_done)
-            except Exception:
-                pass
 
     def reset_workspace(self):
         """Clear tasks and discard unsaved temp previews."""
@@ -825,7 +768,6 @@ class BgRemoveInterface(ContentPage):
         self.append_output(tr["BgRemove"]["ResetDone"])
         self.action_bar.set_save_enabled(False)
         self.action_bar.set_retouch_enabled(False)
-        self.action_bar.set_enhance_enabled(False)
         self._update_protect_controls()
         try:
             InferClient.instance().request_release()
@@ -834,7 +776,14 @@ class BgRemoveInterface(ContentPage):
         gc.collect()
 
     def run_button_clicked(self):
-        if self._installing or self._processing:
+        if self._installing or self._processing or self._external_gpu_busy:
+            if self._external_gpu_busy:
+                from ui.gpu_busy import gpu_busy_message
+
+                self._show_alert(
+                    tr["BgRemove"].get("Title", "Remove BG"),
+                    gpu_busy_message(),
+                )
             return
         pending = self.task_list_component.get_pending_tasks()
         if not pending:
@@ -1049,11 +998,15 @@ class BgRemoveInterface(ContentPage):
                 success["ok"] = False
             elif msg in ("TIMEOUT", "CRASH", "BUSY"):
                 success["ok"] = False
-                text = {
-                    "TIMEOUT": "Background removal timed out. The worker was restarted - try again.",
-                    "CRASH": "Background removal worker crashed. Try again.",
-                    "BUSY": "Another GPU job is already running. Wait for it to finish or stop it first.",
-                }.get(msg, "Background removal worker crashed. Try again.")
+                if msg == "BUSY":
+                    from ui.gpu_busy import gpu_busy_message
+
+                    text = gpu_busy_message()
+                else:
+                    text = {
+                        "TIMEOUT": "Background removal timed out. The worker was restarted - try again.",
+                        "CRASH": "Background removal worker crashed. Try again.",
+                    }.get(msg, "Background removal worker crashed. Try again.")
                 self.task_error_signal.emit(text)
             else:
                 success["ok"] = False

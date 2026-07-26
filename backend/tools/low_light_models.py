@@ -1,4 +1,4 @@
-"""Real-ESRGAN enhance model catalog: install, enable/disable, paths."""
+"""MIRNet low-light model catalog: install, paths, enable/disable."""
 
 from __future__ import annotations
 
@@ -8,89 +8,73 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Set
 
-from backend.tools.constant import EnhanceMode
+from backend.tools.constant import LowLightMode
+
+# Official LOL enhancement weights (swz30/MIRNet Google Drive).
+_LOL_GDRIVE_ID = "1t_FcBuMZD5th2KWVVNXYGJ7bMz5ZAWvF"
 
 
 @dataclass(frozen=True)
-class EnhanceModelInfo:
-    mode: EnhanceMode
-    scale: int
-    """Translation key under [EnhanceMode] / [EnhanceModelDesc]."""
+class LowLightModelInfo:
+    mode: LowLightMode
     desc_key: str
     download_url: str
-    """Recommended default (badge only; On/Off still works)."""
     is_default: bool = False
 
 
-MODEL_CATALOG: List[EnhanceModelInfo] = [
-    EnhanceModelInfo(
-        EnhanceMode.X2PLUS,
-        scale=2,
-        desc_key="X2PLUS",
+MODEL_CATALOG: List[LowLightModelInfo] = [
+    LowLightModelInfo(
+        LowLightMode.MIRNET_LOL,
+        desc_key="MIRNET_LOL",
         download_url=(
-            "https://github.com/xinntao/Real-ESRGAN/releases/download/"
-            "v0.2.1/RealESRGAN_x2plus.pth"
+            "https://drive.usercontent.google.com/download"
+            f"?id={_LOL_GDRIVE_ID}&export=download&confirm=t"
         ),
         is_default=True,
     ),
-    EnhanceModelInfo(
-        EnhanceMode.X4PLUS,
-        scale=4,
-        desc_key="X4PLUS",
-        download_url=(
-            "https://github.com/xinntao/Real-ESRGAN/releases/download/"
-            "v0.1.0/RealESRGAN_x4plus.pth"
-        ),
-        is_default=False,
-    ),
 ]
 
-_CATALOG_BY_MODE: Dict[EnhanceMode, EnhanceModelInfo] = {m.mode: m for m in MODEL_CATALOG}
+_CATALOG_BY_MODE: Dict[LowLightMode, LowLightModelInfo] = {
+    m.mode: m for m in MODEL_CATALOG
+}
 
 DEFAULT_ENABLED_VALUES = tuple(m.mode.value for m in MODEL_CATALOG if m.is_default)
-
-# Saved when every model is Off (empty string would be read as “use factory defaults”)
 _NONE_ENABLED = "__none__"
 
 
 def models_dir() -> Path:
     from backend.config import BASE_DIR
 
-    path = Path(BASE_DIR) / "models" / "realesrgan"
+    path = Path(BASE_DIR) / "models" / "mirnet"
     path.mkdir(parents=True, exist_ok=True)
     return path
 
 
-def model_file_path(mode: EnhanceMode) -> Path:
+def model_file_path(mode: LowLightMode) -> Path:
     return models_dir() / f"{mode.value}.pth"
 
 
-def is_model_installed(mode: EnhanceMode) -> bool:
+def is_model_installed(mode: LowLightMode) -> bool:
     path = model_file_path(mode)
     try:
-        return path.is_file() and path.stat().st_size > 0
+        # Official LOL weights are ~120MB+; reject HTML error pages.
+        return path.is_file() and path.stat().st_size > 1_000_000
     except OSError:
         return False
 
 
-def catalog_info(mode: EnhanceMode) -> Optional[EnhanceModelInfo]:
+def catalog_info(mode: LowLightMode) -> Optional[LowLightModelInfo]:
     return _CATALOG_BY_MODE.get(mode)
 
 
-def native_scale(mode: EnhanceMode) -> int:
-    info = catalog_info(mode)
-    return info.scale if info else 2
-
-
 def parse_enabled_values(raw: str) -> Set[str]:
-    """Parse EnabledModels. Missing/blank → factory defaults; ``__none__`` → all Off."""
     s = "" if raw is None else str(raw).strip()
     if not s:
         return set(DEFAULT_ENABLED_VALUES)
     if s == _NONE_ENABLED:
         return set()
     values = {part.strip() for part in s.split(",") if part.strip()}
-    valid = {m.value for m in EnhanceMode}
+    valid = {m.value for m in LowLightMode}
     return {v for v in values if v in valid}
 
 
@@ -108,11 +92,10 @@ def serialize_enabled_values(values: Iterable[str]) -> str:
 def get_enabled_values() -> Set[str]:
     from backend.config import config
 
-    return parse_enabled_values(config.enhanceEnabledModels.value)
+    return parse_enabled_values(config.lowLightEnabledModels.value)
 
 
-def set_model_enabled(mode: EnhanceMode, enabled: bool) -> None:
-    """Turn a model On/Off for the Enhance dropdown (including the default)."""
+def set_model_enabled(mode: LowLightMode, enabled: bool) -> None:
     from backend.config import config
 
     values = get_enabled_values()
@@ -120,15 +103,10 @@ def set_model_enabled(mode: EnhanceMode, enabled: bool) -> None:
         values.add(mode.value)
     else:
         values.discard(mode.value)
-    config.set(config.enhanceEnabledModels, serialize_enabled_values(values))
+    config.set(config.lowLightEnabledModels, serialize_enabled_values(values))
 
 
-def selectable_modes() -> List[EnhanceMode]:
-    """On + available modes for the Enhance dropdown.
-
-    Default (x2plus) can appear before first download when On; optional
-    models (x4plus) require install + On.
-    """
+def selectable_modes() -> List[LowLightMode]:
     enabled = get_enabled_values()
     return [
         info.mode
@@ -138,28 +116,27 @@ def selectable_modes() -> List[EnhanceMode]:
     ]
 
 
-def ensure_selected_mode_valid() -> EnhanceMode:
+def ensure_selected_mode_valid() -> LowLightMode:
     from backend.config import config
 
-    current = config.enhanceMode.value
+    current = config.lowLightMode.value
     available = selectable_modes()
     if current in available:
         return current
-    if EnhanceMode.X2PLUS in available:
-        config.set(config.enhanceMode, EnhanceMode.X2PLUS)
-        return EnhanceMode.X2PLUS
+    if LowLightMode.MIRNET_LOL in available:
+        config.set(config.lowLightMode, LowLightMode.MIRNET_LOL)
+        return LowLightMode.MIRNET_LOL
     if available:
-        config.set(config.enhanceMode, available[0])
+        config.set(config.lowLightMode, available[0])
         return available[0]
     return current
 
 
-def apply_default_enhance_model() -> EnhanceMode:
-    """Keep dropdown selection valid after install / On-Off changes."""
+def apply_default_low_light_model() -> LowLightMode:
     return ensure_selected_mode_valid()
 
 
-def discard_partial(mode: EnhanceMode) -> None:
+def discard_partial(mode: LowLightMode) -> None:
     """Delete incomplete .pth.part so the next install starts over."""
     tmp = model_file_path(mode).with_suffix(".pth.part")
     try:
@@ -169,10 +146,10 @@ def discard_partial(mode: EnhanceMode) -> None:
         pass
 
 
-def uninstall_model(mode: EnhanceMode) -> None:
+def uninstall_model(mode: LowLightMode) -> None:
     """Delete local weights so the model can be reinstalled later."""
     if catalog_info(mode) is None:
-        raise ValueError(f"Unknown enhance model: {mode}")
+        raise ValueError(f"Unknown low-light model: {mode}")
     dest = model_file_path(mode)
     discard_partial(mode)
     try:
@@ -184,10 +161,10 @@ def uninstall_model(mode: EnhanceMode) -> None:
     ensure_selected_mode_valid()
 
 
-def install_model(mode: EnhanceMode) -> None:
+def install_model(mode: LowLightMode) -> None:
     """Download .pth weights (blocking; call from a worker thread)."""
     from backend.tools.model_download_registry import (
-        KIND_ENHANCE,
+        KIND_LOW_LIGHT,
         DownloadCancelled,
         ModelDownloadRegistry,
         urllib_cancel_reporthook,
@@ -195,10 +172,10 @@ def install_model(mode: EnhanceMode) -> None:
 
     info = catalog_info(mode)
     if info is None:
-        raise ValueError(f"Unknown enhance model: {mode}")
+        raise ValueError(f"Unknown low-light model: {mode}")
 
     reg = ModelDownloadRegistry.instance()
-    reg.begin(KIND_ENHANCE, mode.value)
+    reg.begin(KIND_LOW_LIGHT, mode.value)
     dest = model_file_path(mode)
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_suffix(".pth.part")
@@ -210,29 +187,43 @@ def install_model(mode: EnhanceMode) -> None:
             info.download_url, str(tmp), reporthook=urllib_cancel_reporthook
         )
         reg.check_cancelled()
-        if not tmp.is_file() or tmp.stat().st_size <= 0:
-            raise RuntimeError(f"Download finished but file empty: {tmp}")
+        if not tmp.is_file() or tmp.stat().st_size <= 1_000_000:
+            raise RuntimeError(
+                "Download finished but file looks invalid "
+                f"(size={tmp.stat().st_size if tmp.is_file() else 0}). "
+                "Try again or install from Settings."
+            )
+        # Reject HTML interstitial pages mistakenly saved as .pth
+        with open(tmp, "rb") as f:
+            head = f.read(32)
+        if head.lstrip().startswith((b"<", b"<!")):
+            raise RuntimeError(
+                "Download returned an HTML page instead of MIRNet weights. "
+                "Try again later or download model_lol.pth manually."
+            )
         os.replace(str(tmp), str(dest))
     except DownloadCancelled:
         discard_partial(mode)
-        reg.fail(KIND_ENHANCE, mode.value, keep_pending=True)
+        reg.fail(KIND_LOW_LIGHT, mode.value, keep_pending=True)
         raise
     except Exception:
         discard_partial(mode)
-        reg.fail(KIND_ENHANCE, mode.value, keep_pending=False)
+        reg.fail(KIND_LOW_LIGHT, mode.value, keep_pending=False)
         raise
 
     if not is_model_installed(mode):
         discard_partial(mode)
-        reg.fail(KIND_ENHANCE, mode.value, keep_pending=False)
+        reg.fail(KIND_LOW_LIGHT, mode.value, keep_pending=False)
         raise RuntimeError(f"Download finished but model file missing: {dest}")
     set_model_enabled(mode, True)
-    reg.complete(KIND_ENHANCE, mode.value)
+    reg.complete(KIND_LOW_LIGHT, mode.value)
 
 
-def ensure_model_installed(mode: EnhanceMode) -> Path:
-    """Install if missing (blocking). Returns weight path."""
+def ensure_model_installed(mode: LowLightMode) -> Path:
+    """Install if missing (blocking). Always leaves the model On (Settings default)."""
     path = model_file_path(mode)
     if not is_model_installed(mode):
         install_model(mode)
+    else:
+        set_model_enabled(mode, True)
     return path

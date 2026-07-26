@@ -9,6 +9,8 @@ from typing import Any, Dict, Optional, Tuple
 @unique
 class JobType(str, Enum):
     ENHANCE = "enhance"
+    LOW_LIGHT = "low_light"
+    GENERATE = "generate"
     BG_REMOVE = "bg_remove"
     LAMA_RETOUCH = "lama_retouch"
     SELECT_SUBJECT = "select_subject"

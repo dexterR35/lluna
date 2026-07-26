@@ -16,6 +16,8 @@ from backend.tools.concurrent import TaskExecutor
 from ui.component.utils.confirm_dialog import ask_confirm
 from ui.component.cards.bg_remove_model_manager import BgRemoveModelManager
 from ui.component.cards.enhance_model_manager import EnhanceModelManager
+from ui.component.cards.low_light_model_manager import LowLightModelManager
+from ui.component.cards.generate_model_manager import GenerateModelManager
 from ui.component.cards.select_object_model_manager import SelectObjectModelManager
 from ui.component.cards.midgard_setting_cards import (
     MidgardCardGroup,
@@ -100,6 +102,15 @@ class AdvancedSettingInterface(ScrollArea):
             self.enhance_models_group.addSettingCard(card)
         self.expandLayout.addWidget(self.enhance_models_group)
 
+        for card in self.low_light_model_manager.cards:
+            self.low_light_models_group.addSettingCard(card)
+        self.expandLayout.addWidget(self.low_light_models_group)
+
+        for card in self.generate_model_manager.cards:
+            self.generate_models_group.addSettingCard(card)
+        self.generate_models_group.addSettingCard(self.generate_model_manager.token_card)
+        self.expandLayout.addWidget(self.generate_models_group)
+
         for card in self.select_object_model_manager.cards:
             self.select_object_models_group.addSettingCard(card)
         self.select_object_models_group.addSettingCard(self.select_object_more_complex)
@@ -160,6 +171,24 @@ class AdvancedSettingInterface(ScrollArea):
         self.enhance_model_manager = EnhanceModelManager(self.enhance_models_group)
         self.enhance_model_manager.status_message.connect(self._on_enhance_model_status)
 
+        self.low_light_models_group = MidgardCardGroup(
+            tr["Setting"]["LowLightModelsSetting"],
+            self.contentColumn,
+            resettable=True,
+            subtitle=tr["Setting"]["LowLightModelsSettingDesc"],
+        )
+        self.low_light_model_manager = LowLightModelManager(self.low_light_models_group)
+        self.low_light_model_manager.status_message.connect(self._on_low_light_model_status)
+
+        self.generate_models_group = MidgardCardGroup(
+            tr["Setting"]["GenerateModelsSetting"],
+            self.contentColumn,
+            resettable=True,
+            subtitle=tr["Setting"]["GenerateModelsSettingDesc"],
+        )
+        self.generate_model_manager = GenerateModelManager(self.generate_models_group)
+        self.generate_model_manager.status_message.connect(self._on_generate_model_status)
+
         self.select_object_models_group = MidgardCardGroup(
             tr["Setting"]["SelectObjectModelsSetting"],
             self.contentColumn,
@@ -207,6 +236,12 @@ class AdvancedSettingInterface(ScrollArea):
         )
         self._wire_section_reset(
             self.enhance_models_group, "enhance_models", "EnhanceModelsSetting"
+        )
+        self._wire_section_reset(
+            self.low_light_models_group, "low_light_models", "LowLightModelsSetting"
+        )
+        self._wire_section_reset(
+            self.generate_models_group, "generate_models", "GenerateModelsSetting"
         )
         self._wire_section_reset(
             self.select_object_models_group,
@@ -371,6 +406,10 @@ class AdvancedSettingInterface(ScrollArea):
             self.bg_remove_model_manager.refresh()
         elif section_id == "enhance_models":
             self.enhance_model_manager.refresh()
+        elif section_id == "low_light_models":
+            self.low_light_model_manager.refresh()
+        elif section_id == "generate_models":
+            self.generate_model_manager.refresh()
         elif section_id == "select_object_models":
             config.set(config.selectObjectMoreComplex, False)
             self.select_object_model_manager.refresh()
@@ -424,6 +463,8 @@ class AdvancedSettingInterface(ScrollArea):
         self.bg_remove_model_manager.refresh()
         self.enhance_model_manager.refresh()
         self.select_object_model_manager.refresh()
+        self.low_light_model_manager.refresh()
+        self.generate_model_manager.refresh()
         self._sync_more_complex_switch()
 
     def _on_select_object_install_busy(self, busy: bool):
@@ -488,6 +529,22 @@ class AdvancedSettingInterface(ScrollArea):
     def _on_enhance_model_status(self, message: str):
         InfoBar.info(
             title=tr["Setting"]["EnhanceModelsSetting"],
+            content=message,
+            duration=config.infoBarDurationMs,
+            parent=self,
+        )
+
+    def _on_low_light_model_status(self, message: str):
+        InfoBar.info(
+            title=tr["Setting"]["LowLightModelsSetting"],
+            content=message,
+            duration=config.infoBarDurationMs,
+            parent=self,
+        )
+
+    def _on_generate_model_status(self, message: str):
+        InfoBar.info(
+            title=tr["Setting"]["GenerateModelsSetting"],
             content=message,
             duration=config.infoBarDurationMs,
             parent=self,

@@ -30,6 +30,8 @@ class HomeInterface(ContentPage):
     task_status_signal = Signal(int, object)  # (task_index, TaskStatus)
     select_task_signal = Signal(int)  # task_index
     compare_done_signal = Signal(str, str)  # (ok_path_or_empty, error_or_empty)
+    processing_changed = Signal(bool)
+
     def __init__(self, parent=None):
         super().__init__("HomeInterface", parent=parent)
         # Initialize variables
@@ -58,6 +60,8 @@ class HomeInterface(ContentPage):
         self.current_processing_task_index = -1
         self._active_run_id: int | None = None
         self._compare_thread: threading.Thread | None = None
+        self._processing = False
+        self._external_gpu_busy = False
 
         self.__init_widgets()
         self.progress_signal.connect(self.update_progress)
@@ -424,10 +428,29 @@ class HomeInterface(ContentPage):
     @Slot(bool)
     def _toggle_buttons(self, show_run):
         """Toggle button visibility thread-safely (show_run=True => idle)."""
+        self._processing = not show_run
+        idle = show_run and not self._external_gpu_busy
         self.action_bar.set_running(not show_run)
+        if show_run:
+            self.action_bar.set_run_enabled(idle)
+            self.action_bar.set_open_enabled(idle)
+            self.action_bar.set_reset_enabled(idle)
+        self.processing_changed.emit(self._processing)
+        self._update_compare_enabled()
+
+    def set_external_gpu_busy(self, busy: bool):
+        self._external_gpu_busy = bool(busy)
+        if self._processing:
+            return
+        idle = not self._external_gpu_busy
+        self.action_bar.set_run_enabled(idle)
+        self.action_bar.set_open_enabled(idle)
+        self.action_bar.set_reset_enabled(idle)
         self._update_compare_enabled()
 
     def _can_compare_current_task(self) -> bool:
+        if self._external_gpu_busy:
+            return False
         if self.running_process is not None:
             return False
         if self._worker_thread is not None and self._worker_thread.is_alive():
@@ -491,6 +514,12 @@ class HomeInterface(ContentPage):
 
     def run_button_clicked(self):
         diag.run("subtitle / inpaint queue")
+        if self._processing or self._external_gpu_busy:
+            if self._external_gpu_busy:
+                from ui.gpu_busy import gpu_busy_message
+
+                self.append_output(gpu_busy_message())
+            return
         if not self.task_list_component.get_pending_tasks():
             self.append_output(tr['SubtitleExtractorGUI']['OpenVideoFirst'])
             return

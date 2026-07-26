@@ -38,6 +38,20 @@ def _release_all_except(keep: Optional[str] = None) -> None:
             release_enhance_models(blocking=True, timeout=5.0)
         except Exception:
             traceback.print_exc()
+    if keep != JobType.LOW_LIGHT.value:
+        try:
+            from backend.tools.image_low_light import release_low_light_models
+
+            release_low_light_models(blocking=True, timeout=5.0)
+        except Exception:
+            traceback.print_exc()
+    if keep != JobType.GENERATE.value:
+        try:
+            from backend.tools.image_generate import release_generate_models
+
+            release_generate_models(blocking=True, timeout=5.0)
+        except Exception:
+            traceback.print_exc()
     if keep != JobType.BG_REMOVE.value:
         try:
             from backend.tools.bg_remove import release_bg_sessions
@@ -119,6 +133,10 @@ def infer_worker_main(cmd_queue, evt_queue, hardware_accel: bool = True) -> None
             _release_all_except(keep=job_type)
             if job_type == JobType.ENHANCE.value:
                 _job_enhance(run_id, payload, cancel_event, on_progress, heartbeat_log, evt_queue)
+            elif job_type == JobType.LOW_LIGHT.value:
+                _job_low_light(run_id, payload, cancel_event, on_progress, heartbeat_log, evt_queue)
+            elif job_type == JobType.GENERATE.value:
+                _job_generate(run_id, payload, cancel_event, on_progress, heartbeat_log, evt_queue)
             elif job_type == JobType.BG_REMOVE.value:
                 _job_bg_remove(run_id, payload, on_progress, heartbeat_log, evt_queue)
             elif job_type == JobType.LAMA_RETOUCH.value:
@@ -172,6 +190,18 @@ def infer_worker_main(cmd_queue, evt_queue, hardware_accel: bool = True) -> None
                     cancel_enhance()
                 except Exception:
                     pass
+                try:
+                    from backend.tools.image_low_light import cancel_low_light
+
+                    cancel_low_light()
+                except Exception:
+                    pass
+                try:
+                    from backend.tools.image_generate import cancel_generate
+
+                    cancel_generate()
+                except Exception:
+                    pass
             last_activity = time.monotonic()
             continue
 
@@ -195,6 +225,7 @@ def _job_enhance(run_id, payload, cancel_event, on_progress, heartbeat_log, evt_
 
     from backend.tools.constant import EnhanceMode
     from backend.tools.enhance_models import ensure_model_installed
+    from backend.tools.enhance_options import EnhanceOptions
     from backend.tools.image_enhance import EnhanceCancelled, enhance_rgba
     from backend.tools.job_config import apply_hardware_from_payload
     from backend.tools.vram_budget import VramBudgetError
@@ -208,6 +239,7 @@ def _job_enhance(run_id, payload, cancel_event, on_progress, heartbeat_log, evt_
         _emit(evt_queue, error(run_id, "Enhance mode was not selected."))
         return
     mode = EnhanceMode(mode_value)
+    options = EnhanceOptions.from_payload(payload)
 
     heartbeat_log(run_id, f"Enhance model: {mode.value}")
     on_progress(run_id, 5)
@@ -217,7 +249,10 @@ def _job_enhance(run_id, payload, cancel_event, on_progress, heartbeat_log, evt_
         _emit(evt_queue, error(run_id, "__cancelled__"))
         return
 
-    heartbeat_log(run_id, "Loading Real-ESRGAN…")
+    if options.denoise:
+        heartbeat_log(run_id, "Denoising…")
+    else:
+        heartbeat_log(run_id, "Loading Real-ESRGAN…")
     on_progress(run_id, 15)
     img = Image.open(input_path).convert("RGBA")
 
@@ -225,12 +260,181 @@ def _job_enhance(run_id, payload, cancel_event, on_progress, heartbeat_log, evt_
         on_progress(run_id, 20 + int(max(0, min(100, v)) * 0.75))
 
     try:
-        out = enhance_rgba(img, mode, progress=prog, cancel_event=cancel_event)
+        out = enhance_rgba(
+            img,
+            mode,
+            progress=prog,
+            cancel_event=cancel_event,
+            options=options,
+        )
     except EnhanceCancelled:
         _emit(evt_queue, error(run_id, "__cancelled__"))
         return
     except VramBudgetError as e:
         _emit(evt_queue, error(run_id, str(e)))
+        return
+
+    os.makedirs(os.path.dirname(os.path.abspath(output_path)) or ".", exist_ok=True)
+    out.save(output_path, format="PNG")
+    on_progress(run_id, 100)
+    _emit(evt_queue, result(run_id, output_path))
+
+
+def _job_low_light(run_id, payload, cancel_event, on_progress, heartbeat_log, evt_queue) -> None:
+    from PIL import Image, ImageOps
+
+    from backend.tools.constant import LowLightMode
+    from backend.tools.image_low_light import (
+        LowLightCancelled,
+        enhance_rgb,
+        preflight_low_light,
+    )
+    from backend.tools.job_config import apply_hardware_from_payload
+    from backend.tools.low_light_models import ensure_model_installed
+    from backend.tools.vram_budget import VramBudgetError
+
+    apply_hardware_from_payload(payload)
+
+    input_path = payload["input_path"]
+    output_path = payload.get("output_path") or _temp_png("low_light")
+    mode_value = payload.get("mode")
+    if not mode_value:
+        _emit(evt_queue, error(run_id, "Low-light model was not selected."))
+        return
+    mode = LowLightMode(mode_value)
+
+    heartbeat_log(run_id, f"Low-light model: {mode.value}")
+    on_progress(run_id, 3)
+    try:
+        with Image.open(input_path) as im:
+            w, h = im.size
+        preflight_low_light(h, w)
+    except VramBudgetError as e:
+        _emit(evt_queue, error(run_id, str(e)))
+        return
+
+    heartbeat_log(run_id, "Ensuring MIRNet weights installed…")
+    ensure_model_installed(mode)
+    if cancel_event.is_set():
+        _emit(evt_queue, error(run_id, "__cancelled__"))
+        return
+
+    heartbeat_log(run_id, "Loading MIRNet (PyTorch)…")
+    on_progress(run_id, 12)
+    img = ImageOps.exif_transpose(Image.open(input_path))
+    if img.mode not in ("RGB", "RGBA"):
+        img = img.convert("RGBA" if "A" in img.getbands() else "RGB")
+
+    def prog(v: int):
+        on_progress(run_id, 15 + int(max(0, min(100, v)) * 0.8))
+
+    try:
+        out = enhance_rgb(
+            img,
+            mode,
+            progress=prog,
+            cancel_event=cancel_event,
+        )
+    except LowLightCancelled:
+        _emit(evt_queue, error(run_id, "__cancelled__"))
+        return
+    except VramBudgetError as e:
+        _emit(evt_queue, error(run_id, str(e)))
+        return
+
+    os.makedirs(os.path.dirname(os.path.abspath(output_path)) or ".", exist_ok=True)
+    # Prefer PNG to preserve quality; JPEG inputs still get PNG preview (Save can convert).
+    out.save(output_path, format="PNG")
+    on_progress(run_id, 100)
+    _emit(evt_queue, result(run_id, output_path))
+
+
+def _job_generate(run_id, payload, cancel_event, on_progress, heartbeat_log, evt_queue) -> None:
+    from backend.tools.constant import GenerateMode
+    from backend.tools.generate_models import (
+        cuda_ready_for_generate,
+        ensure_model_installed,
+    )
+    from backend.tools.image_generate import (
+        GenerateCancelled,
+        GenerateCudaError,
+        generate_image,
+    )
+    from backend.tools.job_config import apply_hardware_from_payload
+
+    apply_hardware_from_payload(payload)
+
+    ok, reason = cuda_ready_for_generate()
+    if not ok:
+        _emit(evt_queue, error(run_id, reason))
+        return
+
+    prompt = str(payload.get("prompt") or "").strip()
+    if not prompt:
+        _emit(evt_queue, error(run_id, "Prompt is empty."))
+        return
+
+    output_path = payload.get("output_path") or _temp_png("generate")
+    mode_value = payload.get("mode")
+    if not mode_value:
+        _emit(evt_queue, error(run_id, "Generate model was not selected."))
+        return
+    mode = GenerateMode(mode_value)
+
+    width = int(payload.get("width") or 1024)
+    height = int(payload.get("height") or 1024)
+    steps = int(payload.get("steps") or 4)
+    guidance = float(payload.get("guidance") or 1.0)
+    seed = payload.get("seed")
+    seed_i = int(seed) if seed is not None and str(seed).strip() != "" else None
+
+    heartbeat_log(run_id, f"Generate model: {mode.value}")
+    on_progress(run_id, 2)
+
+    stop_hb = threading.Event()
+
+    def _keep_alive():
+        while not stop_hb.wait(20.0):
+            heartbeat_log(run_id, "Loading FLUX.2 (still working)…")
+
+    hb_thread = threading.Thread(target=_keep_alive, daemon=True)
+    hb_thread.start()
+    out = None
+    try:
+        heartbeat_log(run_id, "Ensuring FLUX.2 weights installed…")
+        ensure_model_installed(mode)
+        if cancel_event.is_set():
+            _emit(evt_queue, error(run_id, "__cancelled__"))
+            return
+
+        heartbeat_log(run_id, "Loading FLUX.2 (Diffusers)…")
+        on_progress(run_id, 10)
+
+        def prog(v: int):
+            on_progress(run_id, max(10, min(99, int(v))))
+
+        try:
+            out = generate_image(
+                prompt,
+                mode,
+                width=width,
+                height=height,
+                steps=steps,
+                guidance=guidance,
+                seed=seed_i,
+                progress=prog,
+                cancel_event=cancel_event,
+            )
+        except GenerateCancelled:
+            _emit(evt_queue, error(run_id, "__cancelled__"))
+            return
+        except GenerateCudaError as e:
+            _emit(evt_queue, error(run_id, str(e)))
+            return
+    finally:
+        stop_hb.set()
+
+    if out is None:
         return
 
     os.makedirs(os.path.dirname(os.path.abspath(output_path)) or ".", exist_ok=True)

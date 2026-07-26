@@ -120,7 +120,11 @@ class SelectObjectController(QObject):
 
         def on_error(msg: str):
             self._cleanup_temps()
-            if msg in ("__cancelled__", "TIMEOUT", "CRASH", "BUSY"):
+            if msg == "BUSY":
+                from ui.gpu_busy import gpu_busy_message
+
+                self._finish(None, gpu_busy_message())
+            elif msg in ("__cancelled__", "TIMEOUT", "CRASH"):
                 self._finish(None, tr["SelectObject"].get("Cancelled", "Select Object cancelled."))
             else:
                 self._finish(None, msg)

@@ -40,7 +40,6 @@ class RailActions:
     empty_list_hint: str = ""
     save_text: Optional[str] = None
     retouch_text: Optional[str] = None
-    enhance_text: Optional[str] = None
     compare_text: Optional[str] = None
     settings_title: Optional[str] = None
     progress_label: Optional[str] = None  # e.g. "Processing {}%"
@@ -52,7 +51,6 @@ class ActionBar(CardWidget):
 
       [ Open  ] [ Reset    ]
       [ Save  ] [ Retouch  ]   (shown only when a result is ready)
-      [ Enhance ]              (shown only when a result is ready)
       [ Compare ]              (Video tab — side-by-side original|cleaned)
       [ Processing N% + bar ]  (shown while running, when progress_label set)
       [       Run/Stop     ]
@@ -63,7 +61,6 @@ class ActionBar(CardWidget):
     stop_confirmed = Signal()
     save_clicked = Signal()
     retouch_clicked = Signal()
-    enhance_clicked = Signal()
     compare_clicked = Signal()
     reset_confirmed = Signal()
 
@@ -79,7 +76,6 @@ class ActionBar(CardWidget):
         self._reset_confirm_desc = actions.reset_confirm_desc
         self._has_save = bool(actions.save_text)
         self._has_retouch = bool(actions.retouch_text)
-        self._has_enhance = bool(actions.enhance_text)
         self._has_compare = bool(actions.compare_text)
         self._has_reset = bool(actions.reset_text)
         self._progress_fmt = actions.progress_label or ""
@@ -136,16 +132,6 @@ class ActionBar(CardWidget):
         self._mid_row.setVisible(False)
         root.addWidget(self._mid_row)
 
-        # Row 1b - Enhance (Remove BG only; shown after result is ready)
-        self.enhance_button = make_button(
-            actions.enhance_text or "Enhance", "danger", self, FluentIcon.ZOOM
-        )
-        self.enhance_button.clicked.connect(lambda: self._emit_throttled(self.enhance_clicked))
-        self.enhance_button.setEnabled(False)
-        self.enhance_button.setVisible(False)
-        self._style_btn(self.enhance_button)
-        root.addWidget(self.enhance_button)
-
         # Compare (Video tab — side-by-side original | cleaned)
         self.compare_button = make_button(
             actions.compare_text or "Compare", "secondary", self, FluentIcon.ALIGNMENT
@@ -156,7 +142,7 @@ class ActionBar(CardWidget):
         self._style_btn(self.compare_button)
         root.addWidget(self.compare_button)
 
-        # Progress (optional) - same chrome as enhance / retouch dialogs
+        # Progress (optional) - same chrome as retouch dialogs
         self.progress_panel = QWidget(self)
         prog = QVBoxLayout(self.progress_panel)
         prog.setContentsMargins(0, 0, 0, 0)
@@ -264,17 +250,15 @@ class ActionBar(CardWidget):
         self.progress_bar.setValue(0)
 
     def _sync_result_actions(self, *, idle: bool | None = None):
-        """Show Save / Retouch / Enhance only when enabled and not running."""
+        """Show Save / Retouch only when enabled and not running."""
         if idle is None:
             idle = not self.stop_button.isVisible()
         show_save = idle and self._has_save and self.save_button.isEnabled()
         show_retouch = idle and self._has_retouch and self.retouch_button.isEnabled()
-        show_enhance = idle and self._has_enhance and self.enhance_button.isEnabled()
         show_compare = idle and self._has_compare and self.compare_button.isEnabled()
         self.save_button.setVisible(show_save)
         self.retouch_button.setVisible(show_retouch)
         self._mid_row.setVisible(show_save or show_retouch)
-        self.enhance_button.setVisible(show_enhance)
         self.compare_button.setVisible(show_compare)
 
     def set_open_enabled(self, enabled: bool):
@@ -289,10 +273,6 @@ class ActionBar(CardWidget):
 
     def set_retouch_enabled(self, enabled: bool):
         self.retouch_button.setEnabled(enabled)
-        self._sync_result_actions()
-
-    def set_enhance_enabled(self, enabled: bool):
-        self.enhance_button.setEnabled(enabled)
         self._sync_result_actions()
 
     def set_compare_enabled(self, enabled: bool):

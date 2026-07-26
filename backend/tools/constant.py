@@ -55,6 +55,29 @@ class EnhanceMode(Enum):
 
 
 @unique
+class LowLightMode(Enum):
+    """MIRNet low-light enhancement (PyTorch, same-size restore)."""
+
+    MIRNET_LOL = "MIRNet_LOL"
+
+
+@unique
+class GenerateMode(Enum):
+    """Text-to-image models (FLUX.2 via Diffusers)."""
+
+    FLUX2_KLEIN_4B = "FLUX.2-klein-4B"
+    FLUX2_KLEIN_9B = "FLUX.2-klein-9B"
+
+
+@unique
+class DenoiseStrength(Enum):
+    """Safe denoise strength before Real-ESRGAN (restoration-only, no upscale)."""
+
+    SAFE = "safe"
+    MEDIUM = "medium"
+
+
+@unique
 class SelectObjectModelId(str, Enum):
     """SAM2 + Grounding DINO weights for Select Object (Protect keep mask)."""
 

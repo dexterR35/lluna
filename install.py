@@ -622,6 +622,8 @@ def install_packages(py: Path, mode: str, torch_tag: str) -> None:
     pip_install(py, ["rembg>=2.0.60"])
     # Select Object (SAM2 + Grounding DINO via Hugging Face transformers)
     pip_install(py, ["transformers>=4.48.0", "huggingface_hub>=0.26.0"])
+    # Generate (FLUX.2 klein via Diffusers) — weights installed from Settings
+    pip_install(py, ["diffusers>=0.37.1", "accelerate>=1.0.0"])
 
 
 def verify_python_packages(py: Path) -> None:
@@ -632,6 +634,8 @@ checks = [
     ("torch", "import torch"),
     ("transformers", "import transformers"),
     ("huggingface_hub", "import huggingface_hub"),
+    ("diffusers", "import diffusers"),
+    ("accelerate", "import accelerate"),
     ("Sam2Model", "from transformers import Sam2Model, Sam2Processor"),
     (
         "Grounding DINO",
@@ -784,6 +788,37 @@ else:
     run([str(py), "-c", script, str(ROOT)])
 
 
+def prefetch_low_light_mirnet(py: Path) -> None:
+    """Mandatory first-install: MIRNet LOL (Low Light page default). Leaves Settings On."""
+    log("\nInstalling default Low Light model (MIRNet LOL)…")
+    script = r"""
+import sys
+sys.path.insert(0, sys.argv[1])
+from backend.config import config
+from backend.tools.constant import LowLightMode
+from backend.tools.low_light_models import (
+    ensure_model_installed,
+    is_model_installed,
+    model_file_path,
+    set_model_enabled,
+)
+
+mode = LowLightMode.MIRNET_LOL
+path = model_file_path(mode)
+if is_model_installed(mode):
+    print(f"  OK already present: {path}")
+else:
+    print("  Downloading MIRNet_LOL …")
+    path = ensure_model_installed(mode)
+    print(f"  OK {path}")
+# Default On after install (same as Settings Install button)
+set_model_enabled(mode, True)
+config.set(config.lowLightMode, mode)
+print("  Enabled: On (default)")
+"""
+    run([str(py), "-c", script, str(ROOT)])
+
+
 def prefetch_select_object_defaults(py: Path) -> None:
     """Install missing Select Object defaults only; skip models already on disk."""
     log("\nSelect Object models (install missing only)…")
@@ -914,12 +949,21 @@ def main() -> int:
     run([str(py), "-c", merge_script])
 
     if not args.skip_rembg_models:
+        try:
+            from backend.tools.model_download_lifecycle import cli_stop_and_revert_downloads
+
+            # Stop any GUI downloads and wipe partials; prefetch starts clean
+            cli_stop_and_revert_downloads()
+        except Exception as e:
+            log(f"  (model download cancel hook: {e})")
         prefetch_rembg_models(py)
     else:
         log("Skipped Remove BG model prefetch (--skip-rembg-models).")
 
     # Real-ESRGAN ×2 is mandatory on first install (×4 remains Settings-only)
     prefetch_enhance_x2(py)
+    # MIRNet LOL is mandatory on first install (Settings On/Off after that)
+    prefetch_low_light_mirnet(py)
     prefetch_select_object_defaults(py)
 
     write_runtime(

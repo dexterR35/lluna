@@ -111,13 +111,89 @@ def is_model_installed(model_id: SelectObjectModelId) -> bool:
     marker = path / _MARKER
     if marker.is_file():
         return True
-    # HF snapshot leaves config.json at repo root
-    if (path / "config.json").is_file():
-        return True
-    try:
-        return path.is_dir() and any(path.iterdir())
-    except OSError:
+    if not (path / "config.json").is_file():
         return False
+    # Don't adopt mid-download dirs while a pair install is pending
+    try:
+        from backend.tools.model_download_registry import (
+            KIND_SELECT_OBJECT,
+            ModelDownloadRegistry,
+        )
+
+        pending_pairs = {
+            p.key
+            for p in ModelDownloadRegistry.instance().list_pending()
+            if p.kind == KIND_SELECT_OBJECT
+        }
+        for pair_id, members in PAIR_MEMBERS.items():
+            if pair_id.value in pending_pairs and model_id in members:
+                return False
+    except Exception:
+        pass
+    try:
+        marker.touch()
+    except OSError:
+        pass
+    return True
+
+
+def discard_partial(model_id: SelectObjectModelId) -> None:
+    """Remove incomplete HF snapshot so the next install starts over."""
+    import shutil
+
+    dest = model_dir(model_id)
+    marker = dest / _MARKER
+    if marker.is_file():
+        return
+    try:
+        if dest.is_dir():
+            shutil.rmtree(dest)
+    except OSError:
+        pass
+
+
+def discard_pair_partial(pair_id: SelectObjectPairId) -> None:
+    """Wipe pair dirs so an interrupted pair install starts over from scratch."""
+    import shutil
+
+    for mid in PAIR_MEMBERS[pair_id]:
+        dest = model_dir(mid)
+        try:
+            if dest.is_dir():
+                shutil.rmtree(dest)
+        except OSError:
+            pass
+
+
+def uninstall_model(model_id: SelectObjectModelId) -> None:
+    """Delete one local HF snapshot (even if marked installed)."""
+    import shutil
+
+    if catalog_info(model_id) is None:
+        raise ValueError(f"Unknown Select Object model: {model_id}")
+    dest = model_dir(model_id)
+    try:
+        if dest.is_dir():
+            shutil.rmtree(dest)
+        elif dest.exists():
+            dest.unlink()
+    except OSError as e:
+        raise RuntimeError(f"Could not delete {dest}: {e}") from e
+
+
+def uninstall_pair(pair_id: SelectObjectPairId) -> None:
+    """Delete both members of a pair so it can be reinstalled later."""
+    try:
+        members = PAIR_MEMBERS[pair_id]
+    except KeyError as e:
+        raise ValueError(f"Unknown Select Object pair: {pair_id}") from e
+    for mid in members:
+        uninstall_model(mid)
+    if pair_id == SelectObjectPairId.COMPLEX:
+        from backend.config import config
+
+        if config.selectObjectMoreComplex.value:
+            config.set(config.selectObjectMoreComplex, False)
 
 
 def is_fast_pair_installed() -> bool:
@@ -168,14 +244,41 @@ def ensure_defaults_installed() -> None:
 
 def install_pair(pair_id: SelectObjectPairId, *, skip_if_complete: bool = False) -> None:
     """Install SAM2 + DINO for one pair only; never downloads the other pair."""
+    from backend.tools.model_download_registry import (
+        KIND_SELECT_OBJECT,
+        DownloadCancelled,
+        ModelDownloadRegistry,
+    )
+
     if skip_if_complete and is_pair_installed(pair_id):
+        ModelDownloadRegistry.instance().complete(KIND_SELECT_OBJECT, pair_id.value)
         return
     try:
         members = PAIR_MEMBERS[pair_id]
     except KeyError as e:
         raise ValueError(f"Unknown Select Object pair: {pair_id}") from e
-    for mid in members:
-        install_model(mid)
+
+    reg = ModelDownloadRegistry.instance()
+    reg.begin(KIND_SELECT_OBJECT, pair_id.value)
+    try:
+        for mid in members:
+            reg.check_cancelled()
+            install_model(mid)
+        reg.check_cancelled()
+        if not is_pair_installed(pair_id):
+            discard_pair_partial(pair_id)
+            reg.fail(KIND_SELECT_OBJECT, pair_id.value, keep_pending=False)
+            raise RuntimeError(f"Pair install incomplete: {pair_id.value}")
+        reg.complete(KIND_SELECT_OBJECT, pair_id.value)
+    except DownloadCancelled:
+        discard_pair_partial(pair_id)
+        reg.fail(KIND_SELECT_OBJECT, pair_id.value, keep_pending=True)
+        raise
+    except Exception:
+        if not is_pair_installed(pair_id):
+            discard_pair_partial(pair_id)
+            reg.fail(KIND_SELECT_OBJECT, pair_id.value, keep_pending=False)
+        raise
 
 
 def ensure_active_pair_installed(more_complex: bool | None = None) -> None:
@@ -199,6 +302,11 @@ def prefetch_on_install() -> None:
 
 def install_model(model_id: SelectObjectModelId) -> Path:
     """Download HF weights into backend/models/select_object/<id>/."""
+    from backend.tools.model_download_registry import (
+        DownloadCancelled,
+        ModelDownloadRegistry,
+    )
+
     info = catalog_info(model_id)
     if info is None:
         raise ValueError(f"Unknown Select Object model: {model_id}")
@@ -207,7 +315,9 @@ def install_model(model_id: SelectObjectModelId) -> Path:
     if is_model_installed(model_id):
         return dest
 
+    discard_partial(model_id)
     dest.mkdir(parents=True, exist_ok=True)
+    reg = ModelDownloadRegistry.instance()
 
     try:
         from huggingface_hub import snapshot_download
@@ -217,14 +327,28 @@ def install_model(model_id: SelectObjectModelId) -> Path:
             "Re-run install.py or pip install huggingface_hub."
         ) from e
 
-    snapshot_download(
-        repo_id=info.hf_repo,
-        local_dir=str(dest),
-        local_dir_use_symlinks=False,
-    )
+    from backend.tools.hf_auth import apply_hf_token_to_env, snapshot_download_kwargs
+
+    apply_hf_token_to_env()
+    try:
+        reg.check_cancelled()
+        snapshot_download(
+            repo_id=info.hf_repo,
+            local_dir=str(dest),
+            local_dir_use_symlinks=False,
+            **snapshot_download_kwargs(),
+        )
+        reg.check_cancelled()
+    except DownloadCancelled:
+        discard_partial(model_id)
+        raise
+    except Exception:
+        discard_partial(model_id)
+        raise
     (dest / _MARKER).touch()
 
     if not is_model_installed(model_id):
+        discard_partial(model_id)
         raise RuntimeError(f"Download finished but model missing: {dest}")
     return dest
 

@@ -8,7 +8,15 @@ _qfw_stdout = StringIO()
 with redirect_stdout(_qfw_stdout):
     from qfluentwidgets import (qconfig, ConfigItem, QConfig, OptionsValidator, BoolValidator, OptionsConfigItem,
                                 EnumSerializer, RangeValidator, RangeConfigItem, ConfigValidator, Theme)
-from backend.tools.constant import InpaintMode, SubtitleDetectMode, BgRemoveMode, EnhanceMode
+from backend.tools.constant import (
+    InpaintMode,
+    SubtitleDetectMode,
+    BgRemoveMode,
+    EnhanceMode,
+    DenoiseStrength,
+    LowLightMode,
+    GenerateMode,
+)
 import configparser
 
 # Project version
@@ -114,6 +122,49 @@ class Config(QConfig):
         ConfigValidator(),
     )
     enhanceMaxLongEdge = ConfigItem("Enhance", "MaxLongEdge", 5000)
+    enhanceDenoiseEnabled = ConfigItem("Enhance", "DenoiseEnabled", False, BoolValidator())
+    enhanceDenoiseStrength = OptionsConfigItem(
+        "Enhance",
+        "DenoiseStrength",
+        DenoiseStrength.SAFE,
+        OptionsValidator(DenoiseStrength),
+        EnumSerializer(DenoiseStrength),
+    )
+
+    # MIRNet low-light enhance (dedicated Low Light page)
+    lowLightMode = OptionsConfigItem(
+        "LowLight",
+        "Mode",
+        LowLightMode.MIRNET_LOL,
+        OptionsValidator(LowLightMode),
+        EnumSerializer(LowLightMode),
+    )
+    lowLightEnabledModels = ConfigItem(
+        "LowLight",
+        "EnabledModels",
+        "MIRNet_LOL",
+        ConfigValidator(),
+    )
+    lowLightMaxLongEdge = ConfigItem("LowLight", "MaxLongEdge", 2048)
+
+    # FLUX.2 text-to-image (Home dashboard Generate) — Settings install / On / Off
+    generateMode = OptionsConfigItem(
+        "Generate",
+        "Mode",
+        GenerateMode.FLUX2_KLEIN_4B,
+        OptionsValidator(GenerateMode),
+        EnumSerializer(GenerateMode),
+    )
+    # Empty until Install (large weights; nothing On by default)
+    generateEnabledModels = ConfigItem(
+        "Generate",
+        "EnabledModels",
+        "__none__",
+        ConfigValidator(),
+    )
+    generateWidth = ConfigItem("Generate", "Width", 1024)
+    generateHeight = ConfigItem("Generate", "Height", 1024)
+    generateSteps = ConfigItem("Generate", "Steps", 4)
 
     # Select Object (SAM2 + Grounding DINO) - hidden pair; More complex in Settings
     selectObjectMoreComplex = ConfigItem(

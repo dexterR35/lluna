@@ -1,4 +1,4 @@
-"""Enhance (Real-ESRGAN) models as SettingCards - same pattern as Remove BG models."""
+"""Upscale (Real-ESRGAN) models as SettingCards - same pattern as Remove BG models."""
 
 from __future__ import annotations
 
@@ -18,14 +18,17 @@ from backend.tools.enhance_models import (
     install_model,
     is_model_installed,
     set_model_enabled,
+    uninstall_model,
 )
 from ui.component.cards.midgard_card import MidgardSettingCard
 from ui.component.controls.button_styles import make_button
+from ui.component.utils.confirm_dialog import ask_confirm
 from ui.theme import CARD
 
 
 class EnhanceModelCard(MidgardSettingCard):
     install_requested = Signal(object)
+    uninstall_requested = Signal(object)
     enabled_changed = Signal()
 
     def __init__(self, info: EnhanceModelInfo, parent=None):
@@ -35,8 +38,8 @@ class EnhanceModelCard(MidgardSettingCard):
         self.info = info
         self._busy = False
 
-        off = tr["BgEnhance"].get("ToggleOff", tr["BgRemove"]["ToggleOff"])
-        on = tr["BgEnhance"].get("ToggleOn", tr["BgRemove"]["ToggleOn"])
+        off = tr["Upscale"].get("ToggleOff", "Off")
+        on = tr["Upscale"].get("ToggleOn", "On")
         self.switchButton = SwitchButton(off, self, IndicatorPosition.RIGHT)
         self.switchButton.setOnText(on)
         self.switchButton.setOffText(off)
@@ -45,8 +48,20 @@ class EnhanceModelCard(MidgardSettingCard):
         self.hBoxLayout.addWidget(self.switchButton, 0, Qt.AlignRight)
         self.hBoxLayout.addSpacing(gap)
 
+        self.uninstallButton = make_button(
+            tr["Upscale"].get("ActionUninstall", "Uninstall"),
+            "secondary",
+            self,
+            FluentIcon.DELETE,
+        )
+        self.uninstallButton.clicked.connect(
+            lambda: self.uninstall_requested.emit(self.info.mode)
+        )
+        self.hBoxLayout.addWidget(self.uninstallButton, 0, Qt.AlignRight)
+        self.hBoxLayout.addSpacing(gap)
+
         self.installButton = make_button(
-            tr["BgEnhance"].get("ActionInstall", tr["BgRemove"]["ActionInstall"]),
+            tr["Upscale"]["ActionInstall"],
             "primary",
             self,
             FluentIcon.DOWNLOAD,
@@ -70,21 +85,23 @@ class EnhanceModelCard(MidgardSettingCard):
         self._busy = not enabled
         installed = is_model_installed(self.info.mode)
         self.installButton.setEnabled(enabled and not installed)
+        self.uninstallButton.setEnabled(enabled and installed)
         self.switchButton.setEnabled(enabled and installed)
 
     def refresh(self):
-        be = tr["BgEnhance"]
-        br = tr["BgRemove"]
+        up = tr["Upscale"]
         installed = is_model_installed(self.info.mode)
         enabled = self.info.mode.value in get_enabled_values()
         desc = tr["EnhanceModelDesc"].get(self.info.desc_key, "")
 
         if installed:
-            suffix = be.get("StatusInstalled", br["StatusInstalled"])
+            suffix = up["StatusInstalled"]
             if self.info.is_default:
-                suffix = f"{suffix} · {be.get('StatusDefault', br['StatusDefault'])}"
+                suffix = f"{suffix} · {up['StatusDefault']}"
             self.setContent(f"{desc} ({suffix})" if desc else suffix)
             self.installButton.hide()
+            self.uninstallButton.show()
+            self.uninstallButton.setEnabled(not self._busy)
             self.switchButton.show()
             self.switchButton.blockSignals(True)
             self.switchButton.setChecked(enabled)
@@ -93,9 +110,10 @@ class EnhanceModelCard(MidgardSettingCard):
         else:
             self.setContent(desc)
             self.switchButton.hide()
+            self.uninstallButton.hide()
             self.installButton.show()
             self.installButton.setEnabled(not self._busy)
-            self.installButton.setText(be.get("ActionInstall", br["ActionInstall"]))
+            self.installButton.setText(up["ActionInstall"])
 
 
 class EnhanceModelManager(QObject):
@@ -112,6 +130,7 @@ class EnhanceModelManager(QObject):
         for info in MODEL_CATALOG:
             card = EnhanceModelCard(info, parent)
             card.install_requested.connect(self._start_install)
+            card.uninstall_requested.connect(self._start_uninstall)
             card.enabled_changed.connect(self.models_changed.emit)
             self.cards.append(card)
 
@@ -132,19 +151,38 @@ class EnhanceModelManager(QObject):
         self.models_changed.emit()
 
     def _apply_lock(self):
-        be = tr["BgEnhance"]
-        br = tr["BgRemove"]
+        up = tr["Upscale"]
         locked = self._installing or self._processing
         for card in self.cards:
             card.set_controls_enabled(not locked)
             if self._installing and card.installButton.isVisible():
-                card.installButton.setText(
-                    be.get("ActionInstalling", br["ActionInstalling"])
-                )
+                card.installButton.setText(up["ActionInstalling"])
             elif card.installButton.isVisible():
-                card.installButton.setText(
-                    be.get("ActionInstall", br["ActionInstall"])
+                card.installButton.setText(up["ActionInstall"])
+            if self._installing and card.uninstallButton.isVisible():
+                card.uninstallButton.setText(
+                    up.get("ActionUninstalling", "Removing…")
                 )
+            elif card.uninstallButton.isVisible():
+                card.uninstallButton.setText(
+                    up.get("ActionUninstall", "Uninstall")
+                )
+
+    def restart_install(self, mode: EnhanceMode):
+        """Start over an aborted download (no resume)."""
+        if is_model_installed(mode):
+            from backend.tools.model_download_registry import (
+                KIND_ENHANCE,
+                ModelDownloadRegistry,
+            )
+
+            ModelDownloadRegistry.instance().complete(KIND_ENHANCE, mode.value)
+            self.refresh()
+            return
+        if self._installing or self._processing:
+            QTimer.singleShot(1500, lambda m=mode: self.restart_install(m))
+            return
+        self._start_install(mode)
 
     def _start_install(self, mode: EnhanceMode):
         if self._installing or self._processing:
@@ -164,17 +202,60 @@ class EnhanceModelManager(QObject):
         threading.Thread(target=work, daemon=True).start()
 
     def _finish_install(self, mode: EnhanceMode, err: Optional[BaseException]):
+        from backend.tools.model_download_registry import DownloadCancelled
+
         self._installing = False
         self.refresh()
         self.busy_changed.emit(False)
-        be = tr["BgEnhance"]
-        br = tr["BgRemove"]
+        up = tr["Upscale"]
+        name = tr["EnhanceMode"].get(mode.name, mode.value)
+        if isinstance(err, DownloadCancelled):
+            return
+        if err:
+            self.status_message.emit(up["InstallFailed"].format(str(err)))
+        else:
+            self.status_message.emit(up["InstallDone"].format(name))
+
+    def _start_uninstall(self, mode: EnhanceMode):
+        if self._installing or self._processing:
+            return
+        up = tr["Upscale"]
+        name = tr["EnhanceMode"].get(mode.name, mode.value)
+        parent = self.cards[0].window() if self.cards else None
+        if not ask_confirm(
+            up.get("UninstallConfirmTitle", "Uninstall model?"),
+            up.get(
+                "UninstallConfirmDesc",
+                "Delete local files for {}? You can install it again later.",
+            ).format(name),
+            parent,
+        ):
+            return
+        self._installing = True
+        self._apply_lock()
+        self.busy_changed.emit(True)
+
+        def work():
+            err = None
+            try:
+                uninstall_model(mode)
+            except Exception as e:
+                err = e
+            QTimer.singleShot(0, lambda: self._finish_uninstall(mode, err))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _finish_uninstall(self, mode: EnhanceMode, err: Optional[BaseException]):
+        self._installing = False
+        self.refresh()
+        self.busy_changed.emit(False)
+        up = tr["Upscale"]
         name = tr["EnhanceMode"].get(mode.name, mode.value)
         if err:
             self.status_message.emit(
-                be.get("InstallFailed", br["InstallFailed"]).format(str(err))
+                up.get("UninstallFailed", "Uninstall failed: {}").format(str(err))
             )
         else:
             self.status_message.emit(
-                be.get("InstallDone", br["InstallDone"]).format(name)
+                up.get("UninstallDone", "Uninstalled: {}").format(name)
             )

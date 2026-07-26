@@ -25,6 +25,8 @@ from ui.advanced_setting_interface import AdvancedSettingInterface
 from ui.dashboard_interface import DashboardInterface
 from ui.home_interface import HomeInterface
 from ui.bg_remove_interface import BgRemoveInterface
+from ui.low_light_interface import LowLightInterface
+from ui.upscale_interface import UpscaleInterface
 from ui.diag_hooks import install_app_hooks, install_window_hooks
 from ui.shell import (
     APP_ICON,
@@ -58,7 +60,15 @@ class SubtitleExtractorGUI(FluentWindow):
         enable_instant_page_switch(self)
         self._wire_dashboard()
         self._wire_settings()
+        self._wire_gpu_busy_gate()
         apply_shell(self)
+
+        try:
+            from backend.tools.hf_auth import apply_hf_token_to_env
+
+            apply_hf_token_to_env()
+        except Exception:
+            pass
 
         config.appRestartSig.connect(self._show_restart_tooltip)
         self._schedule_update_check()
@@ -80,12 +90,20 @@ class SubtitleExtractorGUI(FluentWindow):
             report_startup()
         except Exception as e:
             diag.warn(f"startup health check failed  {e}")
+        try:
+            from backend.tools.model_download_lifecycle import restart_pending_downloads
+
+            restart_pending_downloads(self.advancedSettingInterface)
+        except Exception as e:
+            diag.warn(f"pending model download restart failed  {e}")
         diag.start("main window ready (pages + nav + infer worker)")
 
     def _build_pages(self) -> list[NavRoute]:
         self.dashboardInterface = DashboardInterface(self)
         self.dashboardInterface.setObjectName("DashboardInterface")
         self.bgRemoveInterface = BgRemoveInterface(self)
+        self.upscaleInterface = UpscaleInterface(self)
+        self.lowLightInterface = LowLightInterface(self)
         self.homeInterface = HomeInterface(self)
         self.advancedSettingInterface = AdvancedSettingInterface(self)
         self.advancedSettingInterface.setObjectName("AdvancedSettingInterface")
@@ -95,6 +113,11 @@ class SubtitleExtractorGUI(FluentWindow):
                 self.dashboardInterface,
                 FluentIcon.HOME,
                 tr["HomeDashboard"]["TabTitle"],
+            ),
+            NavRoute(
+                self.upscaleInterface,
+                FluentIcon.ZOOM,
+                tr["Upscale"]["Title"],
             ),
             NavRoute(
                 self.bgRemoveInterface,
@@ -107,6 +130,11 @@ class SubtitleExtractorGUI(FluentWindow):
                 tr["SubtitleExtractorGUI"]["TabTitle"],
             ),
             NavRoute(
+                self.lowLightInterface,
+                FluentIcon.BRIGHTNESS,
+                tr["LowLight"]["Title"],
+            ),
+            NavRoute(
                 self.advancedSettingInterface,
                 FluentIcon.SETTING,
                 tr["SubtitleExtractorGUI"]["Setting"],
@@ -117,6 +145,8 @@ class SubtitleExtractorGUI(FluentWindow):
     def _wire_dashboard(self):
         dash = self.dashboardInterface
         dash.open_bg_remove.connect(lambda: self.switchTo(self.bgRemoveInterface))
+        dash.open_upscale.connect(lambda: self.switchTo(self.upscaleInterface))
+        dash.open_low_light.connect(lambda: self.switchTo(self.lowLightInterface))
         dash.open_video.connect(lambda: self.switchTo(self.homeInterface))
         dash.open_settings.connect(lambda: self.switchTo(self.advancedSettingInterface))
         dash.open_files.connect(self._dashboard_open_files)
@@ -126,6 +156,44 @@ class SubtitleExtractorGUI(FluentWindow):
         mgr.models_changed.connect(self.bgRemoveInterface.refresh_models)
         mgr.busy_changed.connect(self.bgRemoveInterface.set_install_busy)
         self.bgRemoveInterface.processing_changed.connect(mgr.set_processing)
+
+        up_mgr = self.advancedSettingInterface.enhance_model_manager
+        up_mgr.models_changed.connect(self.upscaleInterface.refresh_models)
+        up_mgr.busy_changed.connect(self.upscaleInterface.set_install_busy)
+        self.upscaleInterface.processing_changed.connect(up_mgr.set_processing)
+
+        ll_mgr = self.advancedSettingInterface.low_light_model_manager
+        ll_mgr.models_changed.connect(self.lowLightInterface.refresh_models)
+        ll_mgr.busy_changed.connect(self.lowLightInterface.set_install_busy)
+        self.lowLightInterface.processing_changed.connect(ll_mgr.set_processing)
+
+        gen_mgr = self.advancedSettingInterface.generate_model_manager
+        gen_mgr.models_changed.connect(self.dashboardInterface.refresh_generate_gate)
+        self.dashboardInterface.processing_changed.connect(gen_mgr.set_processing)
+
+    def _wire_gpu_busy_gate(self):
+        """One shared infer worker: when any tool runs, lock every other tool."""
+        tools = [
+            self.dashboardInterface,
+            self.bgRemoveInterface,
+            self.upscaleInterface,
+            self.lowLightInterface,
+            self.homeInterface,
+        ]
+
+        def _on_busy(busy: bool, source):
+            for tool in tools:
+                if tool is source:
+                    continue
+                setter = getattr(tool, "set_external_gpu_busy", None)
+                if callable(setter):
+                    setter(bool(busy))
+
+        for tool in tools:
+            signal = getattr(tool, "processing_changed", None)
+            if signal is None:
+                continue
+            signal.connect(lambda busy, src=tool: _on_busy(busy, src))
 
     def _schedule_update_check(self):
         if not config.checkUpdateOnStartup.value:
@@ -165,6 +233,13 @@ class SubtitleExtractorGUI(FluentWindow):
 
     def closeEvent(self, event):
         diag.start("window close - shutting down workers")
+        try:
+            from backend.tools.model_download_lifecycle import abort_downloads_on_shutdown
+
+            # Stop downloads, delete partials; reopen will start over (not resume)
+            abort_downloads_on_shutdown()
+        except Exception:
+            pass
         try:
             from backend.tools.infer_client import InferClient
 

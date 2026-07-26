@@ -13,10 +13,13 @@ from PIL import Image
 
 from backend.tools.constant import EnhanceMode
 from backend.tools.cuda_hygiene import empty_cuda_cache
+from backend.tools.cutout_edges import decontaminate_rgb_fringe
 from backend.tools.enhance_models import (
     ensure_model_installed,
     native_scale,
 )
+from backend.tools.enhance_options import EnhanceOptions
+from backend.tools.image_denoise import denoise_rgb, verify_rgb
 from backend.tools.realesrgan_arch import RRDBNet
 from backend.tools.vram_budget import (
     VramBudgetError,
@@ -361,11 +364,68 @@ def _get_upsampler(mode: EnhanceMode, tile: int = DEFAULT_TILE) -> _RealESRGANer
     return upsampler
 
 
+def _validate_rgba(arr: np.ndarray) -> None:
+    if arr.ndim != 3 or arr.shape[2] != 4:
+        raise ValueError("RGBA input must be HxWx4")
+    if arr.dtype != np.uint8:
+        raise ValueError("RGBA input must be uint8")
+
+
+def _verify_rgba_out(out: np.ndarray, ow: int, oh: int) -> None:
+    if out.ndim != 3 or out.shape[2] != 4:
+        raise ValueError("RGBA output must be HxWx4")
+    if out.shape[0] != oh or out.shape[1] != ow:
+        raise ValueError("RGBA output size mismatch")
+    if out.dtype != np.uint8 or not np.all(np.isfinite(out)):
+        raise ValueError("RGBA output invalid")
+
+
+def _preprocess_rgb(
+    rgb: np.ndarray,
+    alpha: np.ndarray,
+    options: EnhanceOptions,
+    cancel_event: CancelEvent,
+    generation: int,
+    progress: ProgressCb,
+) -> np.ndarray:
+    """Fringe cleanup + optional safe denoise before Real-ESRGAN."""
+    if not options.denoise:
+        return rgb
+
+    _check_cancel(cancel_event, generation)
+    if progress:
+        progress(12)
+    try:
+        rgb = decontaminate_rgb_fringe(rgb, alpha)
+    except Exception:
+        pass
+
+    _check_cancel(cancel_event, generation)
+    if progress:
+        progress(18)
+
+    def denoise_prog():
+        if progress:
+            progress(24)
+
+    cleaned = denoise_rgb(
+        rgb,
+        strength=options.denoise_strength,
+        cancel_event=cancel_event,
+        progress=denoise_prog,
+        cancel_exc=EnhanceCancelled,
+    )
+    if verify_rgb(cleaned, rgb):
+        return cleaned
+    return rgb
+
+
 def enhance_rgba(
     image: Image.Image,
     mode: EnhanceMode,
     progress: ProgressCb = None,
     cancel_event: CancelEvent = None,
+    options: EnhanceOptions | None = None,
 ) -> Image.Image:
     """
     Upscale RGBA with Real-ESRGAN. Keeps true upscaled size (no resize-back to original).
@@ -375,6 +435,8 @@ def enhance_rgba(
     to abort; raises EnhanceCancelled.
     """
     global _busy, _last_start_monotonic
+
+    opts = options or EnhanceOptions()
 
     def _p(v: int):
         if cancel_event is not None and cancel_event.is_set():
@@ -407,6 +469,7 @@ def enhance_rgba(
         _p(5)
         rgba = image.convert("RGBA")
         arr = np.asarray(rgba)
+        _validate_rgba(arr)
         h, w = arr.shape[:2]
         long_edge = max(h, w)
         max_edge = _max_long_edge()
@@ -428,22 +491,33 @@ def enhance_rgba(
         out_long = min(long_edge * scale, float(max_edge))
         outscale = out_long / float(long_edge)
 
-        _p(15)
+        _p(8)
+        _check_cancel(cancel_event, generation)
+
+        rgb = arr[:, :, :3].copy()
+        alpha = arr[:, :, 3].copy()
+
+        rgb = _preprocess_rgb(
+            rgb,
+            alpha,
+            opts,
+            cancel_event,
+            generation,
+            _p,
+        )
+        _p(30)
         _check_cancel(cancel_event, generation)
 
         budget = pick_enhance_tile(h, w, int(scale), max_edge)
         tile = budget.tile
         upsampler = _get_upsampler(mode, tile=tile)
-        _p(30)
-
-        rgb = arr[:, :, :3].copy()
-        alpha = arr[:, :, 3]
+        _p(32)
 
         def tile_prog(v: int):
-            # map tile 0–100 into 40–85
-            _p(40 + int(max(0, min(100, v)) * 0.45))
+            # map tile 0–100 into 32–90
+            _p(32 + int(max(0, min(100, v)) * 0.58))
 
-        _p(40)
+        _p(35)
         try:
             rgb_out = upsampler.enhance_rgb(
                 rgb,
@@ -472,11 +546,12 @@ def enhance_rgba(
             else:
                 raise
         _check_cancel(cancel_event, generation)
-        _p(85)
+        _p(92)
 
         oh, ow = rgb_out.shape[:2]
         alpha_out = cv2.resize(alpha, (ow, oh), interpolation=cv2.INTER_LINEAR)
         out = np.dstack([rgb_out, alpha_out])
+        _verify_rgba_out(out, ow, oh)
         _p(100)
         return Image.fromarray(out, "RGBA")
     except EnhanceCancelled:

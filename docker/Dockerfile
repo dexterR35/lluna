@@ -76,7 +76,8 @@ RUN --mount=type=cache,target=/root/.cache/pip,sharing=private \
         ;; \
     esac; \
     # Match install.py extras (also listed in requirements.txt)
-    pip install "rembg>=2.0.60" "transformers>=4.48.0" "huggingface_hub>=0.26.0"
+    pip install "rembg>=2.0.60" "transformers>=4.48.0" "huggingface_hub>=0.26.0" \
+        "diffusers>=0.37.1" "accelerate>=1.0.0"
 
 # Merge split core weights (big-lama / ProPainter) when parts are present
 RUN python -c "from install import verify_models; verify_models()"
@@ -91,10 +92,11 @@ RUN --mount=type=cache,target=/root/.cache,sharing=private \
     fi; \
     python -c "from pathlib import Path; import sys; \
 sys.path.insert(0, '/midgard'); \
-from install import prefetch_rembg_models, prefetch_enhance_x2, prefetch_select_object_defaults; \
+from install import prefetch_rembg_models, prefetch_enhance_x2, prefetch_low_light_mirnet, prefetch_select_object_defaults; \
 py = Path(sys.executable); \
 prefetch_rembg_models(py); \
 prefetch_enhance_x2(py); \
+prefetch_low_light_mirnet(py); \
 prefetch_select_object_defaults(py)"
 
 ENV LD_LIBRARY_PATH=/usr/local/lib/python3.12/site-packages/nvidia/cudnn/lib/

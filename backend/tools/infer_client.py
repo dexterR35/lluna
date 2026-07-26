@@ -93,10 +93,11 @@ class _PendingJob:
 class InferClient:
     """
     Singleton parent-side controller.
-    - One persistent worker process
+    - One persistent worker process (never two model workers)
     - One active job at a time
+    - Same job type while busy: FIFO wait queue (batch / within-tool)
+    - Different job type while busy: reject with BUSY (no cross-tool overlap)
     - coalesce=True: single pending slot that cancels/replaces the active job
-    - coalesce=False: FIFO wait queue (does not cancel the active job)
     - Watchdog: silence → kill → CRASH → respawn
     """
 
@@ -108,6 +109,7 @@ class InferClient:
         JobType.SUBTITLE.value,
         JobType.LAMA_RETOUCH.value,
         JobType.SELECT_SUBJECT.value,
+        JobType.GENERATE.value,
     }
 
     def __init__(self):
@@ -367,8 +369,19 @@ class InferClient:
             traceback.print_exc()
 
     def is_busy(self) -> bool:
+        """True if a job is running or waiting in the same-tool FIFO queue."""
         with self._state_lock:
-            return self._active is not None and not self._active.finished
+            if self._active is not None and not self._active.finished:
+                return True
+            if self._pending is not None:
+                return True
+            return bool(self._wait_queue)
+
+    def active_job_type(self) -> Optional[str]:
+        with self._state_lock:
+            if self._active is not None and not self._active.finished:
+                return self._active.job_type
+            return None
 
     def request_release(self) -> None:
         """
@@ -379,11 +392,17 @@ class InferClient:
         with self._state_lock:
             if self._active is not None and not self._active.finished:
                 return
+            if self._pending is not None or self._wait_queue:
+                return
             if self._process is None or not self._process.is_alive():
                 return
             diag.worker("RECYCLE  infer-worker  (Reset - return RAM to OS)")
             self._kill_worker_unlocked(reason="release")
             # Leave dead - start_job / ensure_started will spawn fresh.
+
+    def release(self) -> None:
+        """Alias for request_release (Reset buttons)."""
+        self.request_release()
 
     def start_job(
         self,
@@ -396,13 +415,14 @@ class InferClient:
         on_error: ErrorCb = None,
         on_preview: PreviewCb = None,
         on_done: DoneCb = None,
-        coalesce: bool = True,
+        coalesce: bool = False,
     ) -> int:
         """
-        Start a job.
+        Start a job on the single shared worker.
         - coalesce=True + busy: replace the single pending slot and cancel active.
-        - coalesce=False + busy: append to FIFO wait queue (active keeps running).
-        Returns run_id (assigned immediately, including for queued jobs).
+        - coalesce=False + same job type busy: FIFO wait queue (batch).
+        - coalesce=False + different job type busy: reject with BUSY (no double models).
+        Returns run_id, or -1 when rejected as BUSY.
         """
         jt = job_type.value if isinstance(job_type, JobType) else str(job_type)
         hard = jt in self.HARD_CANCEL_TYPES
@@ -429,34 +449,51 @@ class InferClient:
                     self._cancel_active_unlocked()
                     return self._run_counter  # provisional until flush
 
-                # Wait in line - do not cancel the active job or spam BUSY.
-                self._run_counter += 1
-                run_id = self._run_counter
-                depth = len(self._wait_queue) + 1
                 active = self._active
-                self._wait_queue.append(
-                    _PendingJob(
-                        job_type=jt,
-                        payload=payload,
-                        callbacks=cbs,
-                        hard_cancel=hard,
-                        run_id=run_id,
-                    )
-                )
-                behind = f"{active.job_type}#{active.run_id}"
-                diag.run(
-                    f"QUEUED  {jt}#{run_id}  behind={behind}  "
-                    f"queue={depth}  (wait - do not cancel active)"
-                )
-                if on_log:
-                    try:
-                        on_log(
-                            f"Queued (#{depth}) - waiting for {active.job_type} "
-                            f"to finish or be stopped…"
+                # Same tool only: queue behind the active job (per-file batch).
+                if active.job_type == jt:
+                    self._run_counter += 1
+                    run_id = self._run_counter
+                    depth = len(self._wait_queue) + 1
+                    self._wait_queue.append(
+                        _PendingJob(
+                            job_type=jt,
+                            payload=payload,
+                            callbacks=cbs,
+                            hard_cancel=hard,
+                            run_id=run_id,
                         )
+                    )
+                    behind = f"{active.job_type}#{active.run_id}"
+                    diag.run(
+                        f"QUEUED  {jt}#{run_id}  behind={behind}  "
+                        f"queue={depth}  (same tool - wait)"
+                    )
+                    if on_log:
+                        try:
+                            on_log(
+                                f"Queued (#{depth}) - waiting for {active.job_type} "
+                                f"to finish or be stopped…"
+                            )
+                        except Exception:
+                            pass
+                    return run_id
+
+                # Different tool: never load a second modality while one is running.
+                diag.run(
+                    f"BUSY reject  {jt}  while={active.job_type}#{active.run_id}"
+                )
+                if on_error:
+                    try:
+                        on_error("BUSY")
                     except Exception:
                         pass
-                return run_id
+                if on_done:
+                    try:
+                        on_done()
+                    except Exception:
+                        pass
+                return -1
 
             return self._start_unlocked(
                 jt,

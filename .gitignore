@@ -4,6 +4,8 @@
 /run_gui.sh
 /run_gui.bat
 /config/config.json
+/config/pending_model_downloads.json
+/config/model_download_cancel.flag
 /midgard_out/
 /output/
 /local_test/
@@ -28,11 +30,19 @@ backend/models/**/*.pth.part
 # Downloaded by install.py / Settings (not shipped in git)
 backend/models/realesrgan/
 backend/models/select_object/
+backend/models/generate/
+backend/models/mirnet/
 backend/models/**/*.ckpt
 backend/models/**/*.onnx
 backend/models/**/*.safetensors
 backend/models/**/*.bin
 inference.onnx
+
+# Secrets (never commit)
+config/hf_token
+.env
+.env.*
+!.env.example
 
 # Sample / output media
 test/**/*.mp4

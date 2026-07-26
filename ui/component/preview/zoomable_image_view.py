@@ -52,7 +52,9 @@ def rgb_pixmap_from_path(path: str, max_side: int | None = None) -> QPixmap:
             )
             w, h = img.size
     data = img.tobytes("raw", "RGB")
-    qimg = QImage(data, w, h, QImage.Format_RGB888)
+    # Pass bytesPerLine explicitly: PIL RGB is tightly packed (w*3), but Qt's
+    # default RGB888 stride is 4-byte aligned — mismatch shreds the preview.
+    qimg = QImage(data, w, h, w * 3, QImage.Format_RGB888)
     return QPixmap.fromImage(qimg.copy())
 
 

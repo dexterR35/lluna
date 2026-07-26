@@ -155,8 +155,38 @@ def ensure_selected_mode_valid() -> BgRemoveMode:
     return current
 
 
+def discard_partial(mode: BgRemoveMode) -> None:
+    """Remove ONNX so a cancelled / interrupted install starts over."""
+    path = model_file_path(mode)
+    try:
+        if path.is_file():
+            path.unlink()
+    except OSError:
+        pass
+
+
+def uninstall_model(mode: BgRemoveMode) -> None:
+    """Delete local ONNX weights so the model can be reinstalled later."""
+    if catalog_info(mode) is None:
+        raise ValueError(f"Unknown Remove BG model: {mode}")
+    path = model_file_path(mode)
+    try:
+        if path.is_file():
+            path.unlink()
+    except OSError as e:
+        raise RuntimeError(f"Could not delete {path}: {e}") from e
+    set_model_enabled(mode, False)
+    ensure_selected_mode_valid()
+
+
 def install_model(mode: BgRemoveMode) -> None:
     """Download ONNX weights via rembg (blocking; call from a worker thread)."""
+    from backend.tools.model_download_registry import (
+        KIND_BG_REMOVE,
+        DownloadCancelled,
+        ModelDownloadRegistry,
+    )
+
     try:
         from rembg.sessions import sessions_class
     except ImportError as e:
@@ -164,17 +194,42 @@ def install_model(mode: BgRemoveMode) -> None:
             'rembg is not installed. Run: pip install "rembg[cpu]"  (or re-run install.py)'
         ) from e
 
+    reg = ModelDownloadRegistry.instance()
+    if is_model_installed(mode):
+        set_model_enabled(mode, True)
+        reg.complete(KIND_BG_REMOVE, mode.value)
+        return
+
+    reg.begin(KIND_BG_REMOVE, mode.value)
+    discard_partial(mode)
     target = mode.value
-    for cls in sessions_class:
-        try:
-            name = cls.name()
-        except Exception:
-            continue
-        if name == target:
-            cls.download_models()
-            if not is_model_installed(mode):
-                raise RuntimeError(f"Download finished but model file missing: {model_file_path(mode)}")
-            # Newly installed defaults / optional: turn on so it appears in dropdown
-            set_model_enabled(mode, True)
-            return
-    raise ValueError(f"Unknown rembg model: {target}")
+    try:
+        reg.check_cancelled()
+        for cls in sessions_class:
+            try:
+                name = cls.name()
+            except Exception:
+                continue
+            if name == target:
+                cls.download_models()
+                reg.check_cancelled()
+                if not is_model_installed(mode):
+                    discard_partial(mode)
+                    reg.fail(KIND_BG_REMOVE, mode.value, keep_pending=False)
+                    raise RuntimeError(
+                        f"Download finished but model file missing: {model_file_path(mode)}"
+                    )
+                set_model_enabled(mode, True)
+                reg.complete(KIND_BG_REMOVE, mode.value)
+                return
+        reg.fail(KIND_BG_REMOVE, mode.value, keep_pending=False)
+        raise ValueError(f"Unknown rembg model: {target}")
+    except DownloadCancelled:
+        discard_partial(mode)
+        reg.fail(KIND_BG_REMOVE, mode.value, keep_pending=True)
+        raise
+    except Exception:
+        if not is_model_installed(mode):
+            discard_partial(mode)
+            reg.fail(KIND_BG_REMOVE, mode.value, keep_pending=False)
+        raise
