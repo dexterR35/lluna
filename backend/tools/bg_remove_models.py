@@ -21,7 +21,7 @@ class BgRemoveModelInfo:
 
 # Categories + one default each. Others are optional (install + on/off).
 MODEL_CATALOG: List[BgRemoveModelInfo] = [
-    # General / quality — BiRefNet General is the app default
+    # General / quality - BiRefNet General is the app default
     BgRemoveModelInfo(BgRemoveMode.BIREFNET, "General", "BIREFNET", True),
     BgRemoveModelInfo(BgRemoveMode.ISNET, "General", "ISNET", False),
     BgRemoveModelInfo(BgRemoveMode.U2NET, "General", "U2NET", False),
@@ -124,7 +124,7 @@ def set_model_enabled(mode: BgRemoveMode, enabled: bool) -> None:
 
 
 def selectable_modes() -> List[BgRemoveMode]:
-    """Installed + On — what the Run dropdown may use."""
+    """Installed + On - what the Run dropdown may use."""
     enabled = get_enabled_values()
     return [
         info.mode

@@ -1,4 +1,4 @@
-"""Midgard setting row card — plain QFrame chrome from ``ui.theme.CARD``"""
+"""Midgard setting row card - plain QFrame chrome from ``ui.theme.CARD``"""
 
 from __future__ import annotations
 

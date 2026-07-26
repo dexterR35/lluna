@@ -1,4 +1,4 @@
-"""Midgard range sliders — solid primary thumb, simple track."""
+"""Midgard range sliders - solid primary thumb, simple track."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from ui.theme import SLIDER
 
 
 class _PrimarySliderHandle(SliderHandle):
-    """Solid primary circle — no outer ring or inner dot."""
+    """Solid primary circle - no outer ring or inner dot."""
 
     def __init__(self, parent: QSlider):
         super().__init__(parent)

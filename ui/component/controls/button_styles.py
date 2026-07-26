@@ -59,7 +59,7 @@ def _size_tokens(size: ButtonSize) -> dict:
 
 
 def ensure_theme_accent():
-    """Point Fluent’s accent at theme PRIMARY — once per color (not every button)."""
+    """Point Fluent’s accent at theme PRIMARY - once per color (not every button)."""
     global _ACCENT_APPLIED
     if _ACCENT_APPLIED == PRIMARY:
         return
@@ -68,7 +68,7 @@ def ensure_theme_accent():
 
 
 def _apply_theme_chrome(btn: FluentButton, role: ButtonRole) -> None:
-    """Paint button with ``theme.button_qss(role)`` — overrides Fluent defaults."""
+    """Paint button with ``theme.button_qss(role)`` - overrides Fluent defaults."""
     qss = button_qss(role)
     setCustomStyleSheet(btn, qss, qss)
 
@@ -171,7 +171,7 @@ def make_toggle_button(
     icon=None,
     size: ButtonSize = BUTTON_SIZE_MEDIUM,
 ) -> FluentButton:
-    """Secondary checkable button — primary fill while checked."""
+    """Secondary checkable button - primary fill while checked."""
     return style_as_toggle(make_button(text, "secondary", parent, icon=icon, size=size))
 
 

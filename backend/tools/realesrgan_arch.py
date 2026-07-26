@@ -1,4 +1,4 @@
-"""Minimal RRDBNet (Real-ESRGAN) — vendored to avoid basicsr dependency."""
+"""Minimal RRDBNet (Real-ESRGAN) - vendored to avoid basicsr dependency."""
 
 from __future__ import annotations
 

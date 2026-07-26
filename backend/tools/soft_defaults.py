@@ -75,7 +75,7 @@ def detect_vram_and_cap() -> Tuple[float, Optional[str]]:
 def apply_soft_defaults_if_needed() -> bool:
     """
     Apply VRAM-based soft defaults once when config still at factory values.
-    Inpaint mode stays STTN Smart Inpainting (sttn-auto) — only batch sizes nudge.
+    Inpaint mode stays STTN Smart Inpainting (sttn-auto) - only batch sizes nudge.
     Returns True if defaults were applied.
     """
     from backend.config import config
@@ -85,7 +85,7 @@ def apply_soft_defaults_if_needed() -> bool:
         return False
 
     total_mb, compute_cap = detect_vram_and_cap()
-    # Only nudge if user has not customized key items much — check factory-ish values.
+    # Only nudge if user has not customized key items much - check factory-ish values.
     sttn_default = 50
     prop_default = 70
     mode_default = InpaintMode.STTN_AUTO

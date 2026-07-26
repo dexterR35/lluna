@@ -70,15 +70,6 @@ def _release_all_except(keep: Optional[str] = None) -> None:
     empty_cuda_cache()
 
 
-def _idle_release_sec() -> float:
-    try:
-        from backend.config import config
-
-        return float(config.inferIdleReleaseSec.value)
-    except Exception:
-        return 60.0
-
-
 def infer_worker_main(cmd_queue, evt_queue, hardware_accel: bool = True) -> None:
     """Child process entry: long-lived control loop."""
     ensure_expandable_segments()
@@ -139,11 +130,7 @@ def infer_worker_main(cmd_queue, evt_queue, hardware_accel: bool = True) -> None
             empty_cuda_cache()
 
     while not stop:
-        # Idle release
-        if not busy and (time.monotonic() - last_activity) >= _idle_release_sec():
-            _release_all_except(keep=None)
-            last_activity = time.monotonic()
-
+        # Models stay warm while idle - parent Reset recycles the worker for RAM.
         try:
             msg, data = cmd_queue.get(timeout=0.5)
         except Exception:
@@ -156,6 +143,12 @@ def infer_worker_main(cmd_queue, evt_queue, hardware_accel: bool = True) -> None
 
         if msg == CmdMsg.PING.value:
             _emit(evt_queue, pong(data.get("run_id")))
+            last_activity = time.monotonic()
+            continue
+
+        if msg == CmdMsg.RELEASE.value:
+            if not busy:
+                _release_all_except(keep=None)
             last_activity = time.monotonic()
             continue
 

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Midgard main window — header + nav shell, stacked tool pages."""
+"""Midgard main window - header + nav shell, stacked tool pages."""
 
 import sys
 import multiprocessing
@@ -164,7 +164,7 @@ class SubtitleExtractorGUI(FluentWindow):
         QStackedWidget.setCurrentWidget(view, widget)
 
     def closeEvent(self, event):
-        diag.start("window close — shutting down workers")
+        diag.start("window close - shutting down workers")
         try:
             from backend.tools.infer_client import InferClient
 
@@ -194,7 +194,7 @@ class SubtitleExtractorGUI(FluentWindow):
 
     def keyPressEvent(self, event):
         if event.key() == QtCore.Qt.Key_C and event.modifiers() == QtCore.Qt.ControlModifier:
-            diag.event("Ctrl+C — exiting")
+            diag.event("Ctrl+C - exiting")
             print("\nInterrupted by user (Ctrl+C), exiting...")
             self.close()
         else:
@@ -273,6 +273,6 @@ if __name__ == "__main__":
     install_window_hooks(window)
     window.show()
     window.apply_default_window_geometry()
-    diag.start("window shown — event loop starting")
+    diag.start("window shown - event loop starting")
     app.exec()
     diag.start("event loop exited")

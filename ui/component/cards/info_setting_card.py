@@ -1,4 +1,4 @@
-"""Home / info row card — Midgard theme chrome (no Fluent SettingCard)."""
+"""Home / info row card - Midgard theme chrome (no Fluent SettingCard)."""
 
 from __future__ import annotations
 

@@ -31,7 +31,7 @@ class SectionCard(CardWidget):
     """
 
     def __init__(self, parent=None, *, title: Optional[str] = None, bordered: bool = True):
-        # Must set before super() — CardWidget reads background color during init
+        # Must set before super() - CardWidget reads background color during init
         self._bordered = bordered
         super().__init__(parent)
         self.setObjectName("SectionCard")
@@ -108,7 +108,7 @@ class WorkspacePage(QWidget):
     Shared ChatGPT-style rounded layout for Video and Remove BG tools.
 
     Left:  preview section (stretch) + log
-    Right: side rail — settings + task list + ActionBar
+    Right: side rail - settings + task list + ActionBar
     """
 
     def __init__(

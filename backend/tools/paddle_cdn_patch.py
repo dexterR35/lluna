@@ -2,7 +2,7 @@
 
 PaddleX builds ``official_models`` at import time and probes HuggingFace / BOS /
 ModelScope / AIStudio. Midgard always passes ``model_dir`` under
-``backend/models/V5/``, so that probe is removed — not merely env-disabled.
+``backend/models/V5/``, so that probe is removed - not merely env-disabled.
 """
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-"""Back-compat — prefer ``ui.component.controls.inputs.AppCombo``."""
+"""Back-compat - prefer ``ui.component.controls.inputs.AppCombo``."""
 
 from ui.component.controls.inputs import AppCombo, PlainComboBox  # noqa: F401
 

@@ -1,4 +1,4 @@
-"""Reusable Midgard inputs — Fluent ComboBox + labeled fields (Fluent chrome).
+"""Reusable Midgard inputs - Fluent ComboBox + labeled fields (Fluent chrome).
 
 Use in SectionCard settings rails::
 
@@ -42,7 +42,7 @@ class _NoAniComboMenu(ComboBoxMenu):
 
 
 class AppCombo(ComboBox):
-    """Fluent dropdown — no popup animation."""
+    """Fluent dropdown - no popup animation."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -58,7 +58,7 @@ PlainComboBox = AppCombo
 
 
 class LabeledField(QWidget):
-    """Label above a control — SectionCard settings field layout."""
+    """Label above a control - SectionCard settings field layout."""
 
     def __init__(
         self,

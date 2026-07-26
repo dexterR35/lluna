@@ -1,4 +1,4 @@
-"""Advanced Settings cards — same MidgardSettingCard structure/bg as Home dashboard."""
+"""Advanced Settings cards - same MidgardSettingCard structure/bg as Home dashboard."""
 
 from __future__ import annotations
 
@@ -91,7 +91,7 @@ def _risk_badge_style(level: RiskLevel) -> str:
 
 
 class MidgardRangeCard(MidgardSettingCard):
-    """Slider row — same shell as dashboard InfoSettingCard."""
+    """Slider row - same shell as dashboard InfoSettingCard."""
 
     valueChanged = Signal(int)
 
@@ -166,7 +166,7 @@ class MidgardRangeCard(MidgardSettingCard):
 
 
 class MidgardSwitchCard(MidgardSettingCard):
-    """On/Off row — same shell as dashboard cards."""
+    """On/Off row - same shell as dashboard cards."""
 
     checkedChanged = Signal(bool)
 
@@ -205,7 +205,7 @@ class MidgardSwitchCard(MidgardSettingCard):
 
 
 class MidgardPushCard(MidgardSettingCard):
-    """Action button row — secondary theme button."""
+    """Action button row - secondary theme button."""
 
     clicked = Signal()
 
@@ -228,7 +228,7 @@ class MidgardPushCard(MidgardSettingCard):
 
 
 class MidgardHyperlinkCard(MidgardSettingCard):
-    """Link row — opens URL."""
+    """Link row - opens URL."""
 
     def __init__(
         self,

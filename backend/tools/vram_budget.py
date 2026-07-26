@@ -8,7 +8,7 @@ from typing import Optional, Sequence, Tuple
 HEADROOM = 1.5
 TILE_CANDIDATES: Tuple[int, ...] = (512, 256, 128, 64)
 
-# Approximate footprints (MB) — calibrated-ish constants, not exact allocator accounting.
+# Approximate footprints (MB) - calibrated-ish constants, not exact allocator accounting.
 _ENHANCE_WEIGHTS_MB = {2: 70.0, 4: 70.0}
 _ENHANCE_TILE_ACT_PER_PX = 0.00012  # MB per input tile pixel (incl. pad/scale scratch)
 _REMBG_SESSION_MB = 900.0

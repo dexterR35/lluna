@@ -1,4 +1,4 @@
-"""Reusable colored log / output panel (content only — outer card is SectionCard)."""
+"""Reusable colored log / output panel (content only - outer card is SectionCard)."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ class LogPanel(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # Plain QTextEdit — Fluent TextEdit paints its own nested card chrome.
+        # Plain QTextEdit - Fluent TextEdit paints its own nested card chrome.
         self.output_text = QTextEdit()
         self.output_text.setFrameShape(QFrame.Shape.NoFrame)
         self.output_text.setReadOnly(True)

@@ -66,7 +66,7 @@ class SubtitleRemover:
         self.frame_width = int(self.video_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         # Temporary video file; on Windows delete=True can cause permission denied
         self.video_temp_file = tempfile.NamedTemporaryFile(suffix='.mp4', delete=False)
-        # Video writer (FFmpeg libx264 — better quality and smaller files than mp4v)
+        # Video writer (FFmpeg libx264 - better quality and smaller files than mp4v)
         try:
             self.video_writer = FFmpegVideoWriter(get_readable_path(self.video_temp_file.name), self.fps, self.size)
         except Exception:
@@ -208,7 +208,7 @@ class SubtitleRemover:
                     # a non -1 end frame means it is
                     if end_frame_no != -1:
                         # self.append_output(f'find end: {end_frame_no}')
-                        # ************ Read all frames in this range — start ************
+                        # ************ Read all frames in this range - start ************
                         temp_frames = list()
                         # Add the head frame to the processing list
                         temp_frames.append(frame)
@@ -220,7 +220,7 @@ class SubtitleRemover:
                                 break
                             index += 1
                             temp_frames.append(frame)
-                        # ************ Read all frames in this range — end ************
+                        # ************ Read all frames in this range - end ************
                         if len(temp_frames) < 1:
                             # Nothing to process; skip
                             continue

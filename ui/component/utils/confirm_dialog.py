@@ -20,7 +20,7 @@ def confirm_dialog(title: str, content: str, parent=None) -> MessageBox:
     box.yesButton.setText(yes)
     box.cancelButton.setText(no)
 
-    # Fluent wraps using the full window width — re-wrap for our narrow card
+    # Fluent wraps using the full window width - re-wrap for our narrow card
     chars = max(
         min(int(width / d["confirm_wrap_div"]), d["confirm_wrap_max"]),
         d["confirm_wrap_min"],

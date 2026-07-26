@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Midgard installer — detects CUDA vs CPU, lets you choose, then installs deps + verifies models.
+Midgard installer - detects CUDA vs CPU, lets you choose, then installs deps + verifies models.
 
 Usage:
   python install.py
@@ -453,7 +453,7 @@ def verify_models() -> None:
         parts = list(directory.glob(f"{Path(target_name).stem}_*.*"))
         manifest = directory / "fs_manifest.csv"
         if not parts and not manifest.exists():
-            log(f"Warning: cannot merge {target_name} — parts not found.")
+            log(f"Warning: cannot merge {target_name} - parts not found.")
             return
         log(f"Merging {target_name} …")
         fs = Filesplit()
@@ -477,7 +477,7 @@ def verify_models() -> None:
 # Category defaults only on first install (must match BgRemoveMode / MODEL_CATALOG is_default).
 # Optional models (BiRefNet Massive, BRIA, Lite, …) download from Settings → Remove BG Models.
 REMBG_PREFETCH_MODELS = [
-    "birefnet-general",  # General — app default
+    "birefnet-general",  # General - app default
     "u2net_human_seg",   # People
     "isnet-anime",       # Anime
     "u2net_cloth_seg",   # Clothes

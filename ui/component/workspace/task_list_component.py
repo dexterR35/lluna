@@ -21,6 +21,7 @@ class TaskStatus(Enum):
     PROCESSING = tr['TaskList']['Processing']
     COMPLETED = tr['TaskList']['Completed']
     FAILED = tr['TaskList']['Failed']
+    STOPPED = tr['TaskList'].get('Stopped', 'Stopped')
 
 
 @unique
@@ -39,9 +40,9 @@ class Task:
     _output_path: str = None
     # Filename stem suffix before extension (e.g. "_no_sub", "_nobg")
     output_suffix: str = "_no_sub"
-    # Unsaved preview (temp PNG) for BG remove — not the final save path
+    # Unsaved preview (temp PNG) for BG remove - not the final save path
     preview_temp_path: str = None
-    # Pre-remove keep-mask (temp L PNG) — painted areas stay opaque after cutout
+    # Pre-remove keep-mask (temp L PNG) - painted areas stay opaque after cutout
     protect_mask_path: str = None
     saved: bool = False
 
@@ -236,6 +237,10 @@ class TaskListComponent(QWidget):
                     status_item.setForeground(QBrush(QColor(STATUS["processing"])))
                 elif status == TaskStatus.FAILED:
                     status_item.setForeground(QBrush(QColor(STATUS["error"])))
+                elif status == TaskStatus.STOPPED:
+                    status_item.setForeground(QBrush(QColor(STATUS["warning"])))
+                else:
+                    status_item.setForeground(QBrush(QColor(STATUS["muted"])))
             
             # Scroll current processing task into view
             if index == self.current_task_index:
@@ -245,12 +250,16 @@ class TaskListComponent(QWidget):
             self.table.selectRow(index)
     
     def get_pending_tasks(self):
-        """Get all pending tasks
+        """Get tasks that are ready to run (Pending or Stopped).
         
         Returns:
-            list: pending tasks as (index, task) tuples
+            list: runnable tasks as (index, task) tuples
         """
-        return [(i, task) for i, task in enumerate(self.tasks) if task.status == TaskStatus.PENDING]
+        return [
+            (i, task)
+            for i, task in enumerate(self.tasks)
+            if task.status in (TaskStatus.PENDING, TaskStatus.STOPPED)
+        ]
     
     def get_all_tasks(self):
         """Get all tasks

@@ -1,4 +1,4 @@
-"""Pre-remove protect mask dialog — paint areas to keep opaque after BG remove."""
+"""Pre-remove protect mask dialog - paint areas to keep opaque after BG remove."""
 
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ class BgProtectDialog(QDialog):
     """
     Paint a keep-mask before background removal.
 
-    Painted regions stay opaque after rembg (not cut). Overlay only — never
+    Painted regions stay opaque after rembg (not cut). Overlay only - never
     baked into the source image RGB.
     """
 
@@ -207,7 +207,7 @@ class BgProtectDialog(QDialog):
         self._tool_buttons[RetouchTool.MASK].setChecked(True)
         self._refresh_history_buttons()
         self._refresh_clear_button()
-        # Caller presents the window (present_editor_dialog) — do not show here
+        # Caller presents the window (present_editor_dialog) - do not show here
 
     def showEvent(self, event):
         super().showEvent(event)

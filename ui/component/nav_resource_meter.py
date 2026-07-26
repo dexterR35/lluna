@@ -25,7 +25,7 @@ class NavResourceMeter(QtWidgets.QWidget):
         )
         root.setSpacing(0)
 
-        self.label = QtWidgets.QLabel("RAM — · GPU — · CPU —", self)
+        self.label = QtWidgets.QLabel("RAM - · GPU - · CPU -", self)
         self.label.setStyleSheet(
             f"color: {TEXT_SECONDARY}; background: transparent; "
             f"font-size: {NAV['meter_font']}px;"
@@ -56,6 +56,6 @@ class NavResourceMeter(QtWidgets.QWidget):
                 f"{format_bytes_short(sample.gpu_total_mb)}"
             )
         else:
-            gpu = "—"
-        cpu = f"{sample.cpu_percent:.0f}%" if sample.cpu_percent is not None else "—"
+            gpu = "-"
+        cpu = f"{sample.cpu_percent:.0f}%" if sample.cpu_percent is not None else "-"
         self.label.setText(f"RAM {ram} · GPU {gpu} · CPU {cpu}")

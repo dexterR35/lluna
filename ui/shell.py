@@ -1,4 +1,4 @@
-"""App shell — full-height sidebar (brand + nav) + content header.
+"""App shell - full-height sidebar (brand + nav) + content header.
 
   ┌─────────────┬─────────────────────────────────┐
   │ logo + name │  title bar (window controls)    │
@@ -24,7 +24,7 @@ APP_ICON = "ui/icon/icon_48.png"
 
 
 class ContentPage(QWidget):
-    """One routed page — no extra chrome; tools/widgets go in ``body``."""
+    """One routed page - no extra chrome; tools/widgets go in ``body``."""
 
     def __init__(self, object_name: str, parent: QWidget | None = None):
         super().__init__(parent)
@@ -50,7 +50,7 @@ def _nav_width(window) -> int:
 
 
 def configure_header(window) -> None:
-    """Content-area title bar only — logo/title live in the sidebar."""
+    """Content-area title bar only - logo/title live in the sidebar."""
     window.hBoxLayout.setContentsMargins(0, 0, 0, 0)
     window.widgetLayout.setContentsMargins(0, HEADER_H, 0, 0)
 

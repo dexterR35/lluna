@@ -1,4 +1,4 @@
-"""Background removal tab — images only (no video engine)."""
+"""Background removal tab - images only (no video engine)."""
 
 from __future__ import annotations
 
@@ -47,7 +47,7 @@ _MODE_PROTECT = "protect"
 
 
 def _preview_temp_path(source_path: str) -> str:
-    """Temp PNG for preview only — final save happens via Save button."""
+    """Temp PNG for preview only - final save happens via Save button."""
     d = Path(tempfile.gettempdir()) / "midgard_bg"
     d.mkdir(parents=True, exist_ok=True)
     stem = Path(source_path).stem[:48] or "preview"
@@ -92,7 +92,7 @@ class BgRemoveInterface(ContentPage):
     task_error_signal = Signal(str)
     processing_changed = Signal(bool)
     save_enabled_signal = Signal(bool)
-    alert_signal = Signal(str, str)  # title, content — UI-thread MessageBox
+    alert_signal = Signal(str, str)  # title, content - UI-thread MessageBox
 
     def __init__(self, parent=None):
         super().__init__("BgRemoveInterface", parent=parent)
@@ -104,6 +104,7 @@ class BgRemoveInterface(ContentPage):
         self._installing = False
         self._processing = False
         self._run_mode = _MODE_AUTOMATIC
+        self._active_run_id: int | None = None
 
         self.__init_widgets()
         self.append_log_signal.connect(self.append_log)
@@ -207,6 +208,7 @@ class BgRemoveInterface(ContentPage):
                 retouch_text=bg["Retouch"],
                 enhance_text=bg["Enhance"],
                 settings_title=tr["SubtitleExtractorGUI"]["Setting"],
+                progress_label=bg.get("ProgressLabel", "Processing {}%"),
             ),
             parent=self,
             preview_title=bg["Preview"],
@@ -472,6 +474,7 @@ class BgRemoveInterface(ContentPage):
     @Slot(int, int)
     def _on_progress(self, index, progress):
         self.task_list_component.update_task_progress(index, progress)
+        self.action_bar.set_progress(progress)
 
     @Slot(str)
     def _on_preview_path(self, path: str):
@@ -564,7 +567,12 @@ class BgRemoveInterface(ContentPage):
     def _abort_current_process(self):
         """Stop BG remove without confirmation (task was deleted)."""
         self._stop_event.set()
-        InferClient.instance().cancel()
+        rid = self._active_run_id
+        if rid is not None:
+            InferClient.instance().cancel(rid)
+        else:
+            InferClient.instance().cancel()
+        self._active_run_id = None
         self.running_process = None
         self._processing = False
         self._apply_app_lock()
@@ -613,7 +621,7 @@ class BgRemoveInterface(ContentPage):
         self._update_protect_controls()
 
     def _on_stop_confirmed(self):
-        diag.run("Stop confirmed — aborting BG remove")
+        diag.run("Stop confirmed - aborting BG remove")
         try:
             from backend.tools.diag_health import report_job_state
 
@@ -621,11 +629,19 @@ class BgRemoveInterface(ContentPage):
         except Exception:
             pass
         self._stop_event.set()
-        InferClient.instance().cancel()
+        rid = self._active_run_id
+        if rid is not None:
+            InferClient.instance().cancel(rid)
+        else:
+            InferClient.instance().cancel()
+        self._active_run_id = None
         self.running_process = None
         if self.current_processing_task_index >= 0:
             self.task_list_component.update_task_status(
-                self.current_processing_task_index, TaskStatus.PENDING
+                self.current_processing_task_index, TaskStatus.STOPPED
+            )
+            self.task_list_component.update_task_progress(
+                self.current_processing_task_index, 0
             )
         self._processing = False
         self._apply_app_lock()
@@ -811,6 +827,10 @@ class BgRemoveInterface(ContentPage):
         self.action_bar.set_retouch_enabled(False)
         self.action_bar.set_enhance_enabled(False)
         self._update_protect_controls()
+        try:
+            InferClient.instance().request_release()
+        except Exception:
+            pass
         gc.collect()
 
     def run_button_clicked(self):
@@ -923,22 +943,20 @@ class BgRemoveInterface(ContentPage):
                         f"protect={'yes' if protect_path else 'no'}  "
                         f"hw={bool(config.hardwareAcceleration.value)}"
                     )
-                    self.append_log_signal.emit([
-                        tr["BgRemove"]["Processing"].format(
-                            name,
-                            mode_value,
-                            "GPU/CPU",
-                        )
-                    ])
 
                     ok = self._run_worker_process(
                         task_item.path,
                         preview_path,
                         mode_value,
                         protect_mask_path=protect_path,
+                        display_name=name,
                     )
                     if self._stop_event.is_set():
                         _unlink_quiet(preview_path)
+                        self.task_status_signal.emit(
+                            self.current_processing_task_index, TaskStatus.STOPPED
+                        )
+                        self.progress_signal.emit(self.current_processing_task_index, 0)
                         diag.run("stopped by user")
                         break
                     if ok:
@@ -961,8 +979,11 @@ class BgRemoveInterface(ContentPage):
                             self.current_processing_task_index, TaskStatus.FAILED
                         )
                         diag.error(f"failed  {Path(task_item.path).name}")
+                        # Don't tight-loop the same pending task if status update is still async.
+                        break
             finally:
                 self.running_process = None
+                self._active_run_id = None
                 self.toggle_buttons_signal.emit(True)
                 self.current_processing_task_index = -1
                 diag.worker("BG remove worker thread exit")
@@ -978,16 +999,50 @@ class BgRemoveInterface(ContentPage):
         mode_value: str,
         *,
         protect_mask_path: str | None = None,
+        display_name: str | None = None,
     ) -> bool:
         task_index = self.current_processing_task_index
         success = {"ok": True}
         done = threading.Event()
+        name = display_name or Path(input_path).name
+        started = {"yes": False}
 
         def on_progress(p: int):
+            if not started["yes"]:
+                started["yes"] = True
+                self.append_log_signal.emit([
+                    tr["BgRemove"]["Processing"].format(name, mode_value, "GPU/CPU")
+                ])
             self.progress_signal.emit(task_index, max(1, min(99, int(p))))
 
         def on_log(msg: str):
-            self.append_log_signal.emit([msg])
+            text = str(msg or "")
+            lower = text.lower()
+            if lower.startswith("queued"):
+                # Prefer localized queue line once InferClient reports wait depth.
+                pos = "1"
+                if "(#" in text and ")" in text:
+                    try:
+                        pos = text.split("(#", 1)[1].split(")", 1)[0]
+                    except Exception:
+                        pass
+                self.append_log_signal.emit([
+                    tr["BgRemove"].get(
+                        "Queued",
+                        "[Queued] {} - waiting for the current GPU job to finish "
+                        "or be stopped. Queue position: {}.",
+                    ).format(name, pos)
+                ])
+                return
+            if "worker free" in lower or lower.startswith("starting queued"):
+                self.append_log_signal.emit([
+                    tr["BgRemove"].get(
+                        "QueueStarted",
+                        "[Queue] Worker free - starting background removal…",
+                    )
+                ])
+                return
+            self.append_log_signal.emit([text])
 
         def on_error(msg: str):
             if msg == "__cancelled__":
@@ -995,7 +1050,7 @@ class BgRemoveInterface(ContentPage):
             elif msg in ("TIMEOUT", "CRASH", "BUSY"):
                 success["ok"] = False
                 text = {
-                    "TIMEOUT": "Background removal timed out. The worker was restarted — try again.",
+                    "TIMEOUT": "Background removal timed out. The worker was restarted - try again.",
                     "CRASH": "Background removal worker crashed. Try again.",
                     "BUSY": "Another GPU job is already running. Wait for it to finish or stop it first.",
                 }.get(msg, "Background removal worker crashed. Try again.")
@@ -1025,7 +1080,8 @@ class BgRemoveInterface(ContentPage):
         if protect_mask_path:
             payload["protect_mask_path"] = protect_mask_path
 
-        InferClient.instance().start_job(
+        client = InferClient.instance()
+        run_id = client.start_job(
             JobType.BG_REMOVE,
             payload,
             on_progress=on_progress,
@@ -1035,11 +1091,18 @@ class BgRemoveInterface(ContentPage):
             on_done=on_done,
             coalesce=False,
         )
-        # Wait until job finishes (or stop).
+        self._active_run_id = run_id if run_id >= 0 else None
+        # Wait until job finishes (or stop). Cancel only this run_id so a
+        # queued BG job does not kill an active subtitle/video job.
         while not done.wait(timeout=0.25):
             if self._stop_event.is_set():
-                InferClient.instance().cancel()
+                if self._active_run_id is not None:
+                    client.cancel(self._active_run_id)
+                else:
+                    client.cancel()
+                self._active_run_id = None
                 return False
+        self._active_run_id = None
         return success["ok"] and not self._stop_event.is_set()
 
     def _format_error_text(self, text: str) -> str:

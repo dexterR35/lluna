@@ -1,4 +1,4 @@
-"""Shared Midgard card chrome — colors + density from ``ui.theme.CARD``."""
+"""Shared Midgard card chrome - colors + density from ``ui.theme.CARD``."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ __all__ = [
 
 
 def apply_card_chrome(card: QWidget) -> None:
-    """Paint card from ``theme.card_qss`` (Midgard QFrame — no Fluent sheet API)."""
+    """Paint card from ``theme.card_qss`` (Midgard QFrame - no Fluent sheet API)."""
     # Leftover Fluent SettingCard subclasses still paint their own fill
     if type(card).paintEvent is not QFrame.paintEvent:
         card.paintEvent = lambda e, _c=card: QFrame.paintEvent(_c, e)  # type: ignore[method-assign]
@@ -28,7 +28,7 @@ def apply_card_chrome(card: QWidget) -> None:
 
 
 def settings_content_summary(text: str, *, max_len: int = 90) -> str:
-    """First line only — full text stays in tooltip."""
+    """First line only - full text stays in tooltip."""
     line = (text or "").split("\n", 1)[0].strip()
     if len(line) > max_len:
         line = line[: max_len - 1].rstrip() + "…"
@@ -88,7 +88,7 @@ def compact_setting_card(card: QWidget) -> QWidget:
 
 
 def apply_settings_card(card: QWidget) -> QWidget:
-    """Compact settings row — one-line summary; hover for full help."""
+    """Compact settings row - one-line summary; hover for full help."""
     c = CARD
     s = SETTINGS
     apply_card_chrome(card)

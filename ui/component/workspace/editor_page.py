@@ -1,4 +1,4 @@
-"""Editor shell — same visual rail as WorkspacePage (preview + right SectionCards).
+"""Editor shell - same visual rail as WorkspacePage (preview + right SectionCards).
 
 Used by modal editors (Retouch) that need canvas + tools without Tasks/ActionBar.
 """
@@ -60,7 +60,7 @@ def present_editor_dialog(dialog: QDialog, image_size: Tuple[int, int] | None = 
 
 class EditorPage(QWidget):
     """
-    [ Preview SectionCard (stretch) ] [ Right rail — SectionCards + footer ]
+    [ Preview SectionCard (stretch) ] [ Right rail - SectionCards + footer ]
 
     Rail width matches WorkspacePage (``WORKSPACE["rail_width"]``).
     """

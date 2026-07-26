@@ -21,6 +21,7 @@ class CmdMsg(str, Enum):
     START_JOB = "START_JOB"
     CANCEL = "CANCEL"
     PING = "PING"
+    RELEASE = "RELEASE"  # drop cached models now (idle / workspace reset)
     SHUTDOWN = "SHUTDOWN"
 
 
@@ -61,6 +62,11 @@ def cancel(run_id: int) -> Msg:
 
 def ping(run_id: Optional[int] = None) -> Msg:
     return cmd(CmdMsg.PING, run_id=run_id)
+
+
+def release() -> Msg:
+    """Ask the worker to drop cached ML weights immediately."""
+    return cmd(CmdMsg.RELEASE)
 
 
 def shutdown() -> Msg:

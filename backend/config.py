@@ -3,7 +3,7 @@ from io import StringIO
 from contextlib import redirect_stdout
 from pathlib import Path
 
-# qfluentwidgets prints a Pro promo tip on import — silence it
+# qfluentwidgets prints a Pro promo tip on import - silence it
 _qfw_stdout = StringIO()
 with redirect_stdout(_qfw_stdout):
     from qfluentwidgets import (qconfig, ConfigItem, QConfig, OptionsValidator, BoolValidator, OptionsConfigItem,
@@ -28,7 +28,7 @@ _EPHEMERAL_CONFIG_GROUPS = frozenset({"UI", "Window", "QFluentWidgets"})
 
 
 class Config(QConfig):
-    # Window size — fixed default, always centered (not persisted)
+    # Window size - fixed default, always centered (not persisted)
     windowW = 1280
     windowH = 750
 
@@ -48,8 +48,8 @@ class Config(QConfig):
     retouchProgressHideMs = 900
 
     # Zoom / preview rendering (Photoshop-like viewport over full-res pixels)
-    minZoom = 0.05   # 5% — zoom out
-    maxZoom = 8.0    # 800% — zoom in
+    minZoom = 0.05   # 5% - zoom out
+    maxZoom = 8.0    # 800% - zoom in
     zoomStep = 1.25
     # 0 = original image size (no downsample). Applies to all previews/dialogs.
     previewMaxSide = 0
@@ -77,7 +77,7 @@ class Config(QConfig):
     - InpaintMode.LAMA: Works well on animated videos; moderate speed; cannot skip subtitle detection
     - InpaintMode.PROPAINTER: High VRAM usage; slower; better for videos with very intense motion
     """
-    # Inpaint algorithm — STTN Smart Inpainting is the first-install / factory default
+    # Inpaint algorithm - STTN Smart Inpainting is the first-install / factory default
     inpaintMode = OptionsConfigItem("Main", "InpaintMode", InpaintMode.STTN_AUTO, OptionsValidator(InpaintMode), EnumSerializer(InpaintMode))
     
     subtitleDetectMode =  OptionsConfigItem("Main", "SubtitleDetectMode", SubtitleDetectMode.PP_OCRv5_SERVER, OptionsValidator(SubtitleDetectMode), EnumSerializer(SubtitleDetectMode))
@@ -99,7 +99,7 @@ class Config(QConfig):
         ConfigValidator(),
     )
 
-    # Real-ESRGAN enhance (Remove BG) — x2plus default; x4plus opt-in via Settings
+    # Real-ESRGAN enhance (Remove BG) - x2plus default; x4plus opt-in via Settings
     enhanceMode = OptionsConfigItem(
         "Enhance",
         "Mode",
@@ -180,7 +180,7 @@ class Config(QConfig):
     saveDirectory = ConfigItem("Main", "SaveDirectory", "", ConfigValidator())
 
     def toDict(self, serialize=True):
-        """Persist only functional settings — skip theme / UI / window geometry."""
+        """Persist only functional settings - skip theme / UI / window geometry."""
         items = super().toDict(serialize=serialize)
         for group in _EPHEMERAL_CONFIG_GROUPS:
             items.pop(group, None)
@@ -191,10 +191,10 @@ CONFIG_FILE = 'config/config.json'
 config = Config()
 qconfig.load(CONFIG_FILE, config)
 
-# Theme is hardcoded in ui.theme — keep in memory only, never from/to JSON
+# Theme is hardcoded in ui.theme - keep in memory only, never from/to JSON
 qconfig.set(config.themeMode, Theme.DARK, save=False)
 
-# No %-interpolation — UI strings may contain "100%" etc.
+# No %-interpolation - UI strings may contain "100%" etc.
 tr = configparser.ConfigParser(interpolation=None)
 TRANSLATION_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'interface', 'en.ini')
 tr.read(TRANSLATION_FILE, encoding='utf-8')

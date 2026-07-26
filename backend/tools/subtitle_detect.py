@@ -42,7 +42,7 @@ class SubtitleDetect:
     def text_detector(self):
         from backend.tools.paddle_cdn_patch import strip_paddle_cdn_hoster_check
 
-        # Local PP-OCR under backend/models/V5 — strip PaddleX CDN hoster check
+        # Local PP-OCR under backend/models/V5 - strip PaddleX CDN hoster check
         strip_paddle_cdn_hoster_check()
 
         import paddle
@@ -102,7 +102,7 @@ class SubtitleDetect:
         frame_count = video_cap.get(cv2.CAP_PROP_FRAME_COUNT)
         tbar = tqdm(total=int(frame_count), unit='frame', position=0, file=sys.__stdout__, desc='Subtitle Finding')
         current_frame_no = 0
-        # Phase 1: sample detection — run OCR only every sample_step frames
+        # Phase 1: sample detection - run OCR only every sample_step frames
         sampled_results = {}  # frame_no -> temp_list
         if sub_remover:
             sub_remover.append_output(tr['Main']['ProcessingStartFindingSubtitles'])
@@ -125,7 +125,7 @@ class SubtitleDetect:
             if sub_remover:
                 sub_remover.progress_total = (100 * float(current_frame_no) / float(frame_count)) // 2
         video_cap.release()
-        # Phase 2: interpolate — if two sampled frames both have subtitles, mark middle frames too
+        # Phase 2: interpolate - if two sampled frames both have subtitles, mark middle frames too
         subtitle_frame_no_box_dict = {}
         detected_nos = sorted(sampled_results.keys())
         max_gap = self.SAMPLE_STEP * 2

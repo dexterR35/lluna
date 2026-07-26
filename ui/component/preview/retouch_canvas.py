@@ -91,7 +91,7 @@ class RetouchCanvas(QWidget):
         self._rgba: Image.Image | None = None
         # Mutable RGBA during alpha brush strokes (avoids Image.copy every stamp)
         self._rgba_arr: np.ndarray | None = None
-        # Source image before BG removal — used by Restore to bring pixels back
+        # Source image before BG removal - used by Restore to bring pixels back
         self._original: Image.Image | None = None
         self._original_arr: np.ndarray | None = None
         self._mask: np.ndarray | None = None
@@ -314,7 +314,7 @@ class RetouchCanvas(QWidget):
         else:
             # Fallback: current image (restore still works for erased subject)
             self._original = self._rgba.copy()
-        self._original_arr = None  # lazy — built on first Restore stamp
+        self._original_arr = None  # lazy - built on first Restore stamp
         self._mask = np.zeros((h, w), dtype=np.uint8)
         self._selection = None
         self._sel_points.clear()
@@ -386,7 +386,7 @@ class RetouchCanvas(QWidget):
         self._rgba_arr = None
         self._mask.fill(0)
         self._base_checker = None
-        # Selection was used as LAMA region — clear it
+        # Selection was used as LAMA region - clear it
         self._selection = None
         self._sel_points.clear()
         self._refresh_display(immediate=True)
@@ -618,7 +618,7 @@ class RetouchCanvas(QWidget):
             if self.is_select_tool():
                 return self._select_press(pos)
 
-            # Brush stroke — snapshot once before painting
+            # Brush stroke - snapshot once before painting
             self._push_undo()
             self._painting = True
             self._stroke_dirty = False
@@ -955,7 +955,7 @@ class RetouchCanvas(QWidget):
         if src is None:
             return
         if self._base_checker is None:
-            # 0 = original size — canvas buffer matches uploaded image WxH
+            # 0 = original size - canvas buffer matches uploaded image WxH
             self._base_checker = checkerboard_pixmap_from_rgba(
                 src, max_side=config.retouchPreviewMaxSide
             )
@@ -1160,7 +1160,7 @@ class RetouchCanvas(QWidget):
 
     @staticmethod
     def _tool_cursor_pen() -> QCursor:
-        """Pencil tip — hotspot at the writing point."""
+        """Pencil tip - hotspot at the writing point."""
         size = 28
         pm = QPixmap(size, size)
         pm.fill(Qt.GlobalColor.transparent)
@@ -1187,7 +1187,7 @@ class RetouchCanvas(QWidget):
 
     @staticmethod
     def _tool_cursor_lasso() -> QCursor:
-        """Lasso loop with handle — hotspot at tip of handle."""
+        """Lasso loop with handle - hotspot at tip of handle."""
         size = 28
         pm = QPixmap(size, size)
         pm.fill(Qt.GlobalColor.transparent)
@@ -1212,7 +1212,7 @@ class RetouchCanvas(QWidget):
 
     @staticmethod
     def _tool_cursor_rect() -> QCursor:
-        """Crosshair with small rectangle — hotspot at center."""
+        """Crosshair with small rectangle - hotspot at center."""
         size = 25
         pm = QPixmap(size, size)
         pm.fill(Qt.GlobalColor.transparent)

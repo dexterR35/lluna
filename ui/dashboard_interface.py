@@ -83,7 +83,7 @@ class _PromptBox(QWidget):
 
 
 class DashboardInterface(QWidget):
-    """Landing home — greeting, system SettingCards, prompt."""
+    """Landing home - greeting, system SettingCards, prompt."""
 
     open_bg_remove = Signal()
     open_video = Signal()
@@ -198,7 +198,7 @@ class DashboardInterface(QWidget):
         self.apply_theme_bg()
 
     def apply_theme_bg(self):
-        """Scroll + inner page default to white — paint both with ``PAGE['bg']``."""
+        """Scroll + inner page default to white - paint both with ``PAGE['bg']``."""
         apply_page_bg(self, self._scroll, self._page)
 
     def resizeEvent(self, event):

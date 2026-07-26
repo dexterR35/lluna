@@ -1,9 +1,9 @@
-"""App theme — Midgard tokens (colors + sizes) and QSS builders.
+"""App theme - Midgard tokens (colors + sizes) and QSS builders.
 
 Layout (FluentWindow):
-  Title bar — top header chrome
-  Nav rail  — left sidebar
-  Content   — stacked pages (middle area + workspace rails)
+  Title bar - top header chrome
+  Nav rail  - left sidebar
+  Content   - stacked pages (middle area + workspace rails)
 
 Edit tokens here. Shell colors are applied once via ``apply_window_theme`` (called from ``ui.shell``).
 Components read PAGE / NAV / HOME / WORKSPACE / SETTINGS / FORM / CARD / SECTION / PREVIEW / BUTTON instead of hardcoding values.
@@ -279,7 +279,7 @@ def _paint_widget_bg(widget, color: str, *, extra: str = "") -> None:
 
 
 def apply_page_bg(*widgets) -> None:
-    """Home scroll areas — Qt viewports default to white."""
+    """Home scroll areas - Qt viewports default to white."""
     for w in widgets:
         _paint_widget_bg(w, PAGE["bg"])
 
@@ -313,7 +313,7 @@ def _paint_nav(nav) -> None:
 
 
 def apply_window_theme(window) -> None:
-    """Called once from ``ui.shell.apply_shell`` — header, nav, page stack."""
+    """Called once from ``ui.shell.apply_shell`` - header, nav, page stack."""
     from PySide6.QtCore import Qt
     from qfluentwidgets import setCustomStyleSheet
 

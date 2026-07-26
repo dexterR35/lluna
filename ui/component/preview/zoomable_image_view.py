@@ -71,7 +71,7 @@ def checkerboard_pixmap_from_rgba(rgba: Image.Image, max_side: int | None = None
             w, h = img.size
 
     tile = max(1, int(config.checkerboardTile))
-    # Vectorized checker — avoid slow advanced indexing on large images
+    # Vectorized checker - avoid slow advanced indexing on large images
     yy = np.arange(h, dtype=np.int32)[:, None]
     xx = np.arange(w, dtype=np.int32)[None, :]
     parity = (((xx // tile) + (yy // tile)) & 1).astype(np.uint8)
@@ -130,7 +130,7 @@ class ZoomableImageView(QWidget):
         self._draft_rect: tuple[float, float, float, float] | None = None
         self._hovered = False
         self._drag_over = False
-        self.image_label = None  # set later — eventFilter must tolerate None
+        self.image_label = None  # set later - eventFilter must tolerate None
         self.scroll = None
 
         root = QVBoxLayout(self)

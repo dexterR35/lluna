@@ -1,4 +1,4 @@
-"""Settings page — Midgard cards (same structure/bg as Home dashboard)."""
+"""Settings page - Midgard cards (same structure/bg as Home dashboard)."""
 
 from PySide6 import QtWidgets, QtCore, QtGui
 from PySide6.QtWidgets import QFileDialog, QVBoxLayout
@@ -28,7 +28,7 @@ from ui.theme import SETTINGS
 
 
 class AdvancedSettingInterface(ScrollArea):
-    """Settings page — same Midgard CARD chrome as Home."""
+    """Settings page - same Midgard CARD chrome as Home."""
 
     def __init__(self, parent=None):
         super().__init__(parent)

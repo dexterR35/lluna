@@ -1,6 +1,6 @@
 # Midgard
 
-AI-based hard subtitle and text watermark remover for images and videos. Runs locally — no third-party API required. Keeps the original resolution when writing output.
+AI-based hard subtitle and text watermark remover for images and videos. Runs locally - no third-party API required. Keeps the original resolution when writing output.
 
 ![Python 3.12+](https://img.shields.io/badge/Python-3.12+-blue.svg)
 ![OS](https://img.shields.io/badge/OS-Windows%20%7C%20macOS%20%7C%20Linux-green.svg)
@@ -22,7 +22,7 @@ AI-based hard subtitle and text watermark remover for images and videos. Runs lo
 ## Quick start
 
 Copy or clone this project folder onto the machine (include `backend/models/`).  
-**Do not copy `midgardEnv/` between Linux and Windows** — recreate it on each OS.
+**Do not copy `midgardEnv/` between Linux and Windows** - recreate it on each OS.
 
 ```shell
 python install.py
@@ -115,15 +115,15 @@ Weights ship under `backend/models/` (~600 MB): STTN, LaMa, ProPainter, and PP-O
 
 ## Troubleshooting
 
-**Slow removal** — prefer STTN and tune settings in the GUI (Advanced / STTN), or edit `backend/config.py`.
+**Slow removal** - prefer STTN and tune settings in the GUI (Advanced / STTN), or edit `backend/config.py`.
 
-**Quality** — try another inpaint mode:
+**Quality** - try another inpaint mode:
 
-- **STTN** — good for live-action, faster
-- **LaMa** — strong on animation / stills
-- **ProPainter** — heavy VRAM, better for strong motion
+- **STTN** - good for live-action, faster
+- **LaMa** - strong on animation / stills
+- **ProPainter** - heavy VRAM, better for strong motion
 
-**CUDA selected but install falls back to CPU** — NVIDIA drivers / `nvidia-smi` were not available on that machine.
+**CUDA selected but install falls back to CPU** - NVIDIA drivers / `nvidia-smi` were not available on that machine.
 
 ## License
 

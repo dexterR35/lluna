@@ -5,14 +5,16 @@ from typing import Optional
 from PySide6.QtCore import QSize, Signal
 from PySide6.QtGui import QColor, QPainter
 from PySide6.QtWidgets import QHBoxLayout, QSizePolicy, QVBoxLayout, QWidget
-from qfluentwidgets import CardWidget, FluentIcon
+from qfluentwidgets import BodyLabel, CardWidget, FluentIcon, ProgressBar
 
 from ui.component.controls.button_styles import ClickThrottle, make_button, make_stop_button
 from ui.component.utils.confirm_dialog import ask_confirm
 from ui.theme import (
     BUTTON_SIZE_MEDIUM,
     BUTTON_SIZES,
+    FORM,
     SECTION,
+    TEXT,
     WORKSPACE,
 )
 
@@ -25,7 +27,7 @@ _BTN_ICON = BUTTON_SIZES[BUTTON_SIZE_MEDIUM]["icon"]
 
 @dataclass(frozen=True)
 class RailActions:
-    """Right-rail action labels / confirms — same component, different data per tab."""
+    """Right-rail action labels / confirms - same component, different data per tab."""
 
     open_text: str
     run_text: str
@@ -39,7 +41,9 @@ class RailActions:
     save_text: Optional[str] = None
     retouch_text: Optional[str] = None
     enhance_text: Optional[str] = None
+    compare_text: Optional[str] = None
     settings_title: Optional[str] = None
+    progress_label: Optional[str] = None  # e.g. "Processing {}%"
 
 
 class ActionBar(CardWidget):
@@ -49,6 +53,8 @@ class ActionBar(CardWidget):
       [ Open  ] [ Reset    ]
       [ Save  ] [ Retouch  ]   (shown only when a result is ready)
       [ Enhance ]              (shown only when a result is ready)
+      [ Compare ]              (Video tab — side-by-side original|cleaned)
+      [ Processing N% + bar ]  (shown while running, when progress_label set)
       [       Run/Stop     ]
     """
 
@@ -58,6 +64,7 @@ class ActionBar(CardWidget):
     save_clicked = Signal()
     retouch_clicked = Signal()
     enhance_clicked = Signal()
+    compare_clicked = Signal()
     reset_confirmed = Signal()
 
     def __init__(self, actions: RailActions, parent=None):
@@ -73,14 +80,17 @@ class ActionBar(CardWidget):
         self._has_save = bool(actions.save_text)
         self._has_retouch = bool(actions.retouch_text)
         self._has_enhance = bool(actions.enhance_text)
+        self._has_compare = bool(actions.compare_text)
         self._has_reset = bool(actions.reset_text)
+        self._progress_fmt = actions.progress_label or ""
+        self._has_progress = bool(self._progress_fmt)
         self._throttle = ClickThrottle(_CLICK_THROTTLE_MS)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(_MARGIN, _MARGIN, _MARGIN, _MARGIN)
         root.setSpacing(_GAP)
 
-        # Row 0 — Open | Reset
+        # Row 0 - Open | Reset
         row0 = QHBoxLayout()
         row0.setContentsMargins(0, 0, 0, 0)
         row0.setSpacing(_GAP)
@@ -99,7 +109,7 @@ class ActionBar(CardWidget):
         row0.addWidget(self.reset_button, 1)
         root.addLayout(row0)
 
-        # Row 1 — Save | Retouch (whole row hidden on Video tab)
+        # Row 1 - Save | Retouch (whole row hidden on Video tab)
         self._mid_row = QWidget(self)
         mid = QHBoxLayout(self._mid_row)
         mid.setContentsMargins(0, 0, 0, 0)
@@ -126,7 +136,7 @@ class ActionBar(CardWidget):
         self._mid_row.setVisible(False)
         root.addWidget(self._mid_row)
 
-        # Row 1b — Enhance (Remove BG only; shown after result is ready)
+        # Row 1b - Enhance (Remove BG only; shown after result is ready)
         self.enhance_button = make_button(
             actions.enhance_text or "Enhance", "danger", self, FluentIcon.ZOOM
         )
@@ -136,7 +146,37 @@ class ActionBar(CardWidget):
         self._style_btn(self.enhance_button)
         root.addWidget(self.enhance_button)
 
-        # Row 2 — Run / Stop (full width, one visible at a time)
+        # Compare (Video tab — side-by-side original | cleaned)
+        self.compare_button = make_button(
+            actions.compare_text or "Compare", "secondary", self, FluentIcon.ALIGNMENT
+        )
+        self.compare_button.clicked.connect(lambda: self._emit_throttled(self.compare_clicked))
+        self.compare_button.setEnabled(False)
+        self.compare_button.setVisible(False)
+        self._style_btn(self.compare_button)
+        root.addWidget(self.compare_button)
+
+        # Progress (optional) - same chrome as enhance / retouch dialogs
+        self.progress_panel = QWidget(self)
+        prog = QVBoxLayout(self.progress_panel)
+        prog.setContentsMargins(0, 0, 0, 0)
+        prog.setSpacing(FORM["tight_spacing"])
+        self.progress_label = BodyLabel(
+            self._progress_fmt.format(0) if self._has_progress else "",
+            self.progress_panel,
+        )
+        self.progress_label.setStyleSheet(
+            f"color: {TEXT}; background: transparent; border: none;"
+        )
+        prog.addWidget(self.progress_label)
+        self.progress_bar = ProgressBar(self.progress_panel)
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
+        prog.addWidget(self.progress_bar)
+        self.progress_panel.setVisible(False)
+        root.addWidget(self.progress_panel)
+
+        # Row 2 - Run / Stop (full width, one visible at a time)
         self._run_row = QWidget(self)
         run_row = QHBoxLayout(self._run_row)
         run_row.setContentsMargins(0, 0, 0, 0)
@@ -196,11 +236,32 @@ class ActionBar(CardWidget):
             self.reset_confirmed.emit()
 
     def set_running(self, running: bool):
+        was_running = self.stop_button.isVisible()
         self.run_button.setVisible(not running)
         self.stop_button.setVisible(running)
         idle = not running
         self.reset_button.setVisible(idle and self._has_reset)
         self._sync_result_actions(idle=idle)
+        if self._has_progress:
+            if running and not was_running:
+                self.set_progress(0)
+            elif not running:
+                self.hide_progress()
+
+    def set_progress(self, value: int):
+        """Show ``Processing N%`` in the action rail (0–100)."""
+        if not self._has_progress:
+            return
+        pct = max(0, min(100, int(value)))
+        self.progress_bar.setValue(pct)
+        self.progress_label.setText(self._progress_fmt.format(pct))
+        self.progress_panel.setVisible(True)
+
+    def hide_progress(self):
+        if not self._has_progress:
+            return
+        self.progress_panel.setVisible(False)
+        self.progress_bar.setValue(0)
 
     def _sync_result_actions(self, *, idle: bool | None = None):
         """Show Save / Retouch / Enhance only when enabled and not running."""
@@ -209,10 +270,12 @@ class ActionBar(CardWidget):
         show_save = idle and self._has_save and self.save_button.isEnabled()
         show_retouch = idle and self._has_retouch and self.retouch_button.isEnabled()
         show_enhance = idle and self._has_enhance and self.enhance_button.isEnabled()
+        show_compare = idle and self._has_compare and self.compare_button.isEnabled()
         self.save_button.setVisible(show_save)
         self.retouch_button.setVisible(show_retouch)
         self._mid_row.setVisible(show_save or show_retouch)
         self.enhance_button.setVisible(show_enhance)
+        self.compare_button.setVisible(show_compare)
 
     def set_open_enabled(self, enabled: bool):
         self.open_button.setEnabled(enabled)
@@ -230,6 +293,10 @@ class ActionBar(CardWidget):
 
     def set_enhance_enabled(self, enabled: bool):
         self.enhance_button.setEnabled(enabled)
+        self._sync_result_actions()
+
+    def set_compare_enabled(self, enabled: bool):
+        self.compare_button.setEnabled(enabled)
         self._sync_result_actions()
 
     def set_reset_enabled(self, enabled: bool):

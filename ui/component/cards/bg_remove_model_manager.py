@@ -37,7 +37,7 @@ def _model_icon(info: BgRemoveModelInfo):
 
 
 class BgRemoveModelCard(MidgardSettingCard):
-    """One rembg model — Install when missing; On/Off when installed."""
+    """One rembg model - Install when missing; On/Off when installed."""
 
     install_requested = Signal(object)
     enabled_changed = Signal()

@@ -211,7 +211,7 @@ def get_inpaint_area_by_mask(W, H, h, mask, multiple=1):
                     ymax = H
                     ymin = max(0, H - h)
             else:
-                # Island height exceeds h; cannot fully cover — prefer the center area
+                # Island height exceeds h; cannot fully cover - prefer the center area
                 # Compute island center
                 island_center = (min_y + max_y) // 2
                 ymin = max(0, island_center - half_h)

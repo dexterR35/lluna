@@ -1,4 +1,4 @@
-"""Video workspace settings — label above control in SectionCard."""
+"""Video workspace settings - label above control in SectionCard."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ class SettingInterface(QtWidgets.QVBoxLayout):
         self.setContentsMargins(0, 0, 0, 0)
         self.setSpacing(FORM["field_spacing"])
 
-        # Inpainting model — fetch enum options from config
+        # Inpainting model - fetch enum options from config
         self.inpaint_mode_combo = AppCombo(parent)
         inpaint_field = LabeledField(
             tr["SubtitleExtractorGUI"]["InpaintMode"],

@@ -1,4 +1,4 @@
-"""Shared zoom control bar — used by ZoomableImageView and RetouchCanvas."""
+"""Shared zoom control bar - used by ZoomableImageView and RetouchCanvas."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from ui.theme import PREVIEW
 
 
 class ZoomChromeBar(QWidget):
-    """Title (optional) + zoom % + out / in / fit / 100% — one chrome everywhere."""
+    """Title (optional) + zoom % + out / in / fit / 100% - one chrome everywhere."""
 
     zoom_out_clicked = Signal()
     zoom_in_clicked = Signal()

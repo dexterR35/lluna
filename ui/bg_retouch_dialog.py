@@ -1,4 +1,4 @@
-"""Fullscreen retouch dialog after Remove BG — brush + selection + LAMA."""
+"""Fullscreen retouch dialog after Remove BG - brush + selection + LAMA."""
 
 from __future__ import annotations
 
@@ -82,7 +82,7 @@ class BgRetouchDialog(QDialog):
         self._mask_paint_mode = RetouchTool.MASK  # MASK or ERASE_MASK
 
         self.canvas = RetouchCanvas(self)
-        # Defer set_image until after show — window appears instantly
+        # Defer set_image until after show - window appears instantly
         self._pending_rgba = rgba
         self._pending_original = original
 
@@ -345,7 +345,7 @@ class BgRetouchDialog(QDialog):
         self._progress_timer.timeout.connect(self._tick_progress)
 
         self._image_size = rgba.size
-        # Caller presents the window (present_editor_dialog) — do not show here
+        # Caller presents the window (present_editor_dialog) - do not show here
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -492,7 +492,7 @@ class BgRetouchDialog(QDialog):
                 self._on_progress(self._progress_value + step)
 
     def _set_busy(self, busy: bool):
-        """Lock tools/canvas while Fill runs — only Stop is available until done."""
+        """Lock tools/canvas while Fill runs - only Stop is available until done."""
         self._busy = busy
         self.canvas.set_interaction_enabled(not busy)
 

@@ -71,7 +71,7 @@ class VideoDisplayComponent(QWidget):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setAlignment(Qt.AlignCenter)
 
-        # Inner black background container (no radius — SectionCard already frames the area)
+        # Inner black background container (no radius - SectionCard already frames the area)
         self.black_container = QWidget(self)
         self.black_container.setObjectName('blackContainer')
         self.black_container.setStyleSheet("""
@@ -100,7 +100,7 @@ class VideoDisplayComponent(QWidget):
         self.video_display.mouseMoveEvent = self.selection_mouse_move
         self.video_display.mouseReleaseEvent = self.selection_mouse_release
         
-        # Video slider — Fluent Slider + hollow handle
+        # Video slider - Fluent Slider + hollow handle
         self.video_slider = Slider(Qt.Horizontal, self)
         self.video_slider.setMinimum(1)
         self.video_slider.setFixedHeight(VIDEO["slider_h"])

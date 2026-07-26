@@ -2,7 +2,7 @@
 """Startup / live health report for the diagnostic CLI.
 
 Prints model install status (OK / MISSING), selected modes, workers,
-active/pending jobs, and tracked processes — the pipeline behind the UI.
+active/pending jobs, and tracked processes - the pipeline behind the UI.
 """
 
 from __future__ import annotations
@@ -197,6 +197,7 @@ def _report_workers() -> None:
         )
         active = snap.get("active")
         pending = snap.get("pending")
+        wait_queue = snap.get("wait_queue") or []
         if active:
             diag.run(
                 f"active job  {active.get('job_type')}#{active.get('run_id')}  "
@@ -205,9 +206,16 @@ def _report_workers() -> None:
         else:
             diag.run("active job  none  (idle)")
         if pending:
-            diag.run(f"pending job  {pending.get('job_type')}  (queued)")
+            diag.run(f"pending job  {pending.get('job_type')}  (coalesce)")
         else:
             diag.run("pending job  none")
+        if wait_queue:
+            parts = [
+                f"{j.get('job_type')}#{j.get('run_id')}" for j in wait_queue
+            ]
+            diag.run(f"wait queue  {len(wait_queue)}  [{' → '.join(parts)}]")
+        else:
+            diag.run("wait queue  empty")
         diag.run(f"run counter  {snap.get('run_counter', 0)}")
     except Exception as e:
         diag.warn(f"infer worker status failed  {e}")

@@ -76,7 +76,7 @@ def _mode_label(section: str, value: Any) -> str:
 
 
 def _clicks_enabled() -> bool:
-    """Noisy Qt button-click logging — off unless MIDGARD_DIAG_CLICKS=1."""
+    """Noisy Qt button-click logging - off unless MIDGARD_DIAG_CLICKS=1."""
     import os
 
     raw = os.environ.get("MIDGARD_DIAG_CLICKS", "").strip().lower()
@@ -84,7 +84,7 @@ def _clicks_enabled() -> bool:
 
 
 class DiagEventFilter(QObject):
-    """Optional app-wide button click logger (zoom/chrome spam — opt-in only)."""
+    """Optional app-wide button click logger (zoom/chrome spam - opt-in only)."""
 
     def eventFilter(self, obj: QObject, event: QEvent) -> bool:
         if not diag.is_enabled() or not _clicks_enabled():
@@ -95,7 +95,7 @@ class DiagEventFilter(QObject):
                 cls = type(obj).__name__
                 if "Combo" in cls or hasattr(obj, "currentIndexChanged"):
                     return False
-                # Skip zoom / tool chrome — almost never useful in pipeline debugging
+                # Skip zoom / tool chrome - almost never useful in pipeline debugging
                 if cls in ("ToolButton", "TransparentToolButton", "NavigationToolButton"):
                     return False
                 tip = ""
@@ -130,7 +130,7 @@ def install_app_hooks(app: QApplication) -> None:
     else:
         diag.start(
             "pipeline diag ON  (UPLOAD RUN MODEL WORKER PROCESS)  "
-            "clicks off — set MIDGARD_DIAG_CLICKS=1 to enable"
+            "clicks off - set MIDGARD_DIAG_CLICKS=1 to enable"
         )
 
 

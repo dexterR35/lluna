@@ -90,7 +90,7 @@ def _ram_summary() -> str:
             return f"{avail_gb:.1f} / {total_gb:.1f} GB free"
     except Exception:
         pass
-    return "—"
+    return "-"
 
 
 def _cpu_summary() -> str:
@@ -148,7 +148,7 @@ def collect_system_info() -> SystemInfo:
     try:
         host = socket.gethostname()
     except Exception:
-        host = "—"
+        host = "-"
     gpu, accel = _gpu_summary()
     return SystemInfo(
         username=display_name(),

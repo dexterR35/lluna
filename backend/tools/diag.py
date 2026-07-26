@@ -217,7 +217,7 @@ def banner() -> None:
         if use_color():
             print(
                 f"\n{_BOLD}{_COLORS[CAT_START]}{line}\n"
-                f"  Midgard Studio — diagnostic CLI log ON\n"
+                f"  Midgard Studio - diagnostic CLI log ON\n"
                 f"  Focus: UPLOAD → MODEL → RUN → WORKER → PROCESS → PROGRESS\n"
                 f"  UI clicks are OFF (no ToolButton spam).\n"
                 f"  Enable clicks: MIDGARD_DIAG_CLICKS=1\n"
@@ -228,7 +228,7 @@ def banner() -> None:
         else:
             print(
                 f"\n{line}\n"
-                f"  Midgard Studio — diagnostic CLI log ON\n"
+                f"  Midgard Studio - diagnostic CLI log ON\n"
                 f"  Focus: UPLOAD → MODEL → RUN → WORKER → PROCESS → PROGRESS\n"
                 f"  UI clicks are OFF (no ToolButton spam).\n"
                 f"  Enable clicks: MIDGARD_DIAG_CLICKS=1\n"

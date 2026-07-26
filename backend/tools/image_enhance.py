@@ -1,4 +1,4 @@
-"""Real-ESRGAN RGBA enhance — keep true upscale, cap long edge at 5000."""
+"""Real-ESRGAN RGBA enhance - keep true upscale, cap long edge at 5000."""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ _cancel_generation = 0
 _cancel_lock = threading.Lock()
 _busy = False
 
-# Hard limits — keep memory bounded and cancel responsive.
+# Hard limits - keep memory bounded and cancel responsive.
 MAX_CACHED_MODELS = 1
 MAX_LONG_EDGE = 5000
 MIN_LONG_EDGE = 64
@@ -330,7 +330,7 @@ class _RealESRGANer:
 
 
 def _get_upsampler(mode: EnhanceMode, tile: int = DEFAULT_TILE) -> _RealESRGANer:
-    """Return the upsampler for mode — at most MAX_CACHED_MODELS in memory."""
+    """Return the upsampler for mode - at most MAX_CACHED_MODELS in memory."""
     device = _device()
     key = f"{mode.value}:{device}:{int(tile)}"
     cached = _session_cache.get(key)
@@ -382,7 +382,7 @@ def enhance_rgba(
         if progress:
             progress(v)
 
-    # Serialize inference — never run two Real-ESRGAN jobs at once.
+    # Serialize inference - never run two Real-ESRGAN jobs at once.
     while not _infer_lock.acquire(timeout=0.25):
         if cancel_event is not None and cancel_event.is_set():
             raise EnhanceCancelled()

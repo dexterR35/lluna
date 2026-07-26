@@ -1,4 +1,4 @@
-"""Enhance preview dialog after Remove BG — Real-ESRGAN 2×/4×, Apply or Cancel."""
+"""Enhance preview dialog after Remove BG - Real-ESRGAN 2×/4×, Apply or Cancel."""
 
 from __future__ import annotations
 
@@ -143,7 +143,7 @@ class BgEnhanceDialog(QDialog):
         self._progress_timer.setInterval(400)
         self._progress_timer.timeout.connect(self._tick_progress)
 
-        # Rate-limited queue flusher (latest scale only) — used when Run while busy.
+        # Rate-limited queue flusher (latest scale only) - used when Run while busy.
         self._queue_timer = QTimer(self)
         self._queue_timer.setSingleShot(True)
         self._queue_timer.setInterval(self.SCALE_DEBOUNCE_MS)
@@ -151,14 +151,14 @@ class BgEnhanceDialog(QDialog):
 
         BgEnhanceDialog._open_instance = self
         self._fill_scale_combo()
-        # Do not auto-run — user clicks Run.
+        # Do not auto-run - user clicks Run.
 
     def _fill_scale_combo(self):
         apply_default_enhance_model()
 
         def _fetch():
             modes = selectable_modes()
-            # x2 may not be on disk yet — still offer it (auto-download on run)
+            # x2 may not be on disk yet - still offer it (auto-download on run)
             return modes or [EnhanceMode.X2PLUS]
 
         current = config.enhanceMode.value
@@ -210,7 +210,7 @@ class BgEnhanceDialog(QDialog):
         if self._closed or not self._pending_restart:
             return
         if self._busy:
-            # Still draining previous job — keep the single pending slot and retry.
+            # Still draining previous job - keep the single pending slot and retry.
             self._queue_timer.start(self.SCALE_DEBOUNCE_MS)
             return
         self._pending_restart = False
@@ -219,7 +219,7 @@ class BgEnhanceDialog(QDialog):
     def _on_scale_changed(self, _index: int):
         mode = self._selected_mode()
         config.set(config.enhanceMode, mode)
-        # Scale only selects the model — click Run to enhance (or re-run).
+        # Scale only selects the model - click Run to enhance (or re-run).
 
     def _on_run_clicked(self):
         if self._closed:
@@ -261,7 +261,7 @@ class BgEnhanceDialog(QDialog):
             self._on_progress(self._progress_value + 1)
 
     def _signal_cancel(self):
-        """Ask the worker to abort ASAP (does not bump run_id — needed for restart)."""
+        """Ask the worker to abort ASAP (does not bump run_id - needed for restart)."""
         from backend.tools.infer_client import InferClient
 
         self._cancel_event.set()
@@ -363,12 +363,12 @@ class BgEnhanceDialog(QDialog):
                 if msg == "TIMEOUT":
                     self._emit_done(
                         (run_id, None),
-                        "Enhance timed out (no progress). The worker was restarted — try again.",
+                        "Enhance timed out (no progress). The worker was restarted - try again.",
                     )
                 elif msg == "CRASH":
                     self._emit_done(
                         (run_id, None),
-                        "Enhance worker crashed. The worker was restarted — try again.",
+                        "Enhance worker crashed. The worker was restarted - try again.",
                     )
                 elif msg == "BUSY":
                     self._emit_done(
@@ -489,7 +489,7 @@ class BgEnhanceDialog(QDialog):
             BgEnhanceDialog._open_instance = None
 
     def wait_worker(self, timeout: float = 60.0) -> bool:
-        """Best-effort wait — infer jobs finish via signals; return True if not busy."""
+        """Best-effort wait - infer jobs finish via signals; return True if not busy."""
         import time
 
         end = time.monotonic() + timeout

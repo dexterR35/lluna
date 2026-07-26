@@ -10,13 +10,14 @@ import threading
 import time
 import traceback
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from backend.tools.infer_protocol import (
     EvtMsg,
     JobType,
     cancel as proto_cancel,
     ping as proto_ping,
+    release as proto_release,
     shutdown as proto_shutdown,
     start_job as proto_start_job,
 )
@@ -32,7 +33,7 @@ ErrorCb = Optional[Callable[[str], None]]
 
 def _short_path(path: Any) -> str:
     if not path:
-        return "—"
+        return "-"
     try:
         return os.path.basename(str(path))
     except Exception:
@@ -86,13 +87,16 @@ class _PendingJob:
     payload: Dict[str, Any]
     callbacks: Dict[str, Any]
     hard_cancel: bool = False
+    run_id: Optional[int] = None
 
 
 class InferClient:
     """
     Singleton parent-side controller.
     - One persistent worker process
-    - At most one active job + one pending (coalesced)
+    - One active job at a time
+    - coalesce=True: single pending slot that cancels/replaces the active job
+    - coalesce=False: FIFO wait queue (does not cancel the active job)
     - Watchdog: silence → kill → CRASH → respawn
     """
 
@@ -114,7 +118,9 @@ class InferClient:
         self._run_counter = 0
         self._active: Optional[_JobCallbacks] = None
         self._pending: Optional[_PendingJob] = None
+        self._wait_queue: List[_PendingJob] = []
         self._last_heartbeat = 0.0
+        self._last_activity = time.monotonic()
         self._hw_accel: Optional[bool] = None
         self._stopping = False
         self._shutdown_done = False
@@ -135,6 +141,10 @@ class InferClient:
             return float(config.jobWatchdogSec.value)
         except Exception:
             return 90.0
+
+    def _touch_activity(self) -> None:
+        self._last_activity = time.monotonic()
+        self._last_heartbeat = self._last_activity
 
     def _desired_hw(self) -> bool:
         try:
@@ -172,7 +182,7 @@ class InferClient:
         diag.worker(
             f"START  infer-worker  pid={self._process.pid}  hw_accel={hw}"
         )
-        self._last_heartbeat = time.monotonic()
+        self._touch_activity()
         self._stopping = False
         if self._reader_thread is None or not self._reader_thread.is_alive():
             self._reader_thread = threading.Thread(
@@ -255,6 +265,7 @@ class InferClient:
                 cb = active.on_result
                 done = active.on_done
                 self._active = None
+                self._touch_activity()
                 if cb:
                     try:
                         cb(path)
@@ -273,6 +284,7 @@ class InferClient:
                 cb = active.on_error
                 done = active.on_done
                 self._active = None
+                self._touch_activity()
                 if cb:
                     try:
                         cb(err)
@@ -357,6 +369,21 @@ class InferClient:
         with self._state_lock:
             return self._active is not None and not self._active.finished
 
+    def request_release(self) -> None:
+        """
+        Free RAM on explicit Reset only - keeps models warm during normal idle.
+
+        Recycling the worker returns RSS to the OS; next Run respawns cold.
+        """
+        with self._state_lock:
+            if self._active is not None and not self._active.finished:
+                return
+            if self._process is None or not self._process.is_alive():
+                return
+            diag.worker("RECYCLE  infer-worker  (Reset - return RAM to OS)")
+            self._kill_worker_unlocked(reason="release")
+            # Leave dead - start_job / ensure_started will spawn fresh.
+
     def start_job(
         self,
         job_type: JobType | str,
@@ -371,46 +398,70 @@ class InferClient:
         coalesce: bool = True,
     ) -> int:
         """
-        Start a job. If busy and coalesce=True, replace the single pending slot
-        and soft/hard-cancel the active job as appropriate.
-        Returns run_id (pending jobs get id assigned when flushed).
+        Start a job.
+        - coalesce=True + busy: replace the single pending slot and cancel active.
+        - coalesce=False + busy: append to FIFO wait queue (active keeps running).
+        Returns run_id (assigned immediately, including for queued jobs).
         """
         jt = job_type.value if isinstance(job_type, JobType) else str(job_type)
         hard = jt in self.HARD_CANCEL_TYPES
         self.ensure_started()
 
+        cbs = {
+            "on_progress": on_progress,
+            "on_log": on_log,
+            "on_result": on_result,
+            "on_error": on_error,
+            "on_preview": on_preview,
+            "on_done": on_done,
+        }
+
         with self._state_lock:
             if self._active is not None and not self._active.finished:
-                if not coalesce:
-                    if on_error:
-                        on_error("BUSY")
-                    return -1
-                self._pending = _PendingJob(
-                    job_type=jt,
-                    payload=payload,
-                    callbacks={
-                        "on_progress": on_progress,
-                        "on_log": on_log,
-                        "on_result": on_result,
-                        "on_error": on_error,
-                        "on_preview": on_preview,
-                        "on_done": on_done,
-                    },
-                    hard_cancel=hard,
+                if coalesce:
+                    self._pending = _PendingJob(
+                        job_type=jt,
+                        payload=payload,
+                        callbacks=cbs,
+                        hard_cancel=hard,
+                    )
+                    self._cancel_active_unlocked()
+                    return self._run_counter  # provisional until flush
+
+                # Wait in line - do not cancel the active job or spam BUSY.
+                self._run_counter += 1
+                run_id = self._run_counter
+                depth = len(self._wait_queue) + 1
+                active = self._active
+                self._wait_queue.append(
+                    _PendingJob(
+                        job_type=jt,
+                        payload=payload,
+                        callbacks=cbs,
+                        hard_cancel=hard,
+                        run_id=run_id,
+                    )
                 )
-                self._cancel_active_unlocked()
-                return self._run_counter  # provisional
+                behind = f"{active.job_type}#{active.run_id}"
+                diag.run(
+                    f"QUEUED  {jt}#{run_id}  behind={behind}  "
+                    f"queue={depth}  (wait - do not cancel active)"
+                )
+                if on_log:
+                    try:
+                        on_log(
+                            f"Queued (#{depth}) - waiting for {active.job_type} "
+                            f"to finish or be stopped…"
+                        )
+                    except Exception:
+                        pass
+                return run_id
 
             return self._start_unlocked(
                 jt,
                 payload,
-                on_progress=on_progress,
-                on_log=on_log,
-                on_result=on_result,
-                on_error=on_error,
-                on_preview=on_preview,
-                on_done=on_done,
                 hard_cancel=hard,
+                **cbs,
             )
 
     def _start_unlocked(
@@ -420,15 +471,21 @@ class InferClient:
         **cbs,
     ) -> int:
         hard = bool(cbs.pop("hard_cancel", False))
-        self._run_counter += 1
-        run_id = self._run_counter
+        preset_id = cbs.pop("run_id", None)
+        if preset_id is not None:
+            run_id = int(preset_id)
+            if run_id > self._run_counter:
+                self._run_counter = run_id
+        else:
+            self._run_counter += 1
+            run_id = self._run_counter
         self._active = _JobCallbacks(
             run_id=run_id,
             job_type=job_type,
             hard_cancel=hard,
             **{k: v for k, v in cbs.items()},
         )
-        self._last_heartbeat = time.monotonic()
+        self._touch_activity()
         assert self._cmd_queue is not None
         self._cmd_queue.put(proto_start_job(run_id, job_type, payload))
         route = _payload_route(job_type, payload)
@@ -439,21 +496,68 @@ class InferClient:
     def _flush_pending_unlocked(self) -> None:
         pending = self._pending
         self._pending = None
-        if pending is None:
+        if pending is not None:
+            self.ensure_started()
+            self._start_unlocked(
+                pending.job_type,
+                pending.payload,
+                hard_cancel=pending.hard_cancel,
+                run_id=pending.run_id,
+                **pending.callbacks,
+            )
             return
+        if not self._wait_queue:
+            return
+        nxt = self._wait_queue.pop(0)
         self.ensure_started()
-        self._start_unlocked(
-            pending.job_type,
-            pending.payload,
-            hard_cancel=pending.hard_cancel,
-            **pending.callbacks,
+        left = len(self._wait_queue)
+        diag.run(
+            f"DEQUEUE  {nxt.job_type}#{nxt.run_id}  remaining_queue={left}"
         )
+        log_cb = nxt.callbacks.get("on_log")
+        if log_cb:
+            try:
+                log_cb("Worker free - starting queued job…")
+            except Exception:
+                pass
+        self._start_unlocked(
+            nxt.job_type,
+            nxt.payload,
+            hard_cancel=nxt.hard_cancel,
+            run_id=nxt.run_id,
+            **nxt.callbacks,
+        )
+
+    def _remove_wait_unlocked(self, run_id: int) -> bool:
+        """Remove a queued job by run_id. Returns True if removed."""
+        for i, job in enumerate(self._wait_queue):
+            if job.run_id is not None and int(job.run_id) == int(run_id):
+                removed = self._wait_queue.pop(i)
+                diag.run(f"UNQUEUE  {removed.job_type}#{run_id}")
+                cb = removed.callbacks.get("on_error")
+                done = removed.callbacks.get("on_done")
+                if cb:
+                    try:
+                        cb("__cancelled__")
+                    except Exception:
+                        pass
+                if done:
+                    try:
+                        done()
+                    except Exception:
+                        pass
+                return True
+        return False
 
     def cancel(self, run_id: Optional[int] = None) -> None:
         with self._state_lock:
+            # Cancel a waiting job without touching the active one.
+            if run_id is not None and self._remove_wait_unlocked(run_id):
+                return
             active = self._active
             if active and not active.finished:
                 diag.run(f"CANCEL job  {active.job_type}#{active.run_id}")
+            # Coalesce slot only - leave FIFO wait queue for other tools.
             self._pending = None
             self._cancel_active_unlocked(run_id=run_id)
 
@@ -485,6 +589,8 @@ class InferClient:
                     done()
                 except Exception:
                     pass
+            # Let the next queued job (other tool) start.
+            self._flush_pending_unlocked()
             return
         # Soft cancel
         diag.run(f"soft cancel  {active.job_type}#{active.run_id}")
@@ -513,12 +619,17 @@ class InferClient:
                     "job_type": self._pending.job_type,
                     "hard_cancel": self._pending.hard_cancel,
                 }
+            wait_queue = [
+                {"run_id": j.run_id, "job_type": j.job_type}
+                for j in self._wait_queue
+            ]
             return {
                 "pid": getattr(proc, "pid", None) if proc is not None else None,
                 "alive": alive,
                 "hw_accel": self._hw_accel,
                 "active": active,
                 "pending": pending,
+                "wait_queue": wait_queue,
                 "run_counter": self._run_counter,
                 "reader_alive": bool(
                     self._reader_thread is not None and self._reader_thread.is_alive()
@@ -535,6 +646,7 @@ class InferClient:
             self._shutdown_done = True
             self._stopping = True
             self._pending = None
+            self._wait_queue.clear()
             self._active = None
             diag.worker("shutdown InferClient")
             if self._cmd_queue is not None:

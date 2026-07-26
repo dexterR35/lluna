@@ -1,4 +1,4 @@
-"""Enhance (Real-ESRGAN) models as SettingCards — same pattern as Remove BG models."""
+"""Enhance (Real-ESRGAN) models as SettingCards - same pattern as Remove BG models."""
 
 from __future__ import annotations
 

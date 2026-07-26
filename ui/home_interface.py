@@ -3,6 +3,7 @@ import cv2
 import threading
 import time
 import traceback
+from pathlib import Path
 from PySide6.QtCore import Slot, Signal
 from PySide6.QtWidgets import QWidget
 from PySide6 import QtWidgets
@@ -28,6 +29,7 @@ class HomeInterface(ContentPage):
     toggle_buttons_signal = Signal(bool)  # True=show run button, False=show stop button
     task_status_signal = Signal(int, object)  # (task_index, TaskStatus)
     select_task_signal = Signal(int)  # task_index
+    compare_done_signal = Signal(str, str)  # (ok_path_or_empty, error_or_empty)
     def __init__(self, parent=None):
         super().__init__("HomeInterface", parent=parent)
         # Initialize variables
@@ -54,6 +56,8 @@ class HomeInterface(ContentPage):
 
         # Index of the task currently being processed
         self.current_processing_task_index = -1
+        self._active_run_id: int | None = None
+        self._compare_thread: threading.Thread | None = None
 
         self.__init_widgets()
         self.progress_signal.connect(self.update_progress)
@@ -63,6 +67,7 @@ class HomeInterface(ContentPage):
         self.toggle_buttons_signal.connect(self._toggle_buttons)
         self.task_status_signal.connect(self._on_task_status)
         self.select_task_signal.connect(self.task_list_component.select_task)
+        self.compare_done_signal.connect(self._on_compare_done)
         self.append_output(tr['SubtitleExtractorGUI']['EmptyStateHint'])
 
     def __init_widgets(self):
@@ -97,6 +102,7 @@ class HomeInterface(ContentPage):
                 reset_confirm_desc=gui["ResetConfirmDesc"],
                 empty_list_hint=tr["TaskList"]["EmptyListHint"],
                 settings_title=gui["Setting"],
+                compare_text=gui.get("Compare", "Compare"),
             ),
             parent=self,
             preview_title=gui.get("VideoPreview", "Preview"),
@@ -109,6 +115,7 @@ class HomeInterface(ContentPage):
         self.action_bar.run_clicked.connect(self.run_button_clicked)
         self.action_bar.stop_confirmed.connect(self._on_stop_confirmed)
         self.action_bar.reset_confirmed.connect(self.reset_workspace)
+        self.action_bar.compare_clicked.connect(self.compare_button_clicked)
         self.task_list_component.task_selected.connect(self.on_task_selected)
         self.task_list_component.task_deleted.connect(self.on_task_deleted)
 
@@ -148,6 +155,7 @@ class HomeInterface(ContentPage):
 
     def _on_task_status(self, idx, status):
         self.task_list_component.update_task_status(idx, status)
+        self._update_compare_enabled()
         if idx != self.task_list_component.get_current_task_index():
             return
         if self.media_preview.mode != MediaPreviewMode.IMAGE:
@@ -162,7 +170,7 @@ class HomeInterface(ContentPage):
                 if selections:
                     self.media_preview.before_view.set_selection_rects(selections)
             self._refresh_image_after(idx)
-        elif status in (TaskStatus.PENDING, TaskStatus.FAILED):
+        elif status in (TaskStatus.PENDING, TaskStatus.FAILED, TaskStatus.STOPPED):
             task = self.task_list_component.get_task(idx)
             out = getattr(task, "output_path", None) if task else None
             if out and os.path.isfile(out):
@@ -210,6 +218,7 @@ class HomeInterface(ContentPage):
                     self.media_preview.show_after_path(out)
                 else:
                     self.media_preview.hide_after()
+            self._update_compare_enabled()
             return
 
         ab_sections = self.task_list_component.get_task_option(index, TaskOptions.AB_SECTIONS, [])
@@ -219,6 +228,8 @@ class HomeInterface(ContentPage):
             self.video_display_component.load_selections_from_config()
         else:
             self.video_display_component.set_selection_rects(selections)
+        self._update_compare_enabled()
+
     def on_task_deleted(self, index, task):
         """Clean preview / processing state after a task is removed."""
         # Adjust or abort in-flight processing
@@ -244,19 +255,26 @@ class HomeInterface(ContentPage):
             self.video_slider.setMaximum(1)
             self.video_slider.setValue(1)
             self.append_output(tr['TaskList']['TaskRemovedEmpty'])
+            self._update_compare_enabled()
             return
 
         # Keep a valid selection / preview
         next_idx = min(index, remaining - 1)
         self.task_list_component.select_task(next_idx)
         self.append_output(tr['TaskList']['TaskRemoved'].format(task.name if task else ""))
+        self._update_compare_enabled()
 
     def _stop_infer_job(self):
-        """Hard-cancel the shared infer worker job (subtitle)."""
+        """Hard-cancel this page's infer job (or unqueue it) without touching others' wait slots."""
         try:
             from backend.tools.infer_client import InferClient
 
-            InferClient.instance().cancel()
+            rid = self._active_run_id
+            if rid is not None:
+                InferClient.instance().cancel(rid)
+            else:
+                InferClient.instance().cancel()
+            self._active_run_id = None
         except Exception:
             pass
         running_process = self.running_process
@@ -274,6 +292,7 @@ class HomeInterface(ContentPage):
         finally:
             self.running_process = None
             self.action_bar.set_running(False)
+            self._update_compare_enabled()
 
     def update_preview(self, frame):
         # Scale the image first
@@ -348,20 +367,28 @@ class HomeInterface(ContentPage):
             self._stop_event.set()
             self._stop_infer_job()
             if self.current_processing_task_index >= 0:
-                self.task_list_component.update_task_status(self.current_processing_task_index, TaskStatus.PENDING)
+                self.task_list_component.update_task_status(
+                    self.current_processing_task_index, TaskStatus.STOPPED
+                )
+                self.task_list_component.update_task_progress(
+                    self.current_processing_task_index, 0
+                )
                 if self.media_preview.mode == MediaPreviewMode.IMAGE:
                     self.media_preview.hide_after()
         finally:
             self.running_process = None
             self.action_bar.set_running(False)
+            self._update_compare_enabled()
 
     def reset_workspace(self):
-        """Clear tasks and release video/memory — keep files on disk."""
+        """Clear tasks and release video/memory - keep files on disk."""
         import gc
 
         if self.running_process is not None or (
             self._worker_thread is not None and self._worker_thread.is_alive()
         ):
+            return
+        if self._compare_thread is not None and self._compare_thread.is_alive():
             return
 
         self.task_list_component.clear_all()
@@ -385,12 +412,82 @@ class HomeInterface(ContentPage):
         self.video_slider.setValue(1)
         self.log_panel.clear()
         self.append_output(tr['SubtitleExtractorGUI']['ResetDone'])
+        try:
+            from backend.tools.infer_client import InferClient
+
+            InferClient.instance().request_release()
+        except Exception:
+            pass
+        self._update_compare_enabled()
         gc.collect()
 
     @Slot(bool)
     def _toggle_buttons(self, show_run):
         """Toggle button visibility thread-safely (show_run=True => idle)."""
         self.action_bar.set_running(not show_run)
+        self._update_compare_enabled()
+
+    def _can_compare_current_task(self) -> bool:
+        if self.running_process is not None:
+            return False
+        if self._worker_thread is not None and self._worker_thread.is_alive():
+            return False
+        if self._compare_thread is not None and self._compare_thread.is_alive():
+            return False
+        idx = self.task_list_component.get_current_task_index()
+        task = self.task_list_component.get_task(idx)
+        if task is None or task.status != TaskStatus.COMPLETED:
+            return False
+        if is_image_file(task.path):
+            return False
+        if not task.path or not os.path.isfile(task.path):
+            return False
+        out = task.output_path
+        return bool(out and os.path.isfile(out))
+
+    def _update_compare_enabled(self):
+        self.action_bar.set_compare_enabled(self._can_compare_current_task())
+
+    def compare_button_clicked(self):
+        gui = tr["SubtitleExtractorGUI"]
+        if self._compare_thread is not None and self._compare_thread.is_alive():
+            self.append_output(gui.get("CompareBusy", "Compare is already running."))
+            return
+        if not self._can_compare_current_task():
+            self.append_output(gui.get("CompareNothing", "Nothing to compare."))
+            return
+
+        idx = self.task_list_component.get_current_task_index()
+        task = self.task_list_component.get_task(idx)
+        src = task.path
+        cleaned = task.output_path
+        out_dir = os.path.dirname(os.path.abspath(cleaned)) or "."
+        out_path = os.path.join(out_dir, f"{Path(cleaned).stem}_compare.mp4")
+
+        self.append_output(gui.get("CompareStart", "[Compare] Building side-by-side video…"))
+        self.action_bar.set_compare_enabled(False)
+
+        def work():
+            try:
+                from backend.tools.merge_video import merge_video
+
+                path = merge_video(src, cleaned, out_path, layout="horizontal")
+                self.compare_done_signal.emit(path, "")
+            except Exception as e:
+                traceback.print_exc()
+                self.compare_done_signal.emit("", str(e))
+
+        self._compare_thread = threading.Thread(target=work, daemon=True, name="compare-merge")
+        self._compare_thread.start()
+
+    @Slot(str, str)
+    def _on_compare_done(self, path: str, error: str):
+        gui = tr["SubtitleExtractorGUI"]
+        if error:
+            self.append_output(gui.get("CompareFailed", "[Compare] Failed: {}").format(error))
+        elif path:
+            self.append_output(gui.get("CompareDone", "[Compare] Side-by-side video saved to: {}").format(path))
+        self._update_compare_enabled()
 
     def run_button_clicked(self):
         diag.run("subtitle / inpaint queue")
@@ -468,6 +565,10 @@ class HomeInterface(ContentPage):
 
                             # Check if stopped during processing
                             if self._stop_event.is_set():
+                                self.task_status_signal.emit(
+                                    self.current_processing_task_index, TaskStatus.STOPPED
+                                )
+                                self.progress_signal.emit(0, True)
                                 break
 
                             # Update task status to completed
@@ -533,19 +634,46 @@ class HomeInterface(ContentPage):
     def run_subtitle_remover_process(self, video_path, output_path, options):
         """
         Run subtitle removal via the shared InferClient worker and wait until done.
+        If another GPU job is active, this job waits in the shared FIFO queue.
         """
         from backend.tools.infer_client import InferClient
         from backend.tools.infer_protocol import JobType
 
         done = threading.Event()
         result_box = {"ok": True, "exitcode": 0}
+        name = Path(video_path).name if video_path else "media"
 
         def on_progress(p: int):
             # SubtitleRemover historically sent (progress, isFinished)
             self.progress_signal.emit(int(p), False)
 
         def on_log(msg: str):
-            self.append_log_signal.emit([msg])
+            text = str(msg or "")
+            lower = text.lower()
+            if lower.startswith("queued"):
+                pos = "1"
+                if "(#" in text and ")" in text:
+                    try:
+                        pos = text.split("(#", 1)[1].split(")", 1)[0]
+                    except Exception:
+                        pass
+                self.append_log_signal.emit([
+                    tr["SubtitleExtractorGUI"].get(
+                        "Queued",
+                        "[Queued] {} - waiting for the current GPU job to finish "
+                        "or be stopped. Queue position: {}.",
+                    ).format(name, pos)
+                ])
+                return
+            if "worker free" in lower or lower.startswith("starting queued"):
+                self.append_log_signal.emit([
+                    tr["SubtitleExtractorGUI"].get(
+                        "QueueStarted",
+                        "[Queue] Worker free - starting subtitle removal…",
+                    )
+                ])
+                return
+            self.append_log_signal.emit([text])
 
         def on_preview(**kwargs):
             args = kwargs.get("args")
@@ -569,7 +697,8 @@ class HomeInterface(ContentPage):
         if self._stop_event.is_set():
             return None
 
-        InferClient.instance().start_job(
+        client = InferClient.instance()
+        run_id = client.start_job(
             JobType.SUBTITLE,
             {
                 "video_path": video_path,
@@ -585,15 +714,20 @@ class HomeInterface(ContentPage):
             on_done=on_done,
             coalesce=False,
         )
+        self._active_run_id = run_id if run_id >= 0 else None
         self.running_process = "infer-client"
 
         while not done.wait(timeout=0.25):
             if self._stop_event.is_set():
-                InferClient.instance().cancel()
+                if self._active_run_id is not None:
+                    client.cancel(self._active_run_id)
+                else:
+                    client.cancel()
                 result_box["ok"] = False
                 result_box["exitcode"] = -1
                 break
 
+        self._active_run_id = None
         self.running_process = None
 
         class _ProcProxy:
@@ -615,6 +749,7 @@ class HomeInterface(ContentPage):
         self.video_slider.setValue(1)
         # Reset current processing task index
         self.current_processing_task_index = -1
+        self._update_compare_enabled()
 
     @Slot(int, bool)
     def update_progress(self, progress_total, isFinished):
