@@ -107,8 +107,17 @@ class BackgroundRemover:
         self,
         image: Union[str, Image.Image, np.ndarray],
         progress: ProgressCb = None,
+        protect_mask: Union[str, np.ndarray, Image.Image, None] = None,
+        log: Optional[Callable[[str], None]] = None,
     ) -> Image.Image:
-        """Remove background from a still image. Returns RGBA (no video)."""
+        """
+        Remove background from a still image. Returns RGBA (no video).
+
+        BiRefNet cannot be conditioned on a keep-mask. When ``protect_mask`` is
+        set, we take the model alpha and force-merge the protect mask into it
+        (``max(model, protect)``) *before* applying cutout to the original RGB
+        — so protected pixels are never made transparent.
+        """
         def _p(v: int):
             if progress:
                 progress(v)
@@ -120,11 +129,17 @@ class BackgroundRemover:
 
         pil = self._fit_long_edge(self._to_pil_rgb(image))
         _p(40)
-        result = remove(pil, session=self._session)
+        # Mask-only so we can union protect before any cutout is applied.
+        mask = remove(pil, session=self._session, only_mask=True)
+        _p(70)
+        if not isinstance(mask, Image.Image):
+            mask = Image.fromarray(np.asarray(mask))
+        mask_l = mask.convert("L")
+        if protect_mask is not None:
+            mask_l = merge_protect_into_mask(mask_l, protect_mask, log=log)
         _p(85)
-        if not isinstance(result, Image.Image):
-            result = Image.fromarray(np.asarray(result))
-        out = result.convert("RGBA")
+        out = pil.convert("RGBA")
+        out.putalpha(mask_l)
         _p(95)
         return out
 
@@ -141,14 +156,13 @@ class BackgroundRemover:
             if progress:
                 progress(v)
 
-        result = self.remove(input_path, progress=progress)
+        result = self.remove(
+            input_path,
+            progress=progress,
+            protect_mask=protect_mask_path,
+            log=log,
+        )
         if protect_mask_path:
-            result = apply_protect_mask(
-                result,
-                protect_mask_path,
-                source=input_path,
-                log=log,
-            )
             _p(97)
         out_dir = os.path.dirname(os.path.abspath(output_path))
         if out_dir:
@@ -158,25 +172,10 @@ class BackgroundRemover:
         return output_path
 
 
-def apply_protect_mask(
-    rgba: Image.Image,
+def _load_mask_l(
     mask: Union[str, np.ndarray, Image.Image],
-    source: Union[str, Image.Image, np.ndarray, None] = None,
-    log: Optional[Callable[[str], None]] = None,
+    size: tuple[int, int],
 ) -> Image.Image:
-    """
-    Force-keep painted regions after rembg.
-
-    BiRefNet/rembg never sees the mask — they cut the whole image first.
-    This step runs after cutout: where the keep-mask is white, restore the
-    original photo RGB and raise alpha so those pixels stay visible.
-
-    Soft brush edges blend RGB and alpha naturally.
-    """
-    out = rgba.convert("RGBA")
-    arr = np.asarray(out).copy()
-    h, w = arr.shape[:2]
-
     if isinstance(mask, str):
         with Image.open(mask) as im:
             mask_l = im.convert("L")
@@ -187,10 +186,58 @@ def apply_protect_mask(
         if m.ndim != 2:
             raise ValueError("protect mask must be 2D")
         mask_l = Image.fromarray(m.astype(np.uint8), mode="L")
+    if mask_l.size != size:
+        mask_l = mask_l.resize(size, Image.Resampling.BILINEAR)
+    return mask_l
 
-    if mask_l.size != (w, h):
-        mask_l = mask_l.resize((w, h), Image.Resampling.BILINEAR)
-    strength = np.asarray(mask_l, dtype=np.float32) / 255.0
+
+def merge_protect_into_mask(
+    model_mask: Image.Image,
+    protect: Union[str, np.ndarray, Image.Image],
+    log: Optional[Callable[[str], None]] = None,
+) -> Image.Image:
+    """
+    Force-keep painted regions in the cutout alpha.
+
+    BiRefNet has no protect input — we union the keep-mask into the model
+    mask so protected pixels stay opaque when alpha is applied to the photo.
+    Soft brush edges use per-pixel max (model vs protect).
+    """
+    base = model_mask.convert("L")
+    w, h = base.size
+    keep = _load_mask_l(protect, (w, h))
+    model_a = np.asarray(base, dtype=np.uint8)
+    keep_a = np.asarray(keep, dtype=np.uint8)
+    if not np.any(keep_a):
+        return base
+    merged = np.maximum(model_a, keep_a)
+    if log is not None:
+        pixels = int(np.count_nonzero(keep_a > 0))
+        forced = int(np.count_nonzero((keep_a > model_a) & (keep_a > 0)))
+        log(
+            f"Protect mask: {pixels:,} px marked keep, "
+            f"{forced:,} px forced opaque over model cut ({w}x{h})"
+        )
+    return Image.fromarray(merged, mode="L")
+
+
+def apply_protect_mask(
+    rgba: Image.Image,
+    mask: Union[str, np.ndarray, Image.Image],
+    source: Union[str, Image.Image, np.ndarray, None] = None,
+    log: Optional[Callable[[str], None]] = None,
+) -> Image.Image:
+    """
+    Legacy helper: raise alpha (and optionally restore RGB) for keep regions.
+
+    Prefer ``merge_protect_into_mask`` before cutout; this remains for callers
+    that already have an RGBA cutout.
+    """
+    out = rgba.convert("RGBA")
+    arr = np.asarray(out).copy()
+    h, w = arr.shape[:2]
+    keep_img = _load_mask_l(mask, (w, h))
+    strength = np.asarray(keep_img, dtype=np.float32) / 255.0
     if not np.any(strength):
         return out
 
@@ -275,7 +322,10 @@ def run_bg_remove_job(
     if log:
         log(f"Device: {remover.device_label} | Model: {remover.mode.value}")
         if protect_mask_path:
-            log("Protect mask: rembg first, then restore kept areas from original")
+            log(
+                "Protect mask: force-keep painted areas in cutout "
+                "(model cannot see the mask; we union it into alpha)"
+            )
     return remover.process_to_file(
         input_path,
         output_path,

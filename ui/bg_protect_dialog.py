@@ -38,8 +38,8 @@ class BgProtectDialog(QDialog):
     """
     Paint a keep-mask before background removal.
 
-    Painted regions stay opaque after rembg (not cut). Overlay only - never
-    baked into the source image RGB.
+    Painted regions are force-merged into the cutout alpha so rembg/BiRefNet
+    cannot make them transparent. Overlay only - never baked into source RGB.
     """
 
     finished_mask = Signal(object)  # np.ndarray uint8 L, or None if cleared/cancel path unused
