@@ -1,0 +1,284 @@
+# -*- coding: utf-8 -*-
+"""Startup / live health report for the diagnostic CLI.
+
+Prints model install status (OK / MISSING), selected modes, workers,
+active/pending jobs, and tracked processes — the pipeline behind the UI.
+"""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+from typing import Any, Optional
+
+from backend.tools import diag
+
+
+def _ok(flag: bool) -> str:
+    return "OK" if flag else "MISSING"
+
+
+def _file_ok(path: str | Path) -> bool:
+    try:
+        p = Path(path)
+        return p.is_file() and p.stat().st_size > 0
+    except OSError:
+        return False
+
+
+def _dir_has_weights(path: str | Path) -> bool:
+    try:
+        p = Path(path)
+        if not p.is_dir():
+            return False
+        for name in p.iterdir():
+            if name.is_file() and name.suffix.lower() in (".pth", ".pt", ".onnx", ".pdiparams"):
+                if name.stat().st_size > 0:
+                    return True
+        return False
+    except OSError:
+        return False
+
+
+def _line(label: str, status: str, detail: str = "") -> None:
+    extra = f"  {detail}" if detail else ""
+    if status == "OK":
+        diag.model(f"{label:<28}  {_ok(True)}{extra}")
+    elif status == "MISSING":
+        diag.warn(f"{label:<28}  {_ok(False)}{extra}")
+    else:
+        diag.model(f"{label:<28}  {status}{extra}")
+
+
+def _report_hardware() -> None:
+    diag.start("── hardware ──")
+    try:
+        from backend.tools.hardware_accelerator import HardwareAccelerator
+
+        hw = HardwareAccelerator.instance()
+        accel = getattr(hw, "accelerator_name", "?")
+        cuda = hw.has_cuda()
+        diag.model(f"{'accelerator':<28}  {accel}  cuda={cuda}")
+        if cuda:
+            free_mb, total_mb = hw.get_vram_mb()
+            if total_mb > 0:
+                used = max(0.0, total_mb - free_mb)
+                diag.model(
+                    f"{'vram':<28}  {used/1024:.1f}G used / {total_mb/1024:.1f}G total"
+                )
+    except Exception as e:
+        diag.warn(f"hardware check failed  {e}")
+    try:
+        from backend.config import config
+
+        diag.model(
+            f"{'hardwareAcceleration':<28}  {bool(config.hardwareAcceleration.value)}"
+        )
+    except Exception:
+        pass
+
+
+def _report_bg_remove_models() -> None:
+    diag.start("── models: background remove ──")
+    try:
+        from backend.config import config, tr
+        from backend.tools import bg_remove_models as bgm
+
+        enabled = bgm.parse_enabled_values(config.bgRemoveEnabledModels.value)
+        selected = getattr(config.bgRemoveMode.value, "value", config.bgRemoveMode.value)
+        ok_n = miss_n = 0
+        for info in bgm.MODEL_CATALOG:
+            mode = info.mode
+            installed = bgm.is_model_installed(mode)
+            if installed:
+                ok_n += 1
+            else:
+                miss_n += 1
+            name = tr["BgRemoveMode"].get(mode.name, mode.value)
+            flags = []
+            if mode.value in enabled:
+                flags.append("on")
+            else:
+                flags.append("off")
+            if mode.value == selected:
+                flags.append("selected")
+            if info.is_default:
+                flags.append("default")
+            path = bgm.model_file_path(mode)
+            _line(
+                name,
+                "OK" if installed else "MISSING",
+                f"[{', '.join(flags)}]  {path.name}",
+            )
+        diag.model(f"{'bg-remove summary':<28}  {ok_n} OK / {miss_n} MISSING")
+    except Exception as e:
+        diag.warn(f"bg-remove model check failed  {e}")
+
+
+def _report_enhance_models() -> None:
+    diag.start("── models: enhance (Real-ESRGAN) ──")
+    try:
+        from backend.config import config, tr
+        from backend.tools import enhance_models as em
+
+        enabled = em.parse_enabled_values(config.enhanceEnabledModels.value)
+        selected = getattr(config.enhanceMode.value, "value", config.enhanceMode.value)
+        ok_n = miss_n = 0
+        for info in em.MODEL_CATALOG:
+            mode = info.mode
+            installed = em.is_model_installed(mode)
+            if installed:
+                ok_n += 1
+            else:
+                miss_n += 1
+            name = tr["EnhanceMode"].get(mode.name, mode.value)
+            flags = []
+            if mode.value in enabled:
+                flags.append("on")
+            else:
+                flags.append("off")
+            if mode.value == selected:
+                flags.append("selected")
+            path = em.model_file_path(mode)
+            _line(
+                name,
+                "OK" if installed else "MISSING",
+                f"[{', '.join(flags)}]  {path.name}",
+            )
+        diag.model(f"{'enhance summary':<28}  {ok_n} OK / {miss_n} MISSING")
+    except Exception as e:
+        diag.warn(f"enhance model check failed  {e}")
+
+
+def _report_video_models() -> None:
+    diag.start("── models: video / retouch / detect ──")
+    try:
+        from backend.config import BASE_DIR, config
+
+        checks = [
+            ("LAMA (retouch/inpaint)", Path(BASE_DIR) / "models" / "big-lama" / "big-lama.pt"),
+            ("STTN auto", Path(BASE_DIR) / "models" / "sttn-auto" / "infer_model.pth"),
+            ("STTN det", Path(BASE_DIR) / "models" / "sttn-det" / "sttn.pth"),
+            ("ProPainter", Path(BASE_DIR) / "models" / "propainter" / "ProPainter.pth"),
+        ]
+        for label, path in checks:
+            _line(label, "OK" if _file_ok(path) else "MISSING", str(path.name))
+
+        # OCR det dirs
+        for label, rel in (
+            ("PP-OCRv5 mobile det", Path("models") / "V5" / "ch_det_fast"),
+            ("PP-OCRv5 server det", Path("models") / "V5" / "ch_det"),
+        ):
+            path = Path(BASE_DIR) / rel
+            _line(label, "OK" if _dir_has_weights(path) else "MISSING", str(rel))
+
+        try:
+            inpaint = getattr(config.inpaintMode.value, "value", config.inpaintMode.value)
+            detect = getattr(
+                config.subtitleDetectMode.value, "value", config.subtitleDetectMode.value
+            )
+            diag.model(f"{'selected inpaintMode':<28}  {inpaint}")
+            diag.model(f"{'selected subtitleDetect':<28}  {detect}")
+        except Exception:
+            pass
+    except Exception as e:
+        diag.warn(f"video model check failed  {e}")
+
+
+def _report_workers() -> None:
+    diag.start("── workers / processes ──")
+    try:
+        from backend.tools.infer_client import InferClient
+
+        snap = InferClient.instance().status_snapshot()
+        diag.worker(
+            f"infer-worker  pid={snap.get('pid')}  alive={snap.get('alive')}  "
+            f"hw={snap.get('hw_accel')}"
+        )
+        active = snap.get("active")
+        pending = snap.get("pending")
+        if active:
+            diag.run(
+                f"active job  {active.get('job_type')}#{active.get('run_id')}  "
+                f"finished={active.get('finished')}"
+            )
+        else:
+            diag.run("active job  none  (idle)")
+        if pending:
+            diag.run(f"pending job  {pending.get('job_type')}  (queued)")
+        else:
+            diag.run("pending job  none")
+        diag.run(f"run counter  {snap.get('run_counter', 0)}")
+    except Exception as e:
+        diag.warn(f"infer worker status failed  {e}")
+
+    try:
+        from backend.tools.process_manager import ProcessManager
+
+        procs = list(ProcessManager.instance().processes.items())
+        if not procs:
+            diag.process("tracked processes  none")
+        else:
+            for name, proc in procs:
+                if isinstance(proc, int):
+                    diag.process(f"tracked  {name}  pid={proc}")
+                else:
+                    pid = getattr(proc, "pid", "?")
+                    alive = True
+                    if hasattr(proc, "is_alive"):
+                        try:
+                            alive = bool(proc.is_alive())
+                        except Exception:
+                            alive = "?"
+                    elif hasattr(proc, "poll"):
+                        try:
+                            alive = proc.poll() is None
+                        except Exception:
+                            alive = "?"
+                    diag.process(f"tracked  {name}  pid={pid}  alive={alive}")
+    except Exception as e:
+        diag.warn(f"process manager check failed  {e}")
+
+
+def _report_runtime_errors() -> None:
+    diag.start("── quick dependency checks ──")
+    deps = [
+        ("torch", "torch"),
+        ("rembg", "rembg"),
+        ("onnxruntime", "onnxruntime"),
+        ("cv2", "cv2"),
+        ("PIL", "PIL"),
+    ]
+    for label, mod in deps:
+        try:
+            __import__(mod)
+            _line(label, "OK")
+        except Exception as e:
+            _line(label, "MISSING", str(e).split("\n")[0][:60])
+
+
+def report_startup(*, include_deps: bool = True) -> None:
+    """Full startup inventory for the CLI (models + workers + queue)."""
+    if not diag.is_enabled():
+        return
+    diag.start("════════════════════════════════════════")
+    diag.start("startup health check")
+    diag.start("════════════════════════════════════════")
+    _report_hardware()
+    _report_bg_remove_models()
+    _report_enhance_models()
+    _report_video_models()
+    if include_deps:
+        _report_runtime_errors()
+    _report_workers()
+    diag.start("════════════════════════════════════════")
+    diag.start("startup health check DONE")
+    diag.start("════════════════════════════════════════")
+
+
+def report_job_state(label: str = "job state") -> None:
+    """Compact active/pending/worker dump (call around Run / Stop)."""
+    if not diag.is_enabled():
+        return
+    diag.start(f"── {label} ──")
+    _report_workers()

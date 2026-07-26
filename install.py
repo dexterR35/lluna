@@ -1,0 +1,672 @@
+#!/usr/bin/env python3
+"""
+Midgard installer — detects CUDA vs CPU, lets you choose, then installs deps + verifies models.
+
+Usage:
+  python install.py
+  python install.py --mode cpu
+  python install.py --mode cuda --yes
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import platform
+import re
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+from typing import Optional
+
+ROOT = Path(__file__).resolve().parent
+VENV_NAME = "midgardEnv"
+RUNTIME_FILE = ROOT / "midgard_runtime.json"
+
+TORCH_VERSION = "2.7.0"
+TORCHVISION_VERSION = "0.22.0"
+PADDLE_VERSION = "3.0.0"
+
+PADDLE_CPU_INDEX = "https://www.paddlepaddle.org.cn/packages/stable/cpu/"
+PADDLE_CU118_INDEX = "https://www.paddlepaddle.org.cn/packages/stable/cu118/"
+TORCH_INDEX = {
+    "cpu": "https://download.pytorch.org/whl/cpu",
+    "cu118": "https://download.pytorch.org/whl/cu118",
+    "cu126": "https://download.pytorch.org/whl/cu126",
+    "cu128": "https://download.pytorch.org/whl/cu128",
+}
+ORT_CUDA11_INDEX = (
+    "https://aiinfra.pkgs.visualstudio.com/PublicPackages/"
+    "_packaging/onnxruntime-cuda-11/pypi/simple/"
+)
+
+
+class CudaInfo:
+    def __init__(
+        self,
+        available: bool,
+        gpu_name: str = "",
+        driver_cuda: str = "",
+        torch_tag: str = "",
+        message: str = "",
+        compute_cap: str = "",
+        total_vram_mb: float = 0.0,
+    ):
+        self.available = available
+        self.gpu_name = gpu_name
+        self.driver_cuda = driver_cuda
+        self.torch_tag = torch_tag
+        self.message = message
+        self.compute_cap = compute_cap
+        self.total_vram_mb = total_vram_mb
+
+
+def log(msg: str = "") -> None:
+    print(msg, flush=True)
+
+
+def run(cmd: list[str], env: Optional[dict] = None) -> None:
+    log(f"\n> {' '.join(cmd)}")
+    subprocess.check_call(cmd, cwd=str(ROOT), env=env)
+
+
+def find_python() -> str:
+    """Prefer 3.12, then 3.13, 3.11; otherwise current interpreter if 3.11–3.13."""
+    candidates = [
+        "python3.12",
+        "python3.13",
+        "python3.11",
+        "py",
+    ]
+    for name in candidates:
+        path = shutil.which(name)
+        if not path:
+            continue
+        if name == "py" and platform.system() == "Windows":
+            try:
+                out = subprocess.check_output(
+                    [path, "-3.12", "-c", "import sys; print(sys.executable)"],
+                    text=True,
+                    stderr=subprocess.DEVNULL,
+                ).strip()
+                if out:
+                    return out
+            except (subprocess.CalledProcessError, FileNotFoundError):
+                pass
+            continue
+        try:
+            out = subprocess.check_output(
+                [path, "-c", "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"],
+                text=True,
+                stderr=subprocess.DEVNULL,
+            ).strip()
+            major, minor = map(int, out.split("."))
+            if (major, minor) in {(3, 11), (3, 12), (3, 13)}:
+                return path
+        except (subprocess.CalledProcessError, FileNotFoundError, ValueError):
+            continue
+
+    vi = sys.version_info
+    if (vi.major, vi.minor) in {(3, 11), (3, 12), (3, 13)}:
+        return sys.executable
+
+    log(
+        f"Warning: preferred Python 3.11–3.13 not found. "
+        f"Using {sys.executable} ({vi.major}.{vi.minor}). "
+        f"Some packages may lack wheels."
+    )
+    return sys.executable
+
+
+def detect_cuda() -> CudaInfo:
+    smi = shutil.which("nvidia-smi")
+    if not smi:
+        return CudaInfo(
+            False,
+            message="No NVIDIA driver tools found (nvidia-smi missing). Default: CPU.",
+        )
+    try:
+        out = subprocess.check_output(
+            [
+                smi,
+                "--query-gpu=name,driver_version,compute_cap",
+                "--format=csv,noheader",
+            ],
+            text=True,
+            stderr=subprocess.STDOUT,
+            timeout=15,
+        ).strip()
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
+        return CudaInfo(False, message=f"nvidia-smi failed ({exc}). Default: CPU.")
+
+    if not out:
+        return CudaInfo(False, message="nvidia-smi returned no GPUs. Default: CPU.")
+
+    first = out.splitlines()[0]
+    parts = [p.strip() for p in first.split(",")]
+    gpu_name = parts[0] if parts else "NVIDIA GPU"
+    compute_cap = parts[2] if len(parts) >= 3 else ""
+    total_vram_mb = 0.0
+    try:
+        mem_out = subprocess.check_output(
+            [smi, "--query-gpu=memory.total", "--format=csv,noheader,nounits"],
+            text=True,
+            stderr=subprocess.STDOUT,
+            timeout=15,
+        ).strip()
+        if mem_out:
+            total_vram_mb = float(mem_out.splitlines()[0].strip())
+    except Exception:
+        pass
+
+    driver_cuda = ""
+    try:
+        ver_out = subprocess.check_output(
+            [smi],
+            text=True,
+            stderr=subprocess.STDOUT,
+            timeout=15,
+        )
+        m = re.search(r"CUDA Version:\s*([\d.]+)", ver_out)
+        if m:
+            driver_cuda = m.group(1)
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
+        pass
+
+    torch_tag = map_cuda_tag(driver_cuda)
+    msg = f"Detected GPU: {gpu_name}"
+    if driver_cuda:
+        msg += f" (driver CUDA {driver_cuda} → {torch_tag})"
+    else:
+        msg += f" (CUDA version unknown → {torch_tag})"
+    if compute_cap:
+        msg += f" [cc {compute_cap}]"
+    if total_vram_mb:
+        msg += f" {total_vram_mb:.0f}MB"
+    return CudaInfo(
+        True,
+        gpu_name=gpu_name,
+        driver_cuda=driver_cuda,
+        torch_tag=torch_tag,
+        message=msg,
+        compute_cap=compute_cap,
+        total_vram_mb=total_vram_mb,
+    )
+
+
+def map_cuda_tag(driver_cuda: str) -> str:
+    """Map driver-reported max CUDA version to a supported PyTorch wheel tag."""
+    if not driver_cuda:
+        return "cu118"
+    try:
+        major_minor = float(".".join(driver_cuda.split(".")[:2]))
+    except ValueError:
+        return "cu118"
+    if major_minor >= 12.8:
+        return "cu128"
+    if major_minor >= 12.6:
+        return "cu126"
+    if major_minor >= 11.8:
+        return "cu118"
+    return "cu118"
+
+
+def choose_mode_gui(default_cuda: bool, detect_msg: str) -> str:
+    import tkinter as tk
+    from tkinter import ttk
+
+    result: dict[str, str] = {"mode": "cuda" if default_cuda else "cpu"}
+
+    root = tk.Tk()
+    root.title("Midgard Installer")
+    root.resizable(False, False)
+    root.attributes("-topmost", True)
+
+    frame = ttk.Frame(root, padding=20)
+    frame.grid()
+
+    ttk.Label(frame, text="Midgard Installer", font=("Segoe UI", 14, "bold")).grid(
+        row=0, column=0, columnspan=2, sticky="w", pady=(0, 8)
+    )
+    ttk.Label(frame, text=detect_msg, wraplength=420).grid(
+        row=1, column=0, columnspan=2, sticky="w", pady=(0, 16)
+    )
+    ttk.Label(frame, text="Choose acceleration:").grid(
+        row=2, column=0, columnspan=2, sticky="w", pady=(0, 8)
+    )
+
+    def pick(mode: str) -> None:
+        result["mode"] = mode
+        root.destroy()
+
+    cuda_btn = ttk.Button(frame, text="CUDA (NVIDIA GPU)", command=lambda: pick("cuda"))
+    cpu_btn = ttk.Button(frame, text="CPU", command=lambda: pick("cpu"))
+    cuda_btn.grid(row=3, column=0, padx=(0, 8), sticky="ew")
+    cpu_btn.grid(row=3, column=1, sticky="ew")
+
+    if default_cuda:
+        cuda_btn.focus_set()
+    else:
+        cpu_btn.focus_set()
+
+    root.update_idletasks()
+    w, h = root.winfo_width(), root.winfo_height()
+    x = (root.winfo_screenwidth() - w) // 2
+    y = (root.winfo_screenheight() - h) // 3
+    root.geometry(f"+{x}+{y}")
+    root.mainloop()
+    return result["mode"]
+
+
+def choose_mode_cli(default_cuda: bool, detect_msg: str, allow_cuda: bool) -> str:
+    log(detect_msg)
+    log("")
+    log("  1) CUDA (NVIDIA GPU)")
+    log("  2) CPU")
+    default = "1" if default_cuda else "2"
+    prompt = f"Select [1/2] (default {default}): "
+    while True:
+        choice = input(prompt).strip() or default
+        if choice in {"1", "cuda", "CUDA"}:
+            return "cuda"
+        if choice in {"2", "cpu", "CPU"}:
+            return "cpu"
+        log("Please enter 1 or 2.")
+
+
+def choose_mode(cuda: CudaInfo, forced: Optional[str], yes: bool) -> tuple[str, str]:
+    """Return (mode, torch_tag). mode is 'cuda' or 'cpu'."""
+    default_cuda = cuda.available
+    detect_msg = cuda.message
+
+    if forced in {"cuda", "cpu"}:
+        mode = forced
+        if mode == "cuda" and not cuda.available:
+            log("CUDA was requested but not detected. Falling back to CPU.")
+            return "cpu", ""
+        tag = cuda.torch_tag if mode == "cuda" else ""
+        return mode, tag
+
+    if yes:
+        mode = "cuda" if default_cuda else "cpu"
+        tag = cuda.torch_tag if mode == "cuda" else ""
+        log(detect_msg)
+        log(f"Non-interactive: installing {mode.upper()}" + (f" ({tag})" if tag else ""))
+        return mode, tag
+
+    mode = None
+    try:
+        mode = choose_mode_gui(default_cuda, detect_msg)
+    except Exception:
+        mode = None
+
+    if mode is None:
+        mode = choose_mode_cli(default_cuda, detect_msg, allow_cuda=cuda.available)
+
+    if mode == "cuda" and not cuda.available:
+        log("CUDA selected but not available. Falling back to CPU.")
+        return "cpu", ""
+
+    tag = cuda.torch_tag if mode == "cuda" else ""
+    return mode, tag
+
+
+def venv_python(venv_dir: Path) -> Path:
+    if platform.system() == "Windows":
+        return venv_dir / "Scripts" / "python.exe"
+    return venv_dir / "bin" / "python"
+
+
+def ensure_venv(python_bin: str) -> Path:
+    venv_dir = ROOT / VENV_NAME
+    py = venv_python(venv_dir)
+    if py.exists():
+        log(f"Using existing venv: {venv_dir}")
+        return venv_dir
+    log(f"Creating venv with {python_bin} → {venv_dir}")
+    try:
+        run([python_bin, "-m", "venv", str(venv_dir)])
+    except subprocess.CalledProcessError:
+        log("venv with ensurepip failed; creating without pip and bootstrapping…")
+        if venv_dir.exists():
+            shutil.rmtree(venv_dir)
+        run([python_bin, "-m", "venv", "--without-pip", str(venv_dir)])
+        py = venv_python(venv_dir)
+        get_pip = ROOT / ".cache_get_pip.py"
+        get_pip.write_bytes(
+            __import__("urllib.request").request.urlopen(
+                "https://bootstrap.pypa.io/get-pip.py", timeout=120
+            ).read()
+        )
+        run([str(py), str(get_pip)])
+        get_pip.unlink(missing_ok=True)
+    return venv_dir
+
+
+def pip_install(py: Path, args: list[str]) -> None:
+    run([str(py), "-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"])
+    run([str(py), "-m", "pip", "install", *args])
+
+
+def install_packages(py: Path, mode: str, torch_tag: str) -> None:
+    if mode == "cuda":
+        # Prefer paddle GPU for cu118; for newer CUDA use CPU paddle + CUDA torch
+        # (matches Docker/CI practice for 12.x).
+        if torch_tag == "cu118":
+            pip_install(
+                py,
+                [
+                    f"paddlepaddle-gpu=={PADDLE_VERSION}",
+                    "-i",
+                    PADDLE_CU118_INDEX,
+                ],
+            )
+        else:
+            pip_install(
+                py,
+                [
+                    f"paddlepaddle=={PADDLE_VERSION}",
+                    "-i",
+                    PADDLE_CPU_INDEX,
+                ],
+            )
+        pip_install(
+            py,
+            [
+                f"torch=={TORCH_VERSION}",
+                f"torchvision=={TORCHVISION_VERSION}",
+                "--index-url",
+                TORCH_INDEX[torch_tag],
+            ],
+        )
+        if platform.system() == "Linux":
+            if torch_tag == "cu118":
+                pip_install(
+                    py,
+                    [
+                        "onnxruntime-gpu==1.20.1",
+                        "--index-url",
+                        ORT_CUDA11_INDEX,
+                    ],
+                )
+            else:
+                pip_install(py, ["onnxruntime-gpu==1.22.0"])
+        elif platform.system() == "Windows":
+            # rembg needs ORT; prefer GPU build when CUDA mode is selected
+            pip_install(py, ["onnxruntime-gpu"])
+    else:
+        pip_install(
+            py,
+            [
+                f"paddlepaddle=={PADDLE_VERSION}",
+                "-i",
+                PADDLE_CPU_INDEX,
+            ],
+        )
+        pip_install(
+            py,
+            [
+                f"torch=={TORCH_VERSION}",
+                f"torchvision=={TORCHVISION_VERSION}",
+                "--index-url",
+                TORCH_INDEX["cpu"],
+            ],
+        )
+        # CPU onnxruntime for rembg / OCR helpers
+        pip_install(py, ["onnxruntime"])
+
+    pip_install(py, ["-r", str(ROOT / "requirements.txt")])
+    # Ensure rembg is present (also listed in requirements.txt)
+    pip_install(py, ["rembg>=2.0.60"])
+
+
+def verify_models() -> None:
+    models = ROOT / "backend" / "models"
+    required = [
+        models / "sttn-auto" / "infer_model.pth",
+        models / "sttn-det" / "sttn.pth",
+        models / "V5" / "ch_det" / "inference.pdiparams",
+        models / "V5" / "ch_det_fast" / "inference.pdiparams",
+        models / "propainter" / "raft-things.pth",
+        models / "propainter" / "recurrent_flow_completion.pth",
+    ]
+    missing = [str(p.relative_to(ROOT)) for p in required if not p.exists()]
+    if missing:
+        raise SystemExit(
+            "Missing model files (copy the full Midgard folder including backend/models):\n  "
+            + "\n  ".join(missing)
+        )
+
+    # Merge split weights if needed (filesplit)
+    try:
+        from fsplit.filesplit import Filesplit
+    except ImportError:
+        log("filesplit not importable yet; skip merge (will merge on first app run).")
+        return
+
+    def merge_if_needed(directory: Path, target_name: str) -> None:
+        target = directory / target_name
+        if target.exists():
+            log(f"OK: {target.relative_to(ROOT)}")
+            return
+        parts = list(directory.glob(f"{Path(target_name).stem}_*.*"))
+        manifest = directory / "fs_manifest.csv"
+        if not parts and not manifest.exists():
+            log(f"Warning: cannot merge {target_name} — parts not found.")
+            return
+        log(f"Merging {target_name} …")
+        fs = Filesplit()
+        fs.merge(input_dir=str(directory))
+        if target.exists():
+            log(f"OK: {target.relative_to(ROOT)}")
+        else:
+            # typo workaround: bit-lama vs big-lama
+            alt = directory / "bit-lama.pt"
+            if target_name == "big-lama.pt" and alt.exists():
+                alt.rename(target)
+                log(f"OK: renamed bit-lama.pt → {target.relative_to(ROOT)}")
+            else:
+                log(f"Warning: merge finished but {target.name} still missing.")
+
+    merge_if_needed(models / "big-lama", "big-lama.pt")
+    merge_if_needed(models / "propainter", "ProPainter.pth")
+    log("Model check complete.")
+
+
+# Category defaults only on first install (must match BgRemoveMode / MODEL_CATALOG is_default).
+# Optional models (BiRefNet Massive, BRIA, Lite, …) download from Settings → Remove BG Models.
+REMBG_PREFETCH_MODELS = [
+    "birefnet-general",  # General — app default
+    "u2net_human_seg",   # People
+    "isnet-anime",       # Anime
+    "u2net_cloth_seg",   # Clothes
+]
+
+
+def prefetch_rembg_models(py: Path) -> None:
+    """Download default Remove BG ONNX weights (optional models install from Settings)."""
+    log("\nPrefetching default Remove BG models…")
+    # JSON list avoids quoting issues across shells
+    models_json = json.dumps(REMBG_PREFETCH_MODELS)
+    script = r"""
+import json, sys
+models = json.loads(sys.argv[1])
+from rembg.sessions import sessions_class
+
+by_name = {}
+for cls in sessions_class:
+    try:
+        n = cls.name() if callable(getattr(cls, "name", None)) else None
+    except Exception:
+        n = None
+    if n:
+        by_name[n] = cls
+
+ok = fail = skip = 0
+for name in models:
+    cls = by_name.get(name)
+    if cls is None:
+        print(f"  SKIP {name} (not in rembg)")
+        skip += 1
+        continue
+    try:
+        print(f"  Downloading {name} …")
+        path = cls.download_models()
+        print(f"  OK {name} -> {path}")
+        ok += 1
+    except Exception as e:
+        print(f"  WARN {name}: {e}")
+        fail += 1
+print(f"Remove BG models: ok={ok} warn={fail} skip={skip}")
+"""
+    run([str(py), "-c", script, models_json])
+
+
+def prefetch_enhance_x2(py: Path) -> None:
+    """Mandatory first-install: Real-ESRGAN ×2 (app default). ×4 stays Settings-only."""
+    log("\nInstalling default Enhance model (Real-ESRGAN ×2)…")
+    script = r"""
+import sys
+sys.path.insert(0, sys.argv[1])
+from backend.tools.constant import EnhanceMode
+from backend.tools.enhance_models import (
+    ensure_model_installed,
+    is_model_installed,
+    model_file_path,
+)
+
+mode = EnhanceMode.X2PLUS
+path = model_file_path(mode)
+if is_model_installed(mode):
+    print(f"  OK already present: {path}")
+else:
+    print("  Downloading RealESRGAN_x2plus …")
+    path = ensure_model_installed(mode)
+    print(f"  OK {path}")
+"""
+    run([str(py), "-c", script, str(ROOT)])
+
+
+def write_runtime(mode: str, torch_tag: str, gpu_name: str, compute_cap: str = "", total_vram_mb: float = 0.0) -> None:
+    data = {
+        "product": "Midgard",
+        "accel": mode,
+        "torch_cuda_tag": torch_tag or None,
+        "gpu_name": gpu_name or None,
+        "compute_cap": compute_cap or None,
+        "total_vram_mb": total_vram_mb or None,
+        "venv": VENV_NAME,
+    }
+    RUNTIME_FILE.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    log(f"Wrote {RUNTIME_FILE.name}")
+
+
+def write_launchers(venv_dir: Path) -> None:
+    py = venv_python(venv_dir)
+    if platform.system() == "Windows":
+        bat = ROOT / "run_gui.bat"
+        bat.write_text(
+            f'@echo off\r\n'
+            f'cd /d "%~dp0"\r\n'
+            f'"{py}" gui.py %*\r\n',
+            encoding="utf-8",
+        )
+        log(f"Wrote {bat.name}")
+    else:
+        sh = ROOT / "run_gui.sh"
+        sh.write_text(
+            "#!/usr/bin/env bash\n"
+            "set -euo pipefail\n"
+            f'cd "$(dirname "$0")"\n'
+            f'exec "{py}" gui.py "$@"\n',
+            encoding="utf-8",
+        )
+        sh.chmod(sh.stat().st_mode | 0o111)
+        log(f"Wrote {sh.name}")
+
+
+def parse_args() -> argparse.Namespace:
+    p = argparse.ArgumentParser(description="Midgard installer (CUDA auto-detect + CPU/CUDA choice)")
+    p.add_argument(
+        "--mode",
+        choices=["cuda", "cpu", "auto"],
+        default="auto",
+        help="Force install mode (default: auto-detect then prompt)",
+    )
+    p.add_argument(
+        "--yes",
+        "-y",
+        action="store_true",
+        help="Non-interactive: use detected default (CUDA if available, else CPU)",
+    )
+    p.add_argument(
+        "--skip-rembg-models",
+        action="store_true",
+        help="Skip downloading default Remove BG weights (install defaults or optionals from Settings)",
+    )
+    return p.parse_args()
+
+
+def main() -> int:
+    args = parse_args()
+    log("=" * 60)
+    log("  Midgard Installer")
+    log("=" * 60)
+
+    cuda = detect_cuda()
+    forced = None if args.mode == "auto" else args.mode
+    mode, torch_tag = choose_mode(cuda, forced, args.yes)
+
+    python_bin = find_python()
+    log(f"\nPython: {python_bin}")
+    log(f"Install mode: {mode.upper()}" + (f" ({torch_tag})" if torch_tag else ""))
+
+    venv_dir = ensure_venv(python_bin)
+    py = venv_python(venv_dir)
+    if not py.exists():
+        raise SystemExit(f"venv python missing: {py}")
+
+    install_packages(py, mode, torch_tag or "cu118")
+    merge_script = (
+        "import sys; sys.path.insert(0, %r); "
+        "from install import verify_models; verify_models()"
+    ) % str(ROOT)
+    run([str(py), "-c", merge_script])
+
+    if not args.skip_rembg_models:
+        prefetch_rembg_models(py)
+    else:
+        log("Skipped Remove BG model prefetch (--skip-rembg-models).")
+
+    # Real-ESRGAN ×2 is mandatory on first install (×4 remains Settings-only)
+    prefetch_enhance_x2(py)
+
+    write_runtime(
+        mode,
+        torch_tag,
+        cuda.gpu_name,
+        compute_cap=getattr(cuda, "compute_cap", "") or "",
+        total_vram_mb=float(getattr(cuda, "total_vram_mb", 0) or 0),
+    )
+    write_launchers(venv_dir)
+
+    log("\n" + "=" * 60)
+    log("  Midgard install complete.")
+    log("=" * 60)
+    if platform.system() == "Windows":
+        log("  GUI:  run_gui.bat")
+        log(f"  CLI:  {py} backend\\main.py -i video.mp4")
+    else:
+        log("  GUI:  ./run_gui.sh")
+        log(f"  CLI:  {py} backend/main.py -i video.mp4")
+    log("")
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except subprocess.CalledProcessError as exc:
+        log(f"\nInstall failed (exit {exc.returncode}).")
+        raise SystemExit(exc.returncode)
