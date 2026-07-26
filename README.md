@@ -6,7 +6,7 @@
 
 <p align="center">
   Local AI studio for hard-subtitle / text removal and image background cutouts.<br/>
-  No cloud API — runs on your machine and keeps original resolution.
+  No cloud API - runs on your machine and keeps original resolution.
 </p>
 
 <p align="center">
@@ -41,7 +41,7 @@ Everything runs locally. Output keeps the source resolution. Video jobs keep the
   - **Retouch** mask after preview
   - **Enhance** with Real-ESRGAN (2× default, 4× optional)
   - Multiple rembg / ONNX models (BiRefNet, U2-Net, IS-Net, …)
-- **Hardware acceleration** — CUDA (NVIDIA) when available; CPU otherwise; DirectML on Windows packages
+- **Hardware acceleration** - CUDA (NVIDIA) when available; CPU otherwise; DirectML on Windows packages
 - **GUI** (Fluent / PySide6) + **CLI** for subtitle removal
 - **Installer** (`install.py`) creates `midgardEnv`, picks CUDA/CPU, merges model parts, prefetches default BG/Enhance weights
 
@@ -79,8 +79,8 @@ Optional from Settings: BiRefNet Lite / Portrait / Massive / DIS / HRSOD / COD, 
 
 | Model | Notes |
 |-------|--------|
-| **RealESRGAN ×2** (`RealESRGAN_x2plus`) | Default — installed by `install.py` |
-| **RealESRGAN ×4** (`RealESRGAN_x4plus`) | Optional — Settings → Enhance Models |
+| **RealESRGAN ×2** (`RealESRGAN_x2plus`) | Default - installed by `install.py` |
+| **RealESRGAN ×4** (`RealESRGAN_x4plus`) | Optional - Settings → Enhance Models |
 
 ---
 
@@ -90,7 +90,7 @@ Optional from Settings: BiRefNet Lite / Portrait / Massive / DIS / HRSOD / COD, 
 - **Windows 10 / 11**, macOS, or Linux
 - Optional: NVIDIA GPU + current drivers for CUDA
 - Network once for `pip` (and for rembg / Real-ESRGAN downloads on first install)
-- Keep `backend/models/` with the project. **Do not copy `midgardEnv/` between Linux and Windows** — recreate it per OS.
+- Keep `backend/models/` with the project. **Do not copy `midgardEnv/` between Linux and Windows** - recreate it per OS.
 
 ---
 
