@@ -127,7 +127,7 @@ Text-to-image on the **Generate Image** home page using [Black Forest Labs FLUX.
 **How to use**
 
 1. Install with CUDA: `python install.py --mode cuda --yes`
-2. Open **Settings → Generate Models** → **Install** and enable **FLUX.2 klein 4B** (or 9B)
+2. Open **Settings → Generate Models** → **Install** and enable **FLUX.2 klein 4B** (or SDXL Turbo / SD 1.5 / 9B)
 3. Go to **Generate Image** (home), type a prompt, press **Enter** or click **Generate Image**
 4. Preview appears when done; output is saved to your **Save directory** (Settings → Advanced)
 
@@ -137,8 +137,10 @@ Text-to-image on the **Generate Image** home page using [Black Forest Labs FLUX.
 |-------|---------|------|-------|
 | **FLUX.2 klein 4B** (recommended) | Apache 2.0 | ~13 GB | Fast 4-step generation; best default for most GPUs |
 | **FLUX.2 klein 9B** | Non-commercial | ~29 GB | Higher quality; RTX 4090+ class; may need Hugging Face login |
+| **SDXL Turbo** | OpenRAIL++ | ~8 GB | Light option for lower VRAM cards; best at 4-8 steps |
+| **SD 1.5** | OpenRAIL-M | ~4 GB | Classic lightweight fallback model for broad GPU compatibility |
 
-**Defaults:** 1024×1024, 4 inference steps, guidance 1.0. Sizes are aligned to multiples of 16.
+**Defaults:** 768×768, 4 inference steps, guidance by model. Sizes are aligned to multiples of 16.
 
 **Requirements**
 
@@ -336,6 +338,26 @@ midgardEnv/bin/python backend/main.py -t remove-bg -i anime.png -o out.png --bg-
 ```
 
 > Upscale, Fix Low Light, Generate Image, and Select Object are GUI-only for now.
+
+---
+
+## Update policy (Python install)
+
+Use two separate update paths:
+
+1) App code/UI updates (new Midgard version)
+- Bump `VERSION` in `backend/config.py`
+- Publish a GitHub release
+- Users get a startup update prompt and can update source installs with:
+  - `git pull`
+  - `python install.py --yes`
+
+2) Model/weight updates
+- Use **Settings** model managers (Install/Uninstall/On-Off)
+- No full app reinstall is required for model-only changes
+- Downloads are queued and run one at a time
+
+This keeps app binaries/code updates independent from large model downloads.
 
 ---
 

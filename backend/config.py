@@ -162,8 +162,8 @@ class Config(QConfig):
         "__none__",
         ConfigValidator(),
     )
-    generateWidth = ConfigItem("Generate", "Width", 1024)
-    generateHeight = ConfigItem("Generate", "Height", 1024)
+    generateWidth = ConfigItem("Generate", "Width", 768)
+    generateHeight = ConfigItem("Generate", "Height", 768)
     generateSteps = ConfigItem("Generate", "Steps", 4)
 
     # Select Object (SAM2 + Grounding DINO) - hidden pair; More complex in Settings

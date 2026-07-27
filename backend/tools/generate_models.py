@@ -16,6 +16,11 @@ class GenerateModelInfo:
     mode: GenerateMode
     desc_key: str
     hf_repo: str
+    pipeline: str
+    default_guidance: float
+    step_fast: int
+    step_normal: int
+    step_quality: int
     is_default: bool = False
 
 
@@ -24,12 +29,44 @@ MODEL_CATALOG: List[GenerateModelInfo] = [
         GenerateMode.FLUX2_KLEIN_4B,
         desc_key="FLUX2_KLEIN_4B",
         hf_repo="black-forest-labs/FLUX.2-klein-4B",
+        pipeline="flux",
+        default_guidance=1.0,
+        step_fast=4,
+        step_normal=8,
+        step_quality=12,
         is_default=True,
     ),
     GenerateModelInfo(
         GenerateMode.FLUX2_KLEIN_9B,
         desc_key="FLUX2_KLEIN_9B",
         hf_repo="black-forest-labs/FLUX.2-klein-9B",
+        pipeline="flux",
+        default_guidance=1.0,
+        step_fast=4,
+        step_normal=8,
+        step_quality=12,
+        is_default=False,
+    ),
+    GenerateModelInfo(
+        GenerateMode.SDXL_TURBO,
+        desc_key="SDXL_TURBO",
+        hf_repo="stabilityai/sdxl-turbo",
+        pipeline="sdxl_turbo",
+        default_guidance=0.0,
+        step_fast=4,
+        step_normal=8,
+        step_quality=12,
+        is_default=False,
+    ),
+    GenerateModelInfo(
+        GenerateMode.SD15,
+        desc_key="SD15",
+        hf_repo="runwayml/stable-diffusion-v1-5",
+        pipeline="sd15",
+        default_guidance=7.5,
+        step_fast=20,
+        step_normal=28,
+        step_quality=40,
         is_default=False,
     ),
 ]

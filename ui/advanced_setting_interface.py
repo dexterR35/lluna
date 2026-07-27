@@ -451,7 +451,9 @@ class AdvancedSettingInterface(ScrollArea):
         if success:
             self.show_message_box(
                 tr["Setting"]["UpdatesAvailableTitle"],
-                tr["Setting"]["UpdatesAvailableDesc"].format(self.version_manager.lastest_version),
+                tr["Setting"]["UpdatesAvailableDesc"].format(
+                    self.version_manager.lastest_version, VERSION
+                ),
                 True,
                 lambda: QtGui.QDesktopServices.openUrl(QtCore.QUrl(PROJECT_RELEASES_URL)),
             )

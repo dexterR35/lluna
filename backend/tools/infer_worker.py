@@ -355,6 +355,7 @@ def _job_generate(run_id, payload, cancel_event, on_progress, heartbeat_log, evt
         cuda_ready_for_generate,
         ensure_model_installed,
     )
+    from backend.tools.generate_options import resolve_guidance
     from backend.tools.image_generate import (
         GenerateCancelled,
         GenerateCudaError,
@@ -381,10 +382,10 @@ def _job_generate(run_id, payload, cancel_event, on_progress, heartbeat_log, evt
         return
     mode = GenerateMode(mode_value)
 
-    width = int(payload.get("width") or 1024)
-    height = int(payload.get("height") or 1024)
+    width = int(payload.get("width") or 768)
+    height = int(payload.get("height") or 768)
     steps = int(payload.get("steps") or 4)
-    guidance = float(payload.get("guidance") or 1.0)
+    guidance = float(payload.get("guidance") or resolve_guidance(mode))
     seed = payload.get("seed")
     seed_i = int(seed) if seed is not None and str(seed).strip() != "" else None
 
@@ -395,19 +396,19 @@ def _job_generate(run_id, payload, cancel_event, on_progress, heartbeat_log, evt
 
     def _keep_alive():
         while not stop_hb.wait(20.0):
-            heartbeat_log(run_id, "Loading FLUX.2 (still working)…")
+            heartbeat_log(run_id, "Loading generate model (still working)…")
 
     hb_thread = threading.Thread(target=_keep_alive, daemon=True)
     hb_thread.start()
     out = None
     try:
-        heartbeat_log(run_id, "Ensuring FLUX.2 weights installed…")
+        heartbeat_log(run_id, "Ensuring generate weights installed…")
         ensure_model_installed(mode)
         if cancel_event.is_set():
             _emit(evt_queue, error(run_id, "__cancelled__"))
             return
 
-        heartbeat_log(run_id, "Loading FLUX.2 (Diffusers)…")
+        heartbeat_log(run_id, "Loading generate model (Diffusers)…")
         on_progress(run_id, 10)
 
         def prog(v: int):

@@ -29,22 +29,31 @@ from qfluentwidgets import (
 from backend.config import config, tr
 from backend.tools.constant import GenerateMode
 from backend.tools.generate_models import (
+    catalog_info,
     cuda_ready_for_generate,
     ensure_selected_mode_valid,
     selectable_modes,
 )
+from backend.tools.generate_options import resolve_guidance, size_presets, step_presets_for_mode
 from backend.tools.infer_client import InferClient
 from backend.tools.infer_protocol import JobType
 from backend.tools.system_info import collect_system_info, greeting_for_now
 from ui.component.cards.info_setting_card import InfoSettingCard
 from ui.component.cards.setting_card_style import apply_content_column_width
 from ui.component.controls.button_styles import make_button
+from ui.component.controls.inputs import AppCombo, fill_combo
 from ui.theme import HOME, PRIMARY, apply_page_bg
 
 # Content column stretch from SETTINGS content_ratio (~80% → 1:8:1)
 _COLUMN_STRETCH = 8
 _SIDE_STRETCH = 1
 _PREVIEW_MAX = 320
+
+
+def _home_model_choices() -> list[GenerateMode]:
+    """Home dropdown keeps only FLUX 4B + SDXL Turbo."""
+    allow = {GenerateMode.FLUX2_KLEIN_4B, GenerateMode.SDXL_TURBO}
+    return [m for m in selectable_modes() if m in allow]
 
 
 class _PromptBox(QWidget):
@@ -55,6 +64,9 @@ class _PromptBox(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.input = None
+        self.model_combo: AppCombo | None = None
+        self.size_combo: AppCombo | None = None
+        self.steps_combo: AppCombo | None = None
         self.setObjectName("PromptBox")
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
@@ -69,6 +81,20 @@ class _PromptBox(QWidget):
         self.input.setTabChangesFocus(True)
         self.input.installEventFilter(self)
         root.addWidget(self.input)
+
+        options_row = QHBoxLayout()
+        options_row.setContentsMargins(0, 0, 0, 0)
+        options_row.setSpacing(HOME["gap"])
+        self.model_combo = AppCombo(self)
+        self.model_combo.setMinimumWidth(220)
+        self.size_combo = AppCombo(self)
+        self.size_combo.setMinimumWidth(220)
+        self.steps_combo = AppCombo(self)
+        self.steps_combo.setMinimumWidth(220)
+        options_row.addWidget(self.model_combo)
+        options_row.addWidget(self.size_combo)
+        options_row.addWidget(self.steps_combo)
+        root.addLayout(options_row)
 
         row = QHBoxLayout()
         row.setContentsMargins(0, 0, 0, 0)
@@ -92,6 +118,7 @@ class _PromptBox(QWidget):
         self.generate_btn.clicked.connect(self._submit)
         row.addWidget(self.generate_btn)
         root.addLayout(row)
+        self._bind_generate_options()
 
     def _submit(self):
         text = self.input.toPlainText().strip()
@@ -104,6 +131,12 @@ class _PromptBox(QWidget):
         self.stop_btn.setVisible(busy)
         self.input.setReadOnly(busy)
         self.attach_btn.setEnabled(not busy)
+        if self.model_combo is not None:
+            self.model_combo.setEnabled(not busy)
+        if self.size_combo is not None:
+            self.size_combo.setEnabled(not busy)
+        if self.steps_combo is not None:
+            self.steps_combo.setEnabled(not busy)
 
     def set_generate_enabled(self, enabled: bool, tooltip: str = ""):
         self.generate_btn.setEnabled(enabled)
@@ -120,6 +153,136 @@ class _PromptBox(QWidget):
                     self._submit()
                 return True
         return super().eventFilter(obj, event)
+
+    def refresh_generate_option_combos(self):
+        self._refresh_model_combo()
+        self._refresh_size_combo()
+        self._refresh_steps_combo()
+
+    def selected_mode(self) -> GenerateMode | None:
+        if self.model_combo is None:
+            return None
+        data = self.model_combo.currentData()
+        if data is None:
+            return None
+        if isinstance(data, GenerateMode):
+            return data
+        try:
+            return GenerateMode(str(data))
+        except Exception:
+            return None
+
+    def _bind_generate_options(self):
+        self._refresh_model_combo()
+        self._refresh_size_combo()
+        self._refresh_steps_combo()
+        if self.model_combo is not None:
+            self.model_combo.currentIndexChanged.connect(self._on_model_changed)
+        if self.size_combo is not None:
+            self.size_combo.currentIndexChanged.connect(self._on_size_changed)
+        if self.steps_combo is not None:
+            self.steps_combo.currentIndexChanged.connect(self._on_steps_changed)
+
+    def _refresh_model_combo(self):
+        if self.model_combo is None:
+            return
+        hd = tr["HomeDashboard"]
+        current = config.generateMode.value
+        modes = _home_model_choices()
+        if current not in modes and modes:
+            current = GenerateMode.FLUX2_KLEIN_4B if GenerateMode.FLUX2_KLEIN_4B in modes else modes[0]
+            config.set(config.generateMode, current)
+        items = []
+        for mode in modes:
+            info = catalog_info(mode)
+            hint = ""
+            if info is not None:
+                if mode == GenerateMode.FLUX2_KLEIN_4B:
+                    hint = hd.get("GenerateModelHintFlux4B", "Default")
+                elif mode == GenerateMode.SDXL_TURBO:
+                    hint = hd.get("GenerateModelHintLight", "Light")
+            label = tr["GenerateMode"].get(mode.name, mode.name)
+            if hint:
+                label = f"{label} - {hint}"
+            items.append((label, mode))
+        fill_combo(self.model_combo, items, current=current)
+
+    def _refresh_size_combo(self):
+        if self.size_combo is None:
+            return
+        hd = tr["HomeDashboard"]
+        width = int(config.generateWidth.value or 768)
+        height = int(config.generateHeight.value or 768)
+        current_key = None
+        items = []
+        for preset in size_presets():
+            label = hd.get(preset.label_key, f"{preset.width}x{preset.height}")
+            items.append((label, preset.key))
+            if preset.width == width and preset.height == height:
+                current_key = preset.key
+        if current_key is None and items:
+            current_key = "medium"
+            for preset in size_presets():
+                if preset.key == current_key:
+                    config.set(config.generateWidth, preset.width)
+                    config.set(config.generateHeight, preset.height)
+                    break
+        fill_combo(self.size_combo, items, current=current_key)
+
+    def _refresh_steps_combo(self):
+        if self.steps_combo is None:
+            return
+        hd = tr["HomeDashboard"]
+        mode = self.selected_mode() or config.generateMode.value
+        presets = step_presets_for_mode(mode)
+        current_steps = int(config.generateSteps.value or 4)
+        current_key = presets[0].key if presets else None
+        best_gap = None
+        items = []
+        for preset in presets:
+            label = hd.get(preset.label_key, preset.key.title())
+            label = f"{label} ({preset.steps})"
+            items.append((label, preset.key))
+            gap = abs(int(preset.steps) - current_steps)
+            if best_gap is None or gap < best_gap:
+                best_gap = gap
+                current_key = preset.key
+        fill_combo(self.steps_combo, items, current=current_key)
+
+    def _on_model_changed(self, index: int):
+        if self.model_combo is None or index < 0:
+            return
+        mode = self.model_combo.itemData(index)
+        if mode is None:
+            return
+        if not isinstance(mode, GenerateMode):
+            mode = GenerateMode(str(mode))
+        config.set(config.generateMode, mode)
+        self._refresh_steps_combo()
+
+    def _on_size_changed(self, index: int):
+        if self.size_combo is None or index < 0:
+            return
+        key = self.size_combo.itemData(index)
+        if key is None:
+            return
+        for preset in size_presets():
+            if preset.key == key:
+                config.set(config.generateWidth, int(preset.width))
+                config.set(config.generateHeight, int(preset.height))
+                return
+
+    def _on_steps_changed(self, index: int):
+        if self.steps_combo is None or index < 0:
+            return
+        key = self.steps_combo.itemData(index)
+        if key is None:
+            return
+        mode = self.selected_mode() or config.generateMode.value
+        for preset in step_presets_for_mode(mode):
+            if preset.key == key:
+                config.set(config.generateSteps, int(preset.steps))
+                return
 
 
 class DashboardInterface(QWidget):
@@ -307,7 +470,8 @@ class DashboardInterface(QWidget):
         ok, reason = cuda_ready_for_generate()
         self._cuda_ok = ok
         self._cuda_reason = reason
-        modes = selectable_modes()
+        self.prompt.refresh_generate_option_combos()
+        modes = _home_model_choices()
         if self._active_run_id is not None:
             return
         if self._external_gpu_busy:
@@ -390,7 +554,7 @@ class DashboardInterface(QWidget):
             )
             return
 
-        modes = selectable_modes()
+        modes = _home_model_choices()
         if not modes:
             InfoBar.warning(
                 title=gen.get("Title", "Generate"),
@@ -402,8 +566,9 @@ class DashboardInterface(QWidget):
 
         mode = ensure_selected_mode_valid()
         if mode not in modes:
-            mode = modes[0]
+            mode = GenerateMode.FLUX2_KLEIN_4B if GenerateMode.FLUX2_KLEIN_4B in modes else modes[0]
             config.set(config.generateMode, mode)
+            self.prompt.refresh_generate_option_combos()
 
         if self._active_run_id is not None:
             return
@@ -425,7 +590,7 @@ class DashboardInterface(QWidget):
             height = int(config.generateHeight.value)
             steps = int(config.generateSteps.value)
         except (TypeError, ValueError):
-            width, height, steps = 1024, 1024, 4
+            width, height, steps = 768, 768, 4
 
         payload = {
             "prompt": prompt,
@@ -434,7 +599,7 @@ class DashboardInterface(QWidget):
             "width": width,
             "height": height,
             "steps": steps,
-            "guidance": 1.0,
+            "guidance": resolve_guidance(mode),
             "hardware_acceleration": bool(config.hardwareAcceleration.value),
         }
 
