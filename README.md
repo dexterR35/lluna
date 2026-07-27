@@ -52,9 +52,9 @@ Screenshots from the app. Open the same files from `test/` in the GUI to try the
 
 ## Image Generation
 
-Text-to-image on the **Generate Image** home page. Runs locally via [Hugging Face Diffusers](https://github.com/huggingface/diffusers) — no cloud API. **NVIDIA CUDA required** (CPU is not supported).
+Text-to-image on the **Generate Image** home page, powered by [Hugging Face Diffusers](https://github.com/huggingface/diffusers). Runs on NVIDIA CUDA — no cloud API.
 
-### What's included
+### In the app
 
 | Capability | Details |
 |------------|---------|
@@ -81,20 +81,7 @@ Text-to-image on the **Generate Image** home page. Runs locally via [Hugging Fac
 
 Weights install to `backend/models/generate/<model-id>/`. One generate model is cached in VRAM at a time; CPU offload reduces memory use on consumer GPUs.
 
-### How to use
-
-1. Install with CUDA: `python install.py --mode cuda --yes`
-2. Turn on **Hardware acceleration** in Settings
-3. **Settings → Generate Models** → **Install** at least **FLUX.2 klein 4B** or **SDXL Turbo**, then enable it
-4. Open **Generate Image** (home), choose model / size / steps, enter a prompt, and generate
-5. For **9B** (gated): accept the license on Hugging Face, add a read token in **Settings → Generate Models** (`config/hf_token` or `HF_TOKEN` env)
-
-### Requirements
-
-- NVIDIA GPU with working CUDA drivers (`nvidia-smi` must work)
-- **Hardware acceleration** enabled in Settings
-- Large one-time download from Hugging Face (optional — not scheduled by default installer)
-- GUI only (no CLI for Generate Image yet)
+Install models in **Settings → Generate Models**, then open **Generate Image** on the home page. Pick model, size, and steps, enter a prompt, and run. Outputs save to the **Save directory** (Settings → Advanced). Gated **9B** models use a Hugging Face token from **Settings → Generate Models** (`config/hf_token` or `HF_TOKEN`).
 
 ---
 
@@ -110,20 +97,18 @@ python install.py
 run_gui.bat           # Windows
 ```
 
-That is enough for most users. Default models for Remove BG, Upscale ×2 (Real-ESRGAN), Fix Low Light, and Select Object (fast) are scheduled during install and download **one at a time** when you first open the GUI. **FLUX.2 image generation** is optional - install it from **Settings → Generate Models** (CUDA GPU required).
-
 ---
 
 ## What Midgard can do
 
 | Tool | Input | What it does |
 |------|--------|----------------|
+| **Generate Image** | Prompt | FLUX.2 / SDXL Turbo / SD 1.5 text-to-image (CUDA) |
 | **Remove Text** | Video + images | Strip hard subtitles and text watermarks with AI inpainting |
 | **Remove BG** | Images | Cut out backgrounds (transparent PNG), protect mask, retouch, select object |
 | **Image Upscale** | Images | Real-ESRGAN 2× / 4× (optional safe denoise) |
 | **Fix Low Light** | Images | MIRNet restore for dark / underexposed photos |
 | **Select Object** | Images | SAM2 + Grounding DINO - click or name an object for keep-mask editing |
-| **Generate Image** | Prompt | FLUX.2 / SDXL Turbo / SD 1.5 text-to-image (CUDA GPU required) |
 | **Settings** | - | OCR / STTN / ProPainter, model downloads, save dir, updates |
 
 Everything runs locally. Video jobs keep the original audio when merge succeeds.
@@ -212,31 +197,7 @@ Weights live under `backend/models/` (and rembg under `~/.u2net/`).
 | Clothes | U2-Net Cloth |
 | Specialty | BiRefNet DIS / HRSOD / COD |
 
-You can **Install / Uninstall / On–Off** each model in Settings. Uninstall only deletes local files - reinstall anytime.
-
----
-
-## Requirements
-
-- **Python 3.12** recommended (3.11–3.13 supported)
-- **Windows 10/11**, macOS, or Linux
-- Optional: **NVIDIA GPU + current drivers** for CUDA acceleration
-- Network once for `pip` and optional model downloads
-- Keep `backend/models/` with the project
-- **Do not copy `midgardEnv/` between Linux and Windows** — recreate it per OS
-
-### GPU / CUDA — what you need (and what you don't)
-
-| Item | Required for Midgard? |
-|------|------------------------|
-| **NVIDIA GPU** | Optional (recommended for speed) |
-| **NVIDIA drivers** (Game Ready / Studio) | Yes, for GPU mode — `nvidia-smi` should show your GPU |
-| **CUDA Toolkit** (full SDK from [NVIDIA](https://developer.nvidia.com/cuda-downloads)) | **No** — not needed to run Midgard |
-| **PyTorch / Paddle from `install.py`** | Yes — these pip packages include the CUDA runtime libs they need |
-
-You do **not** need to install the CUDA Toolkit separately. `install.py` downloads GPU-enabled PyTorch and Paddle wheels (~3 GB on first CUDA install); the `nvidia-cublas`, `cuda-runtime`, etc. packages are bundled inside those wheels, not from a system-wide CUDA SDK.
-
-If `nvidia-smi` works, your drivers are enough. Run `python install.py` and choose **CUDA** when prompted.
+Each model supports **Install / Uninstall / On–Off** in Settings. Uninstall only deletes local files — reinstall anytime.
 
 ---
 
@@ -252,7 +213,7 @@ The installer will:
 
 1. Prefer Python **3.12** (fallback 3.11 / 3.13)
 2. Detect CUDA via `nvidia-smi` (default CUDA if found, else CPU)
-3. Let you choose **CUDA / CPU**
+3. Supports **CUDA** or **CPU** mode
 4. Create `midgardEnv` and install Paddle, Torch, and `requirements.txt`
 5. Verify / merge core inpaint + OCR weights
 6. Schedule default **Remove BG**, **Real-ESRGAN ×2**, **MIRNet**, and **Select Object (fast)** models for the GUI download queue (one at a time on first open)
@@ -274,7 +235,7 @@ python install.py --mode cuda --yes
 | **2xxx** | RTX 2080, 2060 | `cu118` |
 | **3xxx** | RTX 3060, 3080 | `cu126` |
 | **4xxx** | RTX 4090, 4070 | `cu128` |
-| **5xxx** | RTX 5090, 5080 | `cu128` (required) |
+| **5xxx** | RTX 5090, 5080 | `cu128` |
 
 Override: `python install.py --mode cuda --cuda-tag cu126 --yes`
 
@@ -284,7 +245,7 @@ Skip rembg defaults (install later from Settings):
 python install.py --skip-rembg-models --yes
 ```
 
-On first GUI open, default models download **one at a time** (Settings queue). Real-ESRGAN ×2 is required; once installed it appears in Settings with **On/Off** toggle. Optional models install from Settings the same way — only one download runs at a time.
+On first GUI open, default models download **one at a time** (Settings queue). Real-ESRGAN ×2 is the default upscale model and appears in Settings with an **On/Off** toggle once installed. Additional models install from Settings the same way — one download at a time.
 
 ### Windows 10 / 11
 
@@ -297,7 +258,7 @@ python install.py
 run_gui.bat
 ```
 
-### Optional: Windows package (no Python for end users)
+### Windows package build
 
 ```bat
 pip install QPT==1.0b8 setuptools
@@ -395,7 +356,6 @@ This keeps app binaries/code updates independent from large model downloads.
 | Lower VRAM generate | **SDXL Turbo** (~8 GB) or **SD 1.5** (~4 GB) in Settings → Generate Models |
 | Best FLUX quality | FLUX.2 klein **9B** (~29 GB VRAM, HF token for gated repo) |
 | Out of memory | Lower Max Concurrent Frames, use LaMa/OpenCV, or close other apps |
-| CUDA install falls back to CPU | Drivers / `nvidia-smi` not available |
 
 ---
 
