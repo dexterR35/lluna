@@ -15,9 +15,38 @@
   <img src="https://img.shields.io/badge/version-1.4.0-orange.svg" alt="Version" />
 </p>
 
+---
+
+## Examples
+
+Screenshots from the app. Open the same files from `test/` in the GUI to try them.
+
+### Remove BG
+
 <p align="center">
-  <img src="test/rm-bg.png" alt="Midgard Remove BG preview" width="720" />
+  <img src="test/rm-bg.png" alt="Remove BG — before/after cutout" width="720" />
 </p>
+
+### Image Upscale
+
+<p align="center">
+  <img src="test/scale-image.png" alt="Image Upscale — Real-ESRGAN 2× + denoise" width="720" />
+</p>
+
+### Fix Low Light
+
+<p align="center">
+  <img src="test/low_light.png" alt="Fix Low Light — MIRNet before/after" width="720" />
+</p>
+
+### Sample files
+
+| File | Use for |
+|------|---------|
+| [`test/rm-bg.png`](test/rm-bg.png) | Remove BG demo |
+| [`test/scale-image.png`](test/scale-image.png) | Image Upscale demo |
+| [`test/low_light.png`](test/low_light.png) | Fix Low Light demo |
+| [`test/test.mp4`](test/test.mp4) | Remove Text on video (local only — not in git) |
 
 ---
 
@@ -50,17 +79,6 @@ That is enough for most users. Models you need for Remove Text, Remove BG, Upsca
 | **Settings** | — | OCR / STTN / ProPainter, model downloads, save dir, updates |
 
 Everything runs locally. Video jobs keep the original audio when merge succeeds.
-
-### Sample files (try these)
-
-| File | Use for |
-|------|---------|
-| [`test/rm-bg.png`](test/rm-bg.png) | Present / demo Remove BG (UI + before/after cutouts) |
-| [`test/scale-image.png`](test/scale-image.png) | Present / demo Image Upscale (Real-ESRGAN 2× + denoise) |
-| [`test/low_light.png`](test/low_light.png) | Present / demo Fix Low Light (MIRNet before/after) |
-| [`test/test.mp4`](test/test.mp4) | Try Remove Text on video |
-
-Open them from the GUI, or via CLI (see [Run](#run) below).
 
 ---
 
