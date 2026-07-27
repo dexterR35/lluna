@@ -33,7 +33,7 @@ python install.py
 run_gui.bat           # Windows
 ```
 
-That is enough for most users. Models you need for Remove Text, Remove BG, Upscale ×2, Fix Low Light, and Select Object (fast) are installed or prefetched automatically.
+That is enough for most users. Models you need for Remove Text, Remove BG, Upscale ×2, Fix Low Light, and Select Object (fast) are installed or prefetched automatically. **FLUX.2 image generation** is optional — install it from **Settings → Generate Models** (CUDA GPU required).
 
 ---
 
@@ -57,6 +57,7 @@ Everything runs locally. Video jobs keep the original audio when merge succeeds.
 |------|---------|
 | [`test/rm-bg.png`](test/rm-bg.png) | Present / demo Remove BG (UI + before/after cutouts) |
 | [`test/scale-image.png`](test/scale-image.png) | Present / demo Image Upscale (Real-ESRGAN 2× + denoise) |
+| [`test/low_light.png`](test/low_light.png) | Present / demo Fix Low Light (MIRNet before/after) |
 | [`test/test.mp4`](test/test.mp4) | Try Remove Text on video |
 
 Open them from the GUI, or via CLI (see [Run](#run) below).
@@ -90,8 +91,10 @@ Open them from the GUI, or via CLI (see [Run](#run) below).
 
 ### Fix Low Light
 
-- MIRNet (LOL) for dark / low-light photos
-- Images only; install weights from Settings if missing
+- MIRNet (LOL) for dark / underexposed photos
+- Images only; same-size output with VRAM-safe long-edge cap
+- MIRNet weights auto-download on install (or **Settings → Low Light Models**)
+- Try with [`test/low_light.png`](test/low_light.png) — open in **Fix Low Light**, then **Run**
 
 ### Select Object
 
@@ -99,11 +102,38 @@ Open them from the GUI, or via CLI (see [Run](#run) below).
 - **Complex** pair: SAM2 Large + DINO Base (optional, Settings)
 - Click to segment, or select by name (“person”, …)
 
-### Generate Image
+### Generate Image (FLUX.2)
 
-- FLUX.2 Klein **4B** (~13 GB VRAM) and **9B** (~29 GB VRAM)
-- NVIDIA CUDA only; install from **Settings → Generate Models**
-- 9B may need a Hugging Face token (`config/hf_token`)
+Text-to-image on the **Generate Image** home page using [Black Forest Labs FLUX.2 Klein](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) via Diffusers.
+
+**How to use**
+
+1. Install with CUDA: `python install.py --mode cuda --yes`
+2. Open **Settings → Generate Models** → **Install** and enable **FLUX.2 klein 4B** (or 9B)
+3. Go to **Generate Image** (home), type a prompt, press **Enter** or click **Generate Image**
+4. Preview appears when done; output is saved to your **Save directory** (Settings → Advanced)
+
+**Models**
+
+| Model | License | VRAM | Notes |
+|-------|---------|------|-------|
+| **FLUX.2 klein 4B** (recommended) | Apache 2.0 | ~13 GB | Fast 4-step generation; best default for most GPUs |
+| **FLUX.2 klein 9B** | Non-commercial | ~29 GB | Higher quality; RTX 4090+ class; may need Hugging Face login |
+
+**Defaults:** 1024×1024, 4 inference steps, guidance 1.0. Sizes are aligned to multiples of 16.
+
+**Requirements**
+
+- **NVIDIA CUDA only** — CPU is not supported
+- **Hardware acceleration** must be on in Settings
+- Large download from Hugging Face (`backend/models/generate/`)
+- For **9B** (gated repo): accept the license on Hugging Face, then add a read token in **Settings → Generate Models** (`config/hf_token` or `HF_TOKEN` env)
+
+**Tips**
+
+- Home prompt also accepts shortcuts: “remove background”, “low light”, “upscale”, “open settings”
+- Stop a run with **Stop**; wait if another GPU job is running
+- Out of memory? Close other GPU apps or use 4B instead of 9B
 
 ---
 
@@ -133,7 +163,7 @@ Weights live under `backend/models/` (and rembg under `~/.u2net/`).
 | **Image Upscale** | `RealESRGAN_x2plus` (default), `RealESRGAN_x4plus` (optional) | `backend/models/realesrgan/` | [Real-ESRGAN releases](https://github.com/xinntao/Real-ESRGAN/releases) — [×2](https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.1/RealESRGAN_x2plus.pth) · [×4](https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth) |
 | **Fix Low Light** | `MIRNet_LOL` | `backend/models/mirnet/MIRNet_LOL.pth` | Google Drive ([swz30/MIRNet LOL weights](https://drive.google.com/uc?id=1t_FcBuMZD5th2KWVVNXYGJ7bMz5ZAWvF)) |
 | **Select Object** | SAM2 Tiny + DINO Tiny (default); SAM2 Large + DINO Base (optional) | `backend/models/select_object/` | Hugging Face: [`facebook/sam2-hiera-tiny`](https://huggingface.co/facebook/sam2-hiera-tiny), [`facebook/sam2-hiera-large`](https://huggingface.co/facebook/sam2-hiera-large), [`IDEA-Research/grounding-dino-tiny`](https://huggingface.co/IDEA-Research/grounding-dino-tiny), [`IDEA-Research/grounding-dino-base`](https://huggingface.co/IDEA-Research/grounding-dino-base) |
-| **Generate Image** | FLUX.2 Klein 4B / 9B | `backend/models/generate/` | Hugging Face: [`black-forest-labs/FLUX.2-klein-4B`](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B), [`…/FLUX.2-klein-9B`](https://huggingface.co/black-forest-labs/FLUX.2-klein-9B) |
+| **Generate Image** | FLUX.2 Klein 4B / 9B | `backend/models/generate/` | Hugging Face: [`black-forest-labs/FLUX.2-klein-4B`](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) (Apache 2.0), [`black-forest-labs/FLUX.2-klein-9B`](https://huggingface.co/black-forest-labs/FLUX.2-klein-9B) (non-commercial, gated) — install from **Settings → Generate Models** |
 
 ### Optional Remove BG models (Settings → Remove BG Models)
 
@@ -289,6 +319,8 @@ midgardEnv/bin/python backend/main.py -t remove-bg -i anime.png -o out.png --bg-
 | People cutout | **U2-Net Human** / BiRefNet Portrait |
 | Dark photos | **Fix Low Light** (MIRNet) |
 | Sharper crops / prints | **Image Upscale** ×2 or ×4 |
+| AI image from text | **Generate Image** → FLUX.2 klein **4B** (CUDA + install in Settings) |
+| Best FLUX quality | FLUX.2 klein **9B** (~29 GB VRAM, HF token for gated repo) |
 | Out of memory | Lower Max Concurrent Frames, use LaMa/OpenCV, or close other apps |
 | CUDA install falls back to CPU | Drivers / `nvidia-smi` not available |
 
