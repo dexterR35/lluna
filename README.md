@@ -5,8 +5,8 @@
 <h1 align="center">Midgard</h1>
 
 <p align="center">
-  Local AI studio for hard-subtitle / text removal and image background cutouts.<br/>
-  No cloud API - runs on your machine and keeps original resolution.
+  Local AI studio for remove text, remove background, upscale, low-light restore, object select, and image generation.<br/>
+  No cloud API — runs on your machine and keeps original resolution.
 </p>
 
 <p align="center">
@@ -15,86 +15,154 @@
   <img src="https://img.shields.io/badge/version-1.4.0-orange.svg" alt="Version" />
 </p>
 
+<p align="center">
+  <img src="test/rm-bg.png" alt="Midgard Remove BG preview" width="720" />
+</p>
+
+---
+
+## Quick start
+
+```shell
+# 1. Clone / copy the project (keep backend/models/)
+# 2. Install (creates midgardEnv, picks CUDA or CPU, downloads default models)
+python install.py
+
+# 3. Run the GUI
+./run_gui.sh          # Linux / macOS
+run_gui.bat           # Windows
+```
+
+That is enough for most users. Models you need for Remove Text, Remove BG, Upscale ×2, Fix Low Light, and Select Object (fast) are installed or prefetched automatically.
+
 ---
 
 ## What Midgard can do
 
-| Tool | What it does |
-|------|----------------|
-| **Remove Text** | Strip hardcoded subtitles and text watermarks from **video** and **images** with AI inpainting |
-| **Remove BG** | Cut out image backgrounds (PNG with transparency), with protect-mask, retouch, and upscale |
-| **Settings** | Tune OCR, STTN / ProPainter, hardware acceleration, and optional model installs |
+| Tool | Input | What it does |
+|------|--------|----------------|
+| **Remove Text** | Video + images | Strip hard subtitles and text watermarks with AI inpainting |
+| **Remove BG** | Images | Cut out backgrounds (transparent PNG), protect mask, retouch, select object |
+| **Image Upscale** | Images | Real-ESRGAN 2× / 4× (optional safe denoise) |
+| **Fix Low Light** | Images | MIRNet restore for dark / underexposed photos |
+| **Select Object** | Images | SAM2 + Grounding DINO — click or name an object for keep-mask editing |
+| **Generate Image** | Prompt | FLUX.2 Klein text-to-image (CUDA GPU required) |
+| **Settings** | — | OCR / STTN / ProPainter, model downloads, save dir, updates |
 
-Everything runs locally. Output keeps the source resolution. Video jobs keep the original audio when merge succeeds.
+Everything runs locally. Video jobs keep the original audio when merge succeeds.
 
----
+### Sample files (try these)
 
-## Features
+| File | Use for |
+|------|---------|
+| [`test/rm-bg.png`](test/rm-bg.png) | Present / demo Remove BG (UI + before/after cutouts) |
+| [`test/scale-image.png`](test/scale-image.png) | Present / demo Image Upscale (Real-ESRGAN 2× + denoise) |
+| [`test/test.mp4`](test/test.mp4) | Try Remove Text on video |
 
-- **Hard subtitle & text watermark removal** (video + images)
-  - Draw one or more subtitle regions, or process full-frame text
-  - PP-OCRv5 detection (Precise Server / Fast Mobile)
-  - Inpaint modes: STTN Smart, STTN Detection, LaMa, ProPainter, OpenCV
-  - Scene-aware processing, batch queue, progress + log
-- **Background removal** (images only)
-  - Automatic cutout or **Protect areas** (paint regions to keep)
-  - **Retouch** mask after preview
-  - **Enhance** with Real-ESRGAN (2× default, 4× optional)
-  - Multiple rembg / ONNX models (BiRefNet, U2-Net, IS-Net, …)
-- **Hardware acceleration** - CUDA (NVIDIA) when available; CPU otherwise; DirectML on Windows packages
-- **GUI** (Fluent / PySide6) + **CLI** for subtitle removal and image background cutouts
-- **Installer** (`install.py`) creates `midgardEnv`, picks CUDA/CPU, merges model parts, prefetches default BG/Enhance weights
+Open them from the GUI, or via CLI (see [Run](#run) below).
 
 ---
 
-## Models
+## Features in detail
 
-Weights live under `backend/models/` (~1 GB). Split files are merged by `install.py` / first run. No separate “download models” step for core inpaint/OCR.
+### Remove Text (video + images)
 
-### Subtitle / text removal (shipped)
+- Draw one or more subtitle regions, or process full-frame text
+- PP-OCRv5 detection: **Precise (Server)** / **Fast (Mobile)**
+- Inpaint modes: **STTN Smart**, **STTN Detection**, **LaMa**, **ProPainter**, **OpenCV**
+- Scene-aware processing, batch queue, before/after compare, A/B section marks
+- Keeps source resolution and audio (when merge succeeds)
 
-| Model | Role | Best for |
-|-------|------|----------|
-| **STTN Auto** (`sttn-auto`) | Smart video/image inpaint (default) | Live-action, ~4 GB+ VRAM |
-| **STTN Det** (`sttn-det`) | Inpaint with detection path | Video when you want detection without smart fill |
-| **LaMa** (`big-lama`) | Frame inpaint | Animation, flat color, lower VRAM |
-| **ProPainter** | Video inpaint | Strong motion / sports; ~8 GB+ VRAM |
-| **OpenCV** | Classical inpaint | Fast preview, lowest quality |
-| **PP-OCRv5** (`V5/ch_det`, `ch_det_fast`) | Subtitle / text detection | Precise (Server) or Fast (Mobile) |
+### Remove BG (images)
 
-### Background removal (ONNX via rembg)
+- **Automatic** cutout or **Protect areas** (paint regions to keep)
+- **Edit keep mask**: Paint keep / Erase keep / **Select object**
+- **Retouch** (brush / lasso / pen / rect + Apply LaMa)
+- Multiple rembg ONNX models (BiRefNet, U2-Net, IS-Net, BRIA RMBG, …)
+- Saves transparent PNG
 
-Prefetched on install (or install later in **Settings → Remove BG Models**):
+### Image Upscale
 
-| Default on install | Category |
-|--------------------|----------|
-| `birefnet-general` | General photos (app default) |
-| `u2net_human_seg` | People |
-| `isnet-anime` | Anime |
-| `u2net_cloth_seg` | Clothes |
+- Real-ESRGAN **×2** (default) and **×4**
+- Optional safe denoise before upscale
+- Output capped at 5000 px long edge
+- Try with [`test/scale-image.png`](test/scale-image.png) — open in **Image Upscale**, pick scale, then **Run**
 
-Optional from Settings: BiRefNet Lite / Portrait / Massive / DIS / HRSOD / COD, BRIA RMBG, U2-Net, Silueta, IS-Net General, etc.
+### Fix Low Light
 
-### Enhance (after Remove BG)
+- MIRNet (LOL) for dark / low-light photos
+- Images only; install weights from Settings if missing
 
-| Model | Notes |
-|-------|--------|
-| **RealESRGAN ×2** (`RealESRGAN_x2plus`) | Default - installed by `install.py` |
-| **RealESRGAN ×4** (`RealESRGAN_x4plus`) | Optional - Settings → Enhance Models |
+### Select Object
+
+- **Fast** pair: SAM2 Tiny + Grounding DINO Tiny (prefetched on install)
+- **Complex** pair: SAM2 Large + DINO Base (optional, Settings)
+- Click to segment, or select by name (“person”, …)
+
+### Generate Image
+
+- FLUX.2 Klein **4B** (~13 GB VRAM) and **9B** (~29 GB VRAM)
+- NVIDIA CUDA only; install from **Settings → Generate Models**
+- 9B may need a Hugging Face token (`config/hf_token`)
+
+---
+
+## Models used & download (DW)
+
+Weights live under `backend/models/` (and rembg under `~/.u2net/`).  
+**Core inpaint + OCR ship with the repo** (~1 GB). Split files are merged by `install.py` / first run.
+
+### Shipped with the project (no extra download)
+
+| Model | Path | Role | Best for |
+|-------|------|------|----------|
+| **STTN Auto** | `backend/models/sttn-auto/` | Default video/image inpaint | Live-action, ~4 GB+ VRAM |
+| **STTN Det** | `backend/models/sttn-det/` | Detection-path inpaint | Video with detection path |
+| **LaMa** | `backend/models/big-lama/` | Frame inpaint / retouch | Animation, flat color, lower VRAM |
+| **ProPainter** | `backend/models/propainter/` | Motion video inpaint | Sports / strong motion; ~8 GB+ VRAM |
+| **PP-OCRv5 Server** | `backend/models/V5/ch_det/` | Precise text detection | Better boxes |
+| **PP-OCRv5 Mobile** | `backend/models/V5/ch_det_fast/` | Fast text detection | Speed |
+
+**OpenCV** inpaint needs no weights (fast preview, lowest quality).
+
+### Downloaded by installer (or Settings)
+
+| Feature | Model | Local path | Download source |
+|---------|-------|------------|-----------------|
+| **Remove BG** | `birefnet-general`, `u2net_human_seg`, `isnet-anime`, `u2net_cloth_seg` (+ more in Settings) | `~/.u2net/*.onnx` | rembg sessions (GitHub/Hugging Face via rembg) |
+| **Image Upscale** | `RealESRGAN_x2plus` (default), `RealESRGAN_x4plus` (optional) | `backend/models/realesrgan/` | [Real-ESRGAN releases](https://github.com/xinntao/Real-ESRGAN/releases) — [×2](https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.1/RealESRGAN_x2plus.pth) · [×4](https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth) |
+| **Fix Low Light** | `MIRNet_LOL` | `backend/models/mirnet/MIRNet_LOL.pth` | Google Drive ([swz30/MIRNet LOL weights](https://drive.google.com/uc?id=1t_FcBuMZD5th2KWVVNXYGJ7bMz5ZAWvF)) |
+| **Select Object** | SAM2 Tiny + DINO Tiny (default); SAM2 Large + DINO Base (optional) | `backend/models/select_object/` | Hugging Face: [`facebook/sam2-hiera-tiny`](https://huggingface.co/facebook/sam2-hiera-tiny), [`facebook/sam2-hiera-large`](https://huggingface.co/facebook/sam2-hiera-large), [`IDEA-Research/grounding-dino-tiny`](https://huggingface.co/IDEA-Research/grounding-dino-tiny), [`IDEA-Research/grounding-dino-base`](https://huggingface.co/IDEA-Research/grounding-dino-base) |
+| **Generate Image** | FLUX.2 Klein 4B / 9B | `backend/models/generate/` | Hugging Face: [`black-forest-labs/FLUX.2-klein-4B`](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B), [`…/FLUX.2-klein-9B`](https://huggingface.co/black-forest-labs/FLUX.2-klein-9B) |
+
+### Optional Remove BG models (Settings → Remove BG Models)
+
+| Category | Models |
+|----------|--------|
+| General | BiRefNet General (default), Lite, Massive, IS-Net, U2-Net, U2-NetP, Silueta, BRIA RMBG |
+| People | U2-Net Human, BiRefNet Portrait |
+| Anime | IS-Net Anime |
+| Clothes | U2-Net Cloth |
+| Specialty | BiRefNet DIS / HRSOD / COD |
+
+You can **Install / Uninstall / On–Off** each model in Settings. Uninstall only deletes local files — reinstall anytime.
 
 ---
 
 ## Requirements
 
 - **Python 3.12** recommended (3.11–3.13 supported)
-- **Windows 10 / 11**, macOS, or Linux
+- **Windows 10/11**, macOS, or Linux
 - Optional: NVIDIA GPU + current drivers for CUDA
-- Network once for `pip` (and for rembg / Real-ESRGAN downloads on first install)
-- Keep `backend/models/` with the project. **Do not copy `midgardEnv/` between Linux and Windows** - recreate it per OS.
+- Network once for `pip` and optional model downloads
+- Keep `backend/models/` with the project
+- **Do not copy `midgardEnv/` between Linux and Windows** — recreate it per OS
 
 ---
 
-## Install
+## Install (easy)
+
+### One command
 
 ```shell
 python install.py
@@ -102,28 +170,23 @@ python install.py
 
 The installer will:
 
-1. Prefer Python 3.12 (falls back to 3.11 / 3.13)
+1. Prefer Python **3.12** (fallback 3.11 / 3.13)
 2. Detect CUDA via `nvidia-smi` (default CUDA if found, else CPU)
 3. Let you choose **CUDA / CPU**
 4. Create `midgardEnv` and install Paddle, Torch, and `requirements.txt`
-5. Verify / merge core model weights
-6. Prefetch default Remove BG + Real-ESRGAN ×2 models
+5. Verify / merge core inpaint + OCR weights
+6. Prefetch default **Remove BG**, **Real-ESRGAN ×2**, **MIRNet**, and **Select Object (fast)** models
 7. Write `run_gui.sh` (Linux/macOS) or `run_gui.bat` (Windows)
 
-Non-interactive:
+### Non-interactive
 
 ```shell
 python install.py --yes
-```
-
-Force a mode:
-
-```shell
 python install.py --mode cpu --yes
 python install.py --mode cuda --yes
 ```
 
-CUDA wheel is chosen automatically from GPU series + driver (clamped to what the driver can load):
+### CUDA wheel (auto from GPU series)
 
 | Series | Examples | Preferred Torch wheel |
 |--------|----------|------------------------|
@@ -133,9 +196,9 @@ CUDA wheel is chosen automatically from GPU series + driver (clamped to what the
 | **4xxx** | RTX 4090, 4070 | `cu128` |
 | **5xxx** | RTX 5090, 5080 | `cu128` (required) |
 
-Override if needed: `python install.py --mode cuda --cuda-tag cu126 --yes`
+Override: `python install.py --mode cuda --cuda-tag cu126 --yes`
 
-Skip rembg prefetch (install those later from Settings):
+Skip rembg prefetch (install later from Settings):
 
 ```shell
 python install.py --skip-rembg-models --yes
@@ -152,9 +215,9 @@ python install.py
 run_gui.bat
 ```
 
-For NVIDIA GPUs, install a current Game Ready / Studio driver first so CUDA can be selected.
+For NVIDIA GPUs, install a current Game Ready / Studio driver first.
 
-### Optional: Windows packaged build (no Python for end users)
+### Optional: Windows package (no Python for end users)
 
 ```bat
 pip install QPT==1.0b8 setuptools
@@ -162,9 +225,7 @@ python backend\tools\makedist.py
 ```
 
 CUDA examples: `makedist.py --cuda 11.8`, `--cuda 12.6`, `--cuda 12.8`, or `--directml`.  
-Output is under `midgard_out/`. Ship that folder to Win10/Win11 PCs.
-
-GitHub Actions workflows: `build-windows-cpu.yml`, `build-windows-cuda-*.yml`, `build-windows-directml.yml`.
+Output is under `midgard_out/`.
 
 ---
 
@@ -180,14 +241,12 @@ midgardEnv/bin/python gui.py
 midgardEnv\Scripts\python.exe gui.py
 ```
 
-### CLI (subtitle / text removal)
+### CLI — Remove Text (video / image)
 
 ```shell
-midgardEnv/bin/python backend/main.py -i input.mp4 -o output.mp4
-midgardEnv\Scripts\python.exe backend\main.py -i input.mp4 -o output.mp4
+midgardEnv/bin/python backend/main.py -i test/test.mp4 -o output.mp4
+midgardEnv\Scripts\python.exe backend\main.py -i test\test.mp4 -o output.mp4
 ```
-
-Options:
 
 ```text
 -t / --task remove-text                 (default)
@@ -197,16 +256,13 @@ Options:
 --inpaint-mode {sttn-auto,sttn-det,lama,propainter,opencv}
 ```
 
-### CLI (image background removal)
-
-Images only. Writes a transparent PNG.
+### CLI — Remove BG (images)
 
 ```shell
-midgardEnv/bin/python backend/main.py -t remove-bg -i input.png -o output.png
-midgardEnv\Scripts\python.exe backend\main.py -t remove-bg -i input.png -o output.png
+midgardEnv/bin/python backend/main.py -t remove-bg -i photo.jpg -o cutout.png
+midgardEnv/bin/python backend/main.py -t remove-bg -i photo.jpg -o out.png --bg-model u2net_human_seg
+midgardEnv/bin/python backend/main.py -t remove-bg -i anime.png -o out.png --bg-model isnet-anime
 ```
-
-Options:
 
 ```text
 -t / --task remove-bg
@@ -216,16 +272,7 @@ Options:
 --protect-mask PATH                     (optional grayscale keep-mask)
 ```
 
-Examples:
-
-```shell
-# Default BiRefNet general model
-midgardEnv/bin/python backend/main.py -t remove-bg -i photo.jpg -o cutout.png
-
-# People / anime / clothes models
-midgardEnv/bin/python backend/main.py -t remove-bg -i person.jpg -o out.png --bg-model u2net_human_seg
-midgardEnv/bin/python backend/main.py -t remove-bg -i anime.png -o out.png --bg-model isnet-anime
-```
+> Upscale, Fix Low Light, Generate Image, and Select Object are GUI-only for now.
 
 ---
 
@@ -238,8 +285,12 @@ midgardEnv/bin/python backend/main.py -t remove-bg -i anime.png -o out.png --bg-
 | Heavy camera motion | **ProPainter** (more VRAM) |
 | Fast rough preview | **OpenCV** |
 | Better OCR boxes | PP-OCRv5 **Precise (Server)** |
+| General photo cutout | **BiRefNet General** |
+| People cutout | **U2-Net Human** / BiRefNet Portrait |
+| Dark photos | **Fix Low Light** (MIRNet) |
+| Sharper crops / prints | **Image Upscale** ×2 or ×4 |
 | Out of memory | Lower Max Concurrent Frames, use LaMa/OpenCV, or close other apps |
-| CUDA install falls back to CPU | Drivers / `nvidia-smi` not available on that machine |
+| CUDA install falls back to CPU | Drivers / `nvidia-smi` not available |
 
 ---
 
