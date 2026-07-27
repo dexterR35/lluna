@@ -50,6 +50,54 @@ Screenshots from the app. Open the same files from `test/` in the GUI to try the
 
 ---
 
+## Image Generation
+
+Text-to-image on the **Generate Image** home page. Runs locally via [Hugging Face Diffusers](https://github.com/huggingface/diffusers) — no cloud API. **NVIDIA CUDA required** (CPU is not supported).
+
+### What's included
+
+| Capability | Details |
+|------------|---------|
+| **Home prompt** | ChatGPT-style dashboard — type a prompt, press **Enter** or click **Generate Image** |
+| **Model picker** | **FLUX.2 klein 4B** (default) and **SDXL Turbo** on the home page |
+| **Size presets** | Small 512×512 · Medium 768×768 · Large 1024×1024 (sizes aligned to multiples of 16) |
+| **Step presets** | Fast / Normal / Quality — step counts vary per model |
+| **Preview & save** | In-app preview; PNG saved to your **Save directory** (Settings → Advanced) |
+| **Stop** | Cancel an in-progress run with **Stop** |
+| **GPU queue** | One GPU job at a time; waits if another tool is using the GPU |
+| **Prompt shortcuts** | Type “remove background”, “upscale”, “low light”, “open settings”, etc. to jump to other tools |
+| **Model management** | **Settings → Generate Models** — Install / Uninstall / On–Off per model; Hugging Face token for gated repos |
+
+**Settings-only models** (install and enable in Settings; not in the home dropdown): **FLUX.2 klein 9B**, **SD 1.5**.
+
+### Models used
+
+| Model | Hugging Face | License | VRAM (approx.) | Steps (fast / normal / quality) | Guidance | Notes |
+|-------|--------------|---------|----------------|-----------------------------------|----------|-------|
+| **FLUX.2 klein 4B** | [`black-forest-labs/FLUX.2-klein-4B`](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) | Apache 2.0 | ~13 GB | 4 / 8 / 12 | 1.0 | Recommended default; home dropdown |
+| **FLUX.2 klein 9B** | [`black-forest-labs/FLUX.2-klein-9B`](https://huggingface.co/black-forest-labs/FLUX.2-klein-9B) | Non-commercial (gated) | ~29 GB | 4 / 8 / 12 | 1.0 | Higher quality; HF login + license accept |
+| **SDXL Turbo** | [`stabilityai/sdxl-turbo`](https://huggingface.co/stabilityai/sdxl-turbo) | OpenRAIL++ | ~8 GB | 4 / 8 / 12 | 0.0 | Light option; home dropdown |
+| **SD 1.5** | [`runwayml/stable-diffusion-v1-5`](https://huggingface.co/runwayml/stable-diffusion-v1-5) | OpenRAIL-M | ~4 GB | 20 / 28 / 40 | 7.5 | Classic fallback for smaller GPUs |
+
+Weights install to `backend/models/generate/<model-id>/`. One generate model is cached in VRAM at a time; CPU offload reduces memory use on consumer GPUs.
+
+### How to use
+
+1. Install with CUDA: `python install.py --mode cuda --yes`
+2. Turn on **Hardware acceleration** in Settings
+3. **Settings → Generate Models** → **Install** at least **FLUX.2 klein 4B** or **SDXL Turbo**, then enable it
+4. Open **Generate Image** (home), choose model / size / steps, enter a prompt, and generate
+5. For **9B** (gated): accept the license on Hugging Face, add a read token in **Settings → Generate Models** (`config/hf_token` or `HF_TOKEN` env)
+
+### Requirements
+
+- NVIDIA GPU with working CUDA drivers (`nvidia-smi` must work)
+- **Hardware acceleration** enabled in Settings
+- Large one-time download from Hugging Face (optional — not scheduled by default installer)
+- GUI only (no CLI for Generate Image yet)
+
+---
+
 ## Quick start
 
 ```shell
@@ -75,7 +123,7 @@ That is enough for most users. Default models for Remove BG, Upscale ×2 (Real-E
 | **Image Upscale** | Images | Real-ESRGAN 2× / 4× (optional safe denoise) |
 | **Fix Low Light** | Images | MIRNet restore for dark / underexposed photos |
 | **Select Object** | Images | SAM2 + Grounding DINO - click or name an object for keep-mask editing |
-| **Generate Image** | Prompt | FLUX.2 Klein text-to-image (CUDA GPU required) |
+| **Generate Image** | Prompt | FLUX.2 / SDXL Turbo / SD 1.5 text-to-image (CUDA GPU required) |
 | **Settings** | - | OCR / STTN / ProPainter, model downloads, save dir, updates |
 
 Everything runs locally. Video jobs keep the original audio when merge succeeds.
@@ -120,40 +168,9 @@ Everything runs locally. Video jobs keep the original audio when merge succeeds.
 - **Complex** pair: SAM2 Large + DINO Base (optional, Settings)
 - Click to segment, or select by name (“person”, …)
 
-### Generate Image (FLUX.2)
+### Generate Image
 
-Text-to-image on the **Generate Image** home page using [Black Forest Labs FLUX.2 Klein](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) via Diffusers.
-
-**How to use**
-
-1. Install with CUDA: `python install.py --mode cuda --yes`
-2. Open **Settings → Generate Models** → **Install** and enable **FLUX.2 klein 4B** (or SDXL Turbo / SD 1.5 / 9B)
-3. Go to **Generate Image** (home), type a prompt, press **Enter** or click **Generate Image**
-4. Preview appears when done; output is saved to your **Save directory** (Settings → Advanced)
-
-**Models**
-
-| Model | License | VRAM | Notes |
-|-------|---------|------|-------|
-| **FLUX.2 klein 4B** (recommended) | Apache 2.0 | ~13 GB | Fast 4-step generation; best default for most GPUs |
-| **FLUX.2 klein 9B** | Non-commercial | ~29 GB | Higher quality; RTX 4090+ class; may need Hugging Face login |
-| **SDXL Turbo** | OpenRAIL++ | ~8 GB | Light option for lower VRAM cards; best at 4-8 steps |
-| **SD 1.5** | OpenRAIL-M | ~4 GB | Classic lightweight fallback model for broad GPU compatibility |
-
-**Defaults:** 768×768, 4 inference steps, guidance by model. Sizes are aligned to multiples of 16.
-
-**Requirements**
-
-- **NVIDIA CUDA only** - CPU is not supported
-- **Hardware acceleration** must be on in Settings
-- Large download from Hugging Face (`backend/models/generate/`)
-- For **9B** (gated repo): accept the license on Hugging Face, then add a read token in **Settings → Generate Models** (`config/hf_token` or `HF_TOKEN` env)
-
-**Tips**
-
-- Home prompt also accepts shortcuts: “remove background”, “low light”, “upscale”, “open settings”
-- Stop a run with **Stop**; wait if another GPU job is running
-- Out of memory? Close other GPU apps or use 4B instead of 9B
+See **[Image Generation](#image-generation)** for models, setup, and capabilities.
 
 ---
 
@@ -183,7 +200,7 @@ Weights live under `backend/models/` (and rembg under `~/.u2net/`).
 | **Image Upscale** | `RealESRGAN_x2plus` (default), `RealESRGAN_x4plus` (optional) | `backend/models/realesrgan/` | [Real-ESRGAN releases](https://github.com/xinntao/Real-ESRGAN/releases) - [×2](https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.1/RealESRGAN_x2plus.pth) · [×4](https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth) |
 | **Fix Low Light** | `MIRNet_LOL` | `backend/models/mirnet/MIRNet_LOL.pth` | Google Drive ([swz30/MIRNet LOL weights](https://drive.google.com/uc?id=1t_FcBuMZD5th2KWVVNXYGJ7bMz5ZAWvF)) |
 | **Select Object** | SAM2 Tiny + DINO Tiny (default); SAM2 Large + DINO Base (optional) | `backend/models/select_object/` | Hugging Face: [`facebook/sam2-hiera-tiny`](https://huggingface.co/facebook/sam2-hiera-tiny), [`facebook/sam2-hiera-large`](https://huggingface.co/facebook/sam2-hiera-large), [`IDEA-Research/grounding-dino-tiny`](https://huggingface.co/IDEA-Research/grounding-dino-tiny), [`IDEA-Research/grounding-dino-base`](https://huggingface.co/IDEA-Research/grounding-dino-base) |
-| **Generate Image** | FLUX.2 Klein 4B / 9B | `backend/models/generate/` | Hugging Face: [`black-forest-labs/FLUX.2-klein-4B`](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) (Apache 2.0), [`black-forest-labs/FLUX.2-klein-9B`](https://huggingface.co/black-forest-labs/FLUX.2-klein-9B) (non-commercial, gated) - install from **Settings → Generate Models** |
+| **Generate Image** | FLUX.2 Klein 4B / 9B, SDXL Turbo, SD 1.5 | `backend/models/generate/` | Hugging Face: [`FLUX.2-klein-4B`](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B), [`FLUX.2-klein-9B`](https://huggingface.co/black-forest-labs/FLUX.2-klein-9B) (gated), [`sdxl-turbo`](https://huggingface.co/stabilityai/sdxl-turbo), [`stable-diffusion-v1-5`](https://huggingface.co/runwayml/stable-diffusion-v1-5) — install from **Settings → Generate Models** |
 
 ### Optional Remove BG models (Settings → Remove BG Models)
 
@@ -374,7 +391,8 @@ This keeps app binaries/code updates independent from large model downloads.
 | People cutout | **U2-Net Human** / BiRefNet Portrait |
 | Dark photos | **Fix Low Light** (MIRNet) |
 | Sharper crops / prints | **Image Upscale** ×2 or ×4 |
-| AI image from text | **Generate Image** → FLUX.2 klein **4B** (CUDA + install in Settings) |
+| AI image from text | **Generate Image** → FLUX.2 klein **4B** or **SDXL Turbo** (CUDA + install in Settings) |
+| Lower VRAM generate | **SDXL Turbo** (~8 GB) or **SD 1.5** (~4 GB) in Settings → Generate Models |
 | Best FLUX quality | FLUX.2 klein **9B** (~29 GB VRAM, HF token for gated repo) |
 | Out of memory | Lower Max Concurrent Frames, use LaMa/OpenCV, or close other apps |
 | CUDA install falls back to CPU | Drivers / `nvidia-smi` not available |
