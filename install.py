@@ -2,6 +2,9 @@
 """
 Midgard installer - detects CUDA vs CPU, lets you choose, then installs deps + verifies models.
 
+GPU mode needs NVIDIA drivers (nvidia-smi). You do NOT need the NVIDIA CUDA Toolkit (full SDK) —
+install.py pulls GPU PyTorch/Paddle wheels that bundle the CUDA runtime libs.
+
 Usage:
   python install.py
   python install.py --mode cpu
@@ -45,6 +48,12 @@ ORT_CUDA11_INDEX = (
 # PyTorch CUDA wheel tags Midgard ships (see TORCH_INDEX). Highest first.
 TORCH_CUDA_TAGS = ("cu128", "cu126", "cu118")
 _TAG_RANK = {t: i for i, t in enumerate(reversed(TORCH_CUDA_TAGS))}
+
+# Shown when GPU / CUDA mode is selected (no separate CUDA Toolkit install).
+_NO_CUDA_TOOLKIT_NOTE = (
+    "No NVIDIA CUDA Toolkit (SDK) required — only current GPU drivers. "
+    "CUDA libraries come from the PyTorch/Paddle pip wheels."
+)
 
 
 class CudaInfo:
@@ -188,9 +197,9 @@ def detect_cuda() -> CudaInfo:
     )
     msg = f"Detected GPU: {gpu_name}"
     if driver_cuda:
-        msg += f" (driver CUDA {driver_cuda} → torch {torch_tag})"
+        msg += f" (driver supports CUDA {driver_cuda} → torch {torch_tag})"
     else:
-        msg += f" (CUDA version unknown → torch {torch_tag})"
+        msg += f" (driver CUDA level unknown → torch {torch_tag})"
     if compute_cap:
         msg += f" [cc {compute_cap}]"
     if total_vram_mb:
@@ -404,10 +413,13 @@ def choose_mode_gui(default_cuda: bool, detect_msg: str) -> str:
         row=0, column=0, columnspan=2, sticky="w", pady=(0, 8)
     )
     ttk.Label(frame, text=detect_msg, wraplength=420).grid(
-        row=1, column=0, columnspan=2, sticky="w", pady=(0, 16)
+        row=1, column=0, columnspan=2, sticky="w", pady=(0, 8)
+    )
+    ttk.Label(frame, text=_NO_CUDA_TOOLKIT_NOTE, wraplength=420).grid(
+        row=2, column=0, columnspan=2, sticky="w", pady=(0, 16)
     )
     ttk.Label(frame, text="Choose acceleration:").grid(
-        row=2, column=0, columnspan=2, sticky="w", pady=(0, 8)
+        row=3, column=0, columnspan=2, sticky="w", pady=(0, 8)
     )
 
     def pick(mode: str) -> None:
@@ -416,8 +428,8 @@ def choose_mode_gui(default_cuda: bool, detect_msg: str) -> str:
 
     cuda_btn = ttk.Button(frame, text="CUDA (NVIDIA GPU)", command=lambda: pick("cuda"))
     cpu_btn = ttk.Button(frame, text="CPU", command=lambda: pick("cpu"))
-    cuda_btn.grid(row=3, column=0, padx=(0, 8), sticky="ew")
-    cpu_btn.grid(row=3, column=1, sticky="ew")
+    cuda_btn.grid(row=4, column=0, padx=(0, 8), sticky="ew")
+    cpu_btn.grid(row=4, column=1, sticky="ew")
 
     if default_cuda:
         cuda_btn.focus_set()
@@ -435,6 +447,8 @@ def choose_mode_gui(default_cuda: bool, detect_msg: str) -> str:
 
 def choose_mode_cli(default_cuda: bool, detect_msg: str, allow_cuda: bool) -> str:
     log(detect_msg)
+    log("")
+    log(f"  {_NO_CUDA_TOOLKIT_NOTE}")
     log("")
     log("  1) CUDA (NVIDIA GPU)")
     log("  2) CPU")
@@ -548,6 +562,7 @@ def pip_install(py: Path, args: list[str]) -> None:
 
 def install_packages(py: Path, mode: str, torch_tag: str) -> None:
     if mode == "cuda":
+        log(f"\n{_NO_CUDA_TOOLKIT_NOTE}")
         if torch_tag not in TORCH_INDEX or torch_tag == "cpu":
             raise SystemExit(
                 f"Invalid CUDA tag {torch_tag!r}. Expected one of: {', '.join(TORCH_CUDA_TAGS)}"
@@ -850,6 +865,20 @@ if is_pair_installed(SelectObjectPairId.FAST):
     run([str(py), "-c", script, str(ROOT)])
 
 
+def seed_default_model_downloads(py: Path, *, skip_rembg: bool = False) -> None:
+    """Schedule default models for the GUI download queue (one at a time on first open)."""
+    log("\nScheduling default model downloads for first GUI open…")
+    script = r"""
+import sys
+sys.path.insert(0, sys.argv[1])
+from backend.tools.first_run_downloads import seed_first_run_downloads
+
+n = seed_first_run_downloads(skip_rembg=sys.argv[2] == "1")
+print(f"  Scheduled {n} default model(s) for the Settings download queue.")
+"""
+    run([str(py), "-c", script, str(ROOT), "1" if skip_rembg else "0"])
+
+
 def write_runtime(mode: str, torch_tag: str, gpu_name: str, compute_cap: str = "", total_vram_mb: float = 0.0) -> None:
     data = {
         "product": "Midgard",
@@ -889,7 +918,11 @@ def write_launchers(venv_dir: Path) -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Midgard installer (CUDA auto-detect + CPU/CUDA choice)")
+    p = argparse.ArgumentParser(
+        description="Midgard installer (CUDA auto-detect + CPU/CUDA choice)",
+        epilog=_NO_CUDA_TOOLKIT_NOTE,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     p.add_argument(
         "--mode",
         choices=["cuda", "cpu", "auto"],
@@ -922,6 +955,8 @@ def main() -> int:
     log("=" * 60)
     log("  Midgard Installer")
     log("=" * 60)
+    log(f"  {_NO_CUDA_TOOLKIT_NOTE}")
+    log("")
 
     cuda = detect_cuda()
     forced = None if args.mode == "auto" else args.mode
@@ -948,23 +983,17 @@ def main() -> int:
     ) % str(ROOT)
     run([str(py), "-c", merge_script])
 
-    if not args.skip_rembg_models:
-        try:
-            from backend.tools.model_download_lifecycle import cli_stop_and_revert_downloads
+    try:
+        from backend.tools.model_download_lifecycle import cli_stop_and_revert_downloads
 
-            # Stop any GUI downloads and wipe partials; prefetch starts clean
-            cli_stop_and_revert_downloads()
-        except Exception as e:
-            log(f"  (model download cancel hook: {e})")
-        prefetch_rembg_models(py)
-    else:
-        log("Skipped Remove BG model prefetch (--skip-rembg-models).")
+        cli_stop_and_revert_downloads()
+    except Exception as e:
+        log(f"  (model download cancel hook: {e})")
 
-    # Real-ESRGAN ×2 is mandatory on first install (×4 remains Settings-only)
-    prefetch_enhance_x2(py)
-    # MIRNet LOL is mandatory on first install (Settings On/Off after that)
-    prefetch_low_light_mirnet(py)
-    prefetch_select_object_defaults(py)
+    seed_default_model_downloads(py, skip_rembg=args.skip_rembg_models)
+    if args.skip_rembg_models:
+        log("  Remove BG defaults skipped (--skip-rembg-models) — install from Settings.")
+    log("  Default models (incl. Real-ESRGAN ×2) download one at a time when you open the GUI.")
 
     write_runtime(
         mode,

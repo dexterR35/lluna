@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import threading
 from typing import List, Optional
 
-from PySide6.QtCore import QObject, QTimer, Qt, Signal
+from PySide6.QtCore import QObject, Qt, Signal
 from qfluentwidgets import FluentIcon, PasswordLineEdit, SwitchButton
 from qfluentwidgets.components.widgets.switch_button import IndicatorPosition
 
@@ -21,7 +20,14 @@ from backend.tools.generate_models import (
     uninstall_model,
 )
 from backend.tools.hf_auth import clear_hf_token, has_hf_token, save_hf_token
+from backend.tools.model_download_registry import KIND_GENERATE
 from ui.component.cards.midgard_card import MidgardSettingCard
+from ui.component.cards.model_install_helpers import (
+    enqueue_model_job,
+    install_button_text,
+    job_state,
+    register_queue_listener,
+)
 from ui.component.controls.button_styles import make_button
 from ui.component.utils.confirm_dialog import ask_confirm
 from ui.theme import CARD
@@ -91,9 +97,11 @@ class GenerateModelCard(MidgardSettingCard):
     def set_controls_enabled(self, enabled: bool):
         self._busy = not enabled
         installed = is_model_installed(self.info.mode)
-        self.installButton.setEnabled(enabled and not installed)
-        self.uninstallButton.setEnabled(enabled and installed)
-        self.switchButton.setEnabled(enabled and installed)
+        key = self.info.mode.value
+        queued = job_state(KIND_GENERATE, key) is not None
+        self.installButton.setEnabled(enabled and not installed and not queued)
+        self.uninstallButton.setEnabled(enabled and installed and not queued)
+        self.switchButton.setEnabled(enabled and installed and not queued)
 
     def refresh(self):
         gen = tr["Generate"]
@@ -212,8 +220,8 @@ class GenerateModelManager(QObject):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._installing = False
         self._processing = False
+        self._was_busy = False
         self.cards: List[GenerateModelCard] = []
         self.token_card = HfTokenCard(parent)
         self.token_card.status_message.connect(self.status_message.emit)
@@ -225,11 +233,12 @@ class GenerateModelManager(QObject):
             card.enabled_changed.connect(self.models_changed.emit)
             self.cards.append(card)
 
+        register_queue_listener(self._on_queue_changed)
         self.refresh()
 
     @property
     def is_busy(self) -> bool:
-        return self._installing
+        return self._has_queue_activity()
 
     def set_processing(self, processing: bool):
         self._processing = processing
@@ -241,79 +250,98 @@ class GenerateModelManager(QObject):
         self._apply_lock()
         self.models_changed.emit()
 
+    def _has_queue_activity(self) -> bool:
+        for card in self.cards:
+            if job_state(KIND_GENERATE, card.info.mode.value):
+                return True
+        return False
+
+    def _on_queue_changed(self):
+        busy = self._has_queue_activity()
+        if busy != self._was_busy:
+            self._was_busy = busy
+            self.busy_changed.emit(busy)
+        self._apply_lock()
+
     def _apply_lock(self):
         gen = tr["Generate"]
         br = tr["BgRemove"]
-        locked = self._installing or self._processing
+        set_tr = tr["Setting"]
+        locked = self._has_queue_activity() or self._processing
+        queued_fmt = set_tr.get("ActionQueued", "Queued ({})")
         for card in self.cards:
             card.set_controls_enabled(not locked)
-            if self._installing and card.installButton.isVisible():
+            key = card.info.mode.value
+            state = job_state(KIND_GENERATE, key)
+            if card.installButton.isVisible():
                 card.installButton.setText(
-                    gen.get("ActionInstalling", br["ActionInstalling"])
-                )
-            elif card.installButton.isVisible():
-                card.installButton.setText(
-                    gen.get("ActionInstall", br["ActionInstall"])
-                )
-            if self._installing and card.uninstallButton.isVisible():
-                card.uninstallButton.setText(
-                    gen.get(
-                        "ActionUninstalling",
-                        br.get("ActionUninstalling", "Removing…"),
+                    install_button_text(
+                        kind=KIND_GENERATE,
+                        key=key,
+                        installing_text=gen.get("ActionInstalling", br["ActionInstalling"]),
+                        queued_text=queued_fmt,
+                        install_text=gen.get("ActionInstall", br["ActionInstall"]),
                     )
                 )
-            elif card.uninstallButton.isVisible():
-                card.uninstallButton.setText(
-                    gen.get(
-                        "ActionUninstall",
-                        br.get("ActionUninstall", "Uninstall"),
+                if state:
+                    card.installButton.setEnabled(False)
+            if card.uninstallButton.isVisible():
+                if state == "active":
+                    card.uninstallButton.setText(
+                        gen.get(
+                            "ActionUninstalling",
+                            br.get("ActionUninstalling", "Removing…"),
+                        )
                     )
-                )
+                    card.uninstallButton.setEnabled(False)
+                elif state == "queued":
+                    card.uninstallButton.setText(queued_fmt.format(0))
+                    card.uninstallButton.setEnabled(False)
+                else:
+                    card.uninstallButton.setText(
+                        gen.get(
+                            "ActionUninstall",
+                            br.get("ActionUninstall", "Uninstall"),
+                        )
+                    )
 
     def restart_install(self, mode: GenerateMode):
-        """Start over an aborted download (no resume)."""
         if is_model_installed(mode):
-            from backend.tools.model_download_registry import (
-                KIND_GENERATE,
-                ModelDownloadRegistry,
-            )
+            from backend.tools.model_download_registry import ModelDownloadRegistry
 
             ModelDownloadRegistry.instance().complete(KIND_GENERATE, mode.value)
             self.refresh()
             return
-        if self._installing or self._processing:
-            QTimer.singleShot(1500, lambda m=mode: self.restart_install(m))
+        if job_state(KIND_GENERATE, mode.value):
             return
         self._start_install(mode)
 
     def _start_install(self, mode: GenerateMode):
-        if self._installing or self._processing:
+        if self._processing or job_state(KIND_GENERATE, mode.value):
             return
-        self._installing = True
-        self._apply_lock()
-        self.busy_changed.emit(True)
+        if is_model_installed(mode):
+            return
 
         def work():
-            err = None
-            try:
-                install_model(mode)
-            except Exception as e:
-                err = e
-            QTimer.singleShot(0, lambda: self._finish_install(mode, err))
+            install_model(mode)
 
-        threading.Thread(target=work, daemon=True).start()
+        enqueue_model_job(
+            KIND_GENERATE,
+            mode.value,
+            work,
+            lambda err: self._finish_install(mode, err),
+        )
+        self._on_queue_changed()
 
     def _finish_install(self, mode: GenerateMode, err: Optional[BaseException]):
         from backend.tools.model_download_registry import DownloadCancelled
 
-        self._installing = False
         if err is None:
             set_model_enabled(mode, True)
             from backend.config import config
 
             config.set(config.generateMode, mode)
         self.refresh()
-        self.busy_changed.emit(False)
         if isinstance(err, DownloadCancelled):
             return
         gen = tr["Generate"]
@@ -329,7 +357,7 @@ class GenerateModelManager(QObject):
             )
 
     def _start_uninstall(self, mode: GenerateMode):
-        if self._installing or self._processing:
+        if self._processing or job_state(KIND_GENERATE, mode.value):
             return
         gen = tr["Generate"]
         br = tr["BgRemove"]
@@ -350,24 +378,20 @@ class GenerateModelManager(QObject):
             parent,
         ):
             return
-        self._installing = True
-        self._apply_lock()
-        self.busy_changed.emit(True)
 
         def work():
-            err = None
-            try:
-                uninstall_model(mode)
-            except Exception as e:
-                err = e
-            QTimer.singleShot(0, lambda: self._finish_uninstall(mode, err))
+            uninstall_model(mode)
 
-        threading.Thread(target=work, daemon=True).start()
+        enqueue_model_job(
+            KIND_GENERATE,
+            mode.value,
+            work,
+            lambda err: self._finish_uninstall(mode, err),
+        )
+        self._on_queue_changed()
 
     def _finish_uninstall(self, mode: GenerateMode, err: Optional[BaseException]):
-        self._installing = False
         self.refresh()
-        self.busy_changed.emit(False)
         gen = tr["Generate"]
         br = tr["BgRemove"]
         name = tr["GenerateMode"].get(mode.name, mode.value)

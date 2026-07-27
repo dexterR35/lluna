@@ -90,6 +90,15 @@ class ModelDownloadRegistry:
         except OSError:
             pass
 
+    def schedule(self, kind: str, key: str) -> None:
+        """Persist a future download without marking it active (first-run seeding)."""
+        item = (kind, str(key))
+        with self._lock:
+            pending = self._load_pending_unlocked()
+            if item not in pending:
+                pending.append(item)
+                self._save_pending_unlocked(pending)
+
     def begin(self, kind: str, key: str) -> None:
         """Mark download started; persist so reopen can start over after abort."""
         item = (kind, str(key))

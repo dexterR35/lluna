@@ -8,6 +8,7 @@ from qfluentwidgets import (
     MessageBox,
     SubtitleLabel,
     InfoBar,
+    CaptionLabel,
 )
 from backend.config import config, tr, VERSION, PROJECT_HOME_URL, PROJECT_ISSUES_URL, PROJECT_RELEASES_URL
 from backend.tools.config_section_reset import reset_section
@@ -19,6 +20,12 @@ from ui.component.cards.enhance_model_manager import EnhanceModelManager
 from ui.component.cards.low_light_model_manager import LowLightModelManager
 from ui.component.cards.generate_model_manager import GenerateModelManager
 from ui.component.cards.select_object_model_manager import SelectObjectModelManager
+from ui.component.cards.model_install_helpers import (
+    model_download_queue,
+    register_queue_listener,
+)
+from backend.tools.first_run_downloads import pending_label
+from backend.tools.model_download_registry import ModelDownloadRegistry, PendingDownload
 from ui.component.cards.midgard_setting_cards import (
     MidgardCardGroup,
     MidgardHyperlinkCard,
@@ -134,6 +141,12 @@ class AdvancedSettingInterface(ScrollArea):
     def setup_ui(self):
         self.page_title = SubtitleLabel(tr["SubtitleExtractorGUI"]["Setting"], self.contentColumn)
         self.expandLayout.addWidget(self.page_title)
+
+        self.model_download_banner = CaptionLabel("", self.contentColumn)
+        self.model_download_banner.setWordWrap(True)
+        self.model_download_banner.hide()
+        self.expandLayout.addWidget(self.model_download_banner)
+        register_queue_listener(self._refresh_model_download_banner)
 
         self.subtitle_detection_group = MidgardCardGroup(
             tr["Setting"]["SubtitleDetectionSetting"],
@@ -508,6 +521,35 @@ class AdvancedSettingInterface(ScrollArea):
                 duration=config.infoBarDurationMs,
                 parent=self,
             )
+
+    def _refresh_model_download_banner(self) -> None:
+        st = tr["Setting"]
+        queue = model_download_queue()
+        pending = ModelDownloadRegistry.instance().list_pending()
+        current = queue.current_job()
+
+        if not queue.is_busy() and not pending:
+            self.model_download_banner.hide()
+            return
+
+        if current:
+            kind, key = current
+            name = pending_label(PendingDownload(kind, key))
+            n = max(len(pending), 1)
+            self.model_download_banner.setText(
+                st.get(
+                    "ModelDownloadBannerActive",
+                    "Downloading: {} ({} in queue, one at a time)",
+                ).format(name, n)
+            )
+        else:
+            self.model_download_banner.setText(
+                st.get(
+                    "ModelDownloadBannerPending",
+                    "{} model(s) queued — downloads start one at a time.",
+                ).format(len(pending))
+            )
+        self.model_download_banner.show()
 
     def _on_select_object_model_status(self, message: str):
         InfoBar.info(

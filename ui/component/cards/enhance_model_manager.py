@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import threading
 from typing import List, Optional
 
-from PySide6.QtCore import QObject, QTimer, Qt, Signal
+from PySide6.QtCore import QObject, Qt, Signal
 from qfluentwidgets import FluentIcon, SwitchButton
 from qfluentwidgets.components.widgets.switch_button import IndicatorPosition
 
@@ -20,7 +19,14 @@ from backend.tools.enhance_models import (
     set_model_enabled,
     uninstall_model,
 )
+from backend.tools.model_download_registry import KIND_ENHANCE
 from ui.component.cards.midgard_card import MidgardSettingCard
+from ui.component.cards.model_install_helpers import (
+    enqueue_model_job,
+    install_button_text,
+    job_state,
+    register_queue_listener,
+)
 from ui.component.controls.button_styles import make_button
 from ui.component.utils.confirm_dialog import ask_confirm
 from ui.theme import CARD
@@ -84,9 +90,11 @@ class EnhanceModelCard(MidgardSettingCard):
     def set_controls_enabled(self, enabled: bool):
         self._busy = not enabled
         installed = is_model_installed(self.info.mode)
-        self.installButton.setEnabled(enabled and not installed)
-        self.uninstallButton.setEnabled(enabled and installed)
-        self.switchButton.setEnabled(enabled and installed)
+        key = self.info.mode.value
+        queued = job_state(KIND_ENHANCE, key) is not None
+        self.installButton.setEnabled(enabled and not installed and not queued)
+        self.uninstallButton.setEnabled(enabled and installed and not queued)
+        self.switchButton.setEnabled(enabled and installed and not queued)
 
     def refresh(self):
         up = tr["Upscale"]
@@ -123,8 +131,8 @@ class EnhanceModelManager(QObject):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._installing = False
         self._processing = False
+        self._was_busy = False
         self.cards: List[EnhanceModelCard] = []
 
         for info in MODEL_CATALOG:
@@ -134,11 +142,12 @@ class EnhanceModelManager(QObject):
             card.enabled_changed.connect(self.models_changed.emit)
             self.cards.append(card)
 
+        register_queue_listener(self._on_queue_changed)
         self.refresh()
 
     @property
     def is_busy(self) -> bool:
-        return self._installing
+        return self._has_queue_activity()
 
     def set_processing(self, processing: bool):
         self._processing = processing
@@ -150,63 +159,87 @@ class EnhanceModelManager(QObject):
         self._apply_lock()
         self.models_changed.emit()
 
+    def _has_queue_activity(self) -> bool:
+        for card in self.cards:
+            if job_state(KIND_ENHANCE, card.info.mode.value):
+                return True
+        return False
+
+    def _on_queue_changed(self):
+        busy = self._has_queue_activity()
+        if busy != self._was_busy:
+            self._was_busy = busy
+            self.busy_changed.emit(busy)
+        self._apply_lock()
+
     def _apply_lock(self):
         up = tr["Upscale"]
-        locked = self._installing or self._processing
+        set_tr = tr["Setting"]
+        locked = self._has_queue_activity() or self._processing
+        queued_fmt = set_tr.get("ActionQueued", "Queued ({})")
         for card in self.cards:
             card.set_controls_enabled(not locked)
-            if self._installing and card.installButton.isVisible():
-                card.installButton.setText(up["ActionInstalling"])
-            elif card.installButton.isVisible():
-                card.installButton.setText(up["ActionInstall"])
-            if self._installing and card.uninstallButton.isVisible():
-                card.uninstallButton.setText(
-                    up.get("ActionUninstalling", "Removing…")
+            key = card.info.mode.value
+            state = job_state(KIND_ENHANCE, key)
+            if card.installButton.isVisible():
+                card.installButton.setText(
+                    install_button_text(
+                        kind=KIND_ENHANCE,
+                        key=key,
+                        installing_text=up["ActionInstalling"],
+                        queued_text=queued_fmt,
+                        install_text=up["ActionInstall"],
+                    )
                 )
-            elif card.uninstallButton.isVisible():
-                card.uninstallButton.setText(
-                    up.get("ActionUninstall", "Uninstall")
-                )
+                if state:
+                    card.installButton.setEnabled(False)
+            if card.uninstallButton.isVisible():
+                if state == "active":
+                    card.uninstallButton.setText(
+                        up.get("ActionUninstalling", "Removing…")
+                    )
+                    card.uninstallButton.setEnabled(False)
+                elif state == "queued":
+                    card.uninstallButton.setText(queued_fmt.format(0))
+                    card.uninstallButton.setEnabled(False)
+                else:
+                    card.uninstallButton.setText(
+                        up.get("ActionUninstall", "Uninstall")
+                    )
 
     def restart_install(self, mode: EnhanceMode):
         """Start over an aborted download (no resume)."""
         if is_model_installed(mode):
-            from backend.tools.model_download_registry import (
-                KIND_ENHANCE,
-                ModelDownloadRegistry,
-            )
+            from backend.tools.model_download_registry import ModelDownloadRegistry
 
             ModelDownloadRegistry.instance().complete(KIND_ENHANCE, mode.value)
             self.refresh()
             return
-        if self._installing or self._processing:
-            QTimer.singleShot(1500, lambda m=mode: self.restart_install(m))
+        if job_state(KIND_ENHANCE, mode.value):
             return
         self._start_install(mode)
 
     def _start_install(self, mode: EnhanceMode):
-        if self._installing or self._processing:
+        if self._processing or job_state(KIND_ENHANCE, mode.value):
             return
-        self._installing = True
-        self._apply_lock()
-        self.busy_changed.emit(True)
+        if is_model_installed(mode):
+            return
 
         def work():
-            err = None
-            try:
-                install_model(mode)
-            except Exception as e:
-                err = e
-            QTimer.singleShot(0, lambda: self._finish_install(mode, err))
+            install_model(mode)
 
-        threading.Thread(target=work, daemon=True).start()
+        enqueue_model_job(
+            KIND_ENHANCE,
+            mode.value,
+            work,
+            lambda err: self._finish_install(mode, err),
+        )
+        self._on_queue_changed()
 
     def _finish_install(self, mode: EnhanceMode, err: Optional[BaseException]):
         from backend.tools.model_download_registry import DownloadCancelled
 
-        self._installing = False
         self.refresh()
-        self.busy_changed.emit(False)
         up = tr["Upscale"]
         name = tr["EnhanceMode"].get(mode.name, mode.value)
         if isinstance(err, DownloadCancelled):
@@ -217,7 +250,7 @@ class EnhanceModelManager(QObject):
             self.status_message.emit(up["InstallDone"].format(name))
 
     def _start_uninstall(self, mode: EnhanceMode):
-        if self._installing or self._processing:
+        if self._processing or job_state(KIND_ENHANCE, mode.value):
             return
         up = tr["Upscale"]
         name = tr["EnhanceMode"].get(mode.name, mode.value)
@@ -231,24 +264,20 @@ class EnhanceModelManager(QObject):
             parent,
         ):
             return
-        self._installing = True
-        self._apply_lock()
-        self.busy_changed.emit(True)
 
         def work():
-            err = None
-            try:
-                uninstall_model(mode)
-            except Exception as e:
-                err = e
-            QTimer.singleShot(0, lambda: self._finish_uninstall(mode, err))
+            uninstall_model(mode)
 
-        threading.Thread(target=work, daemon=True).start()
+        enqueue_model_job(
+            KIND_ENHANCE,
+            mode.value,
+            work,
+            lambda err: self._finish_uninstall(mode, err),
+        )
+        self._on_queue_changed()
 
     def _finish_uninstall(self, mode: EnhanceMode, err: Optional[BaseException]):
-        self._installing = False
         self.refresh()
-        self.busy_changed.emit(False)
         up = tr["Upscale"]
         name = tr["EnhanceMode"].get(mode.name, mode.value)
         if err:

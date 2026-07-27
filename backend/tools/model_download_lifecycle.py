@@ -4,11 +4,15 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, List
 
+from backend.tools.first_run_downloads import (
+    dispatch_scheduled_downloads,
+    seed_first_run_downloads,
+)
 from backend.tools.model_download_registry import (
-    KIND_BG_REMOVE,
     KIND_ENHANCE,
     KIND_GENERATE,
     KIND_LOW_LIGHT,
+    KIND_BG_REMOVE,
     KIND_SELECT_OBJECT,
     ModelDownloadRegistry,
     PendingDownload,
@@ -34,17 +38,17 @@ def prepare_restart_pending() -> List[PendingDownload]:
 
 
 def restart_pending_downloads(settings: "AdvancedSettingInterface") -> None:
-    """After GUI opens: start over any downloads left pending from last session."""
-    pending = prepare_restart_pending()
+    """After GUI opens: enqueue pending downloads one at a time."""
+    prepare_restart_pending()
+    seed_first_run_downloads()
+    pending = ModelDownloadRegistry.instance().list_pending()
     if not pending:
         return
 
     from PySide6.QtCore import QTimer
 
-    # Defer so cards / InferClient finish constructing
-    def _kick():
-        for item in pending:
-            _restart_one(settings, item)
+    def _kick() -> None:
+        dispatch_scheduled_downloads(settings)
 
     QTimer.singleShot(800, _kick)
 
@@ -75,7 +79,6 @@ def _restart_one(settings: "AdvancedSettingInterface", item: PendingDownload) ->
                 SelectObjectPairId(key)
             )
     except Exception:
-        # Drop bad pending entry so we don't loop forever
         ModelDownloadRegistry.instance().fail(kind, key, keep_pending=False)
 
 
@@ -83,7 +86,6 @@ def cli_stop_and_revert_downloads() -> None:
     """install.py / CLI: stop GUI downloads, wipe partials, clear pending list."""
     reg = ModelDownloadRegistry.instance()
     reg.abort_all_and_revert()
-    # CLI owns installs now — do not auto-restart these in the GUI
     with reg._lock:
         reg._save_pending_unlocked([])
     reg.clear_cancel()
