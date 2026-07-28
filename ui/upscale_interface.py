@@ -732,6 +732,9 @@ class UpscaleInterface(ContentPage):
             "hardware_acceleration": bool(config.hardwareAcceleration.value),
             "preset": self._preset.value,
             "effective_settings": effective_settings or {},
+            # A multi-file queue must not retain this image's model/VRAM while
+            # the next image begins.
+            "release_after_job": True,
         }
 
         client = InferClient.instance()

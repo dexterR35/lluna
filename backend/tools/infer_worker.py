@@ -12,6 +12,7 @@ from typing import Any, Dict, Optional
 from backend.tools.cuda_hygiene import empty_cuda_cache, ensure_expandable_segments
 from backend.tools.infer_protocol import (
     CmdMsg,
+    EvtMsg,
     JobType,
     error,
     log,
@@ -27,6 +28,35 @@ def _emit(evt_queue, msg) -> None:
         evt_queue.put(msg)
     except Exception:
         pass
+
+
+class _DeferredTerminalQueue:
+    """Forward live events, but hold RESULT/ERROR until worker cleanup finishes."""
+
+    _TERMINAL_EVENTS = {EvtMsg.RESULT.value, EvtMsg.ERROR.value}
+
+    def __init__(self, target_queue) -> None:
+        self._target_queue = target_queue
+        self._terminal_msg = None
+
+    def put(self, msg) -> None:
+        try:
+            kind = msg[0]
+        except (IndexError, TypeError):
+            self._target_queue.put(msg)
+            return
+        if kind in self._TERMINAL_EVENTS:
+            # A job must have exactly one terminal outcome. Keep the first one
+            # so a later cleanup/secondary error cannot replace the real cause.
+            if self._terminal_msg is None:
+                self._terminal_msg = msg
+            return
+        self._target_queue.put(msg)
+
+    def flush_terminal(self) -> None:
+        if self._terminal_msg is not None:
+            _emit(self._target_queue, self._terminal_msg)
+            self._terminal_msg = None
 
 
 def _release_all_except(keep: Optional[str] = None) -> None:
@@ -132,33 +162,79 @@ def infer_worker_main(cmd_queue, evt_queue, hardware_accel: bool = True) -> None
     def run_job(run_id: int, job_type: str, payload: Dict[str, Any]) -> None:
         nonlocal busy, active_run_id, last_activity
         last_activity = time.monotonic()
+        job_evt_queue = _DeferredTerminalQueue(evt_queue)
+        release_after_job = bool(payload.get("release_after_job", False))
         try:
             _release_all_except(keep=job_type)
             if job_type == JobType.ENHANCE.value:
-                _job_enhance(run_id, payload, cancel_event, on_progress, heartbeat_log, evt_queue)
+                _job_enhance(
+                    run_id,
+                    payload,
+                    cancel_event,
+                    on_progress,
+                    heartbeat_log,
+                    job_evt_queue,
+                )
             elif job_type == JobType.LOW_LIGHT.value:
-                _job_low_light(run_id, payload, cancel_event, on_progress, heartbeat_log, evt_queue)
+                _job_low_light(
+                    run_id,
+                    payload,
+                    cancel_event,
+                    on_progress,
+                    heartbeat_log,
+                    job_evt_queue,
+                )
             elif job_type == JobType.GENERATE.value:
-                _job_generate(run_id, payload, cancel_event, on_progress, heartbeat_log, evt_queue)
+                _job_generate(
+                    run_id,
+                    payload,
+                    cancel_event,
+                    on_progress,
+                    heartbeat_log,
+                    job_evt_queue,
+                )
             elif job_type == JobType.BG_REMOVE.value:
-                _job_bg_remove(run_id, payload, on_progress, heartbeat_log, evt_queue)
+                _job_bg_remove(
+                    run_id, payload, on_progress, heartbeat_log, job_evt_queue
+                )
             elif job_type == JobType.LAMA_RETOUCH.value:
-                _job_lama_retouch(run_id, payload, on_progress, heartbeat_log, evt_queue)
+                _job_lama_retouch(
+                    run_id, payload, on_progress, heartbeat_log, job_evt_queue
+                )
             elif job_type == JobType.SELECT_SUBJECT.value:
-                _job_select_subject(run_id, payload, on_progress, heartbeat_log, evt_queue)
+                _job_select_subject(
+                    run_id, payload, on_progress, heartbeat_log, job_evt_queue
+                )
             elif job_type == JobType.SUBTITLE.value:
-                _job_subtitle(run_id, payload, cancel_event, on_progress, heartbeat_log, evt_queue)
+                _job_subtitle(
+                    run_id,
+                    payload,
+                    cancel_event,
+                    on_progress,
+                    heartbeat_log,
+                    job_evt_queue,
+                )
             else:
-                _emit(evt_queue, error(run_id, f"Unknown job_type: {job_type}"))
+                _emit(
+                    job_evt_queue,
+                    error(run_id, f"Unknown job_type: {job_type}"),
+                )
         except Exception as e:
             traceback.print_exc()
-            _emit(evt_queue, error(run_id, str(e)))
+            _emit(job_evt_queue, error(run_id, str(e)))
         finally:
+            if release_after_job:
+                _emit(job_evt_queue, log(run_id, "Releasing model and GPU memory..."))
+                _release_all_except(keep=None)
+            else:
+                empty_cuda_cache()
             with state_lock:
                 busy = False
                 active_run_id = None
             last_activity = time.monotonic()
-            empty_cuda_cache()
+            # RESULT/ERROR is deliberately last. The parent may enqueue the
+            # next image as soon as it receives this terminal event.
+            job_evt_queue.flush_terminal()
 
     while not stop:
         # Models stay warm while idle - parent Reset recycles the worker for RAM.

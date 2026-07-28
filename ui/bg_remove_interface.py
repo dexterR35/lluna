@@ -1029,6 +1029,8 @@ class BgRemoveInterface(ContentPage):
             "output_path": preview_path,
             "mode": mode_value,
             "hardware_acceleration": bool(config.hardwareAcceleration.value),
+            # Keep queued images isolated: unload this run before the next one.
+            "release_after_job": True,
         }
         if protect_mask_path:
             payload["protect_mask_path"] = protect_mask_path

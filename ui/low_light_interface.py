@@ -607,6 +607,9 @@ class LowLightInterface(ContentPage):
             "output_path": preview_path,
             "mode": mode_value,
             "hardware_acceleration": bool(config.hardwareAcceleration.value),
+            # Make the terminal callback a model/VRAM-release barrier before
+            # this queue submits its next image.
+            "release_after_job": True,
         }
 
         client = InferClient.instance()
