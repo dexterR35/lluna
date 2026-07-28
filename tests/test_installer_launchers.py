@@ -62,6 +62,17 @@ def test_launchers_resolve_the_repository_and_preserve_arguments() -> None:
 
 
 @pytest.mark.installer
+def test_windows_installer_verifies_candidates_and_supports_uv_python() -> None:
+    batch = Path("install.bat").read_text(encoding="utf-8")
+    assert 'set "PYTHONUTF8=1"' in batch
+    assert "sys.version_info[:2] == (3, 12)" in batch
+    assert "py -0" in batch
+    assert "py %MIDGARD_PY_TAG% install.py %*" in batch
+    assert "uv python find 3.12" in batch
+    assert '"%MIDGARD_UV_PYTHON%" install.py %*' in batch
+
+
+@pytest.mark.installer
 def test_shell_launchers_have_valid_syntax() -> None:
     subprocess.run(["bash", "-n", "install.sh", "run_gui.sh"], check=True)
 
