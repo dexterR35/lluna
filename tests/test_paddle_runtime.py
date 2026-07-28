@@ -38,6 +38,31 @@ def test_gpu_paddle_wheel_is_detected_without_runtime_import(monkeypatch) -> Non
     assert "paddle" not in sys.modules
 
 
+def test_onnx_probe_rejects_unsupported_and_unloadable_providers(monkeypatch) -> None:
+    fake_ort = type(
+        "FakeOrt",
+        (),
+        {
+            "__file__": None,
+            "get_available_providers": staticmethod(
+                lambda: [
+                    "TensorrtExecutionProvider",
+                    "CUDAExecutionProvider",
+                    "CPUExecutionProvider",
+                ]
+            ),
+        },
+    )
+    monkeypatch.setitem(sys.modules, "onnxruntime", fake_ort)
+    monkeypatch.setattr(providers, "_cuda_provider_library_ready", lambda ort: False)
+
+    capabilities, warnings = providers.detect_framework_capabilities()
+
+    assert capabilities.onnx_providers == ("CPUExecutionProvider",)
+    assert any("TensorrtExecutionProvider" in item for item in warnings)
+    assert any("CUDA/cuDNN" in item for item in warnings)
+
+
 def test_paddle_background_dump_threads_are_forced_off(monkeypatch) -> None:
     monkeypatch.setenv("FLAGS_bvar_dump", "true")
     monkeypatch.setenv("FLAGS_mbvar_dump", "true")

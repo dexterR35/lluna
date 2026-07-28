@@ -91,3 +91,37 @@ def test_background_remove_job_applies_saved_keep_mask(
     assert result[2, 3, 3] == 255
     assert np.all(result[2, 3, :3] == (33, 66, 99))
     assert result[0, 0, 3] == 0
+
+
+def test_background_remover_retries_cpu_when_accelerated_session_fails(
+    monkeypatch,
+) -> None:
+    calls = []
+
+    class FakeInner:
+        @staticmethod
+        def get_providers():
+            return ["CPUExecutionProvider"]
+
+    def new_session(*args, **kwargs):
+        providers = kwargs["providers"]
+        calls.append(providers)
+        if providers != ["CPUExecutionProvider"]:
+            raise RuntimeError("CUDA provider DLL is unavailable")
+        return types.SimpleNamespace(inner_session=FakeInner())
+
+    fake_rembg = types.ModuleType("rembg")
+    fake_rembg.new_session = new_session
+    monkeypatch.setitem(sys.modules, "rembg", fake_rembg)
+
+    remover = BackgroundRemover(
+        BgRemoveMode.BIREFNET,
+        providers=["CUDAExecutionProvider", "CPUExecutionProvider"],
+    )
+    remover._ensure_session()
+
+    assert calls == [
+        ["CUDAExecutionProvider", "CPUExecutionProvider"],
+        ["CPUExecutionProvider"],
+    ]
+    assert remover.device_label == "CPU"

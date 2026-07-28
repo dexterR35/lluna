@@ -584,6 +584,21 @@ def pip_install(py: Path, args: list[str]) -> None:
     run([str(py), "-m", "pip", "install", *args])
 
 
+def pip_uninstall(py: Path, packages: list[str]) -> None:
+    run([str(py), "-m", "pip", "uninstall", "--yes", *packages])
+
+
+def onnxruntime_gpu_install_args(torch_tag: str) -> list[str]:
+    """Select an ORT wheel built for the same CUDA major as PyTorch."""
+    if torch_tag == "cu118":
+        return [
+            "onnxruntime-gpu==1.20.1",
+            "--index-url",
+            ORT_CUDA11_INDEX,
+        ]
+    return ["onnxruntime-gpu==1.22.0"]
+
+
 def prepare_pip(py: Path) -> None:
     """Upgrade installer tooling once, not before every dependency group."""
     run(
@@ -602,6 +617,13 @@ def prepare_pip(py: Path) -> None:
 
 def install_packages(py: Path, mode: str, torch_tag: str) -> None:
     prepare_pip(py)
+    # These distributions expose the same ``onnxruntime`` import and must not
+    # coexist. Removing all variants also repairs environments that drifted to
+    # an incompatible CUDA-major wheel.
+    pip_uninstall(
+        py,
+        ["onnxruntime", "onnxruntime-gpu", "onnxruntime-directml"],
+    )
     if mode == "cuda":
         log(f"\n{_NO_CUDA_TOOLKIT_NOTE}")
         if torch_tag not in TORCH_INDEX or torch_tag == "cpu":
@@ -637,21 +659,10 @@ def install_packages(py: Path, mode: str, torch_tag: str) -> None:
                 TORCH_INDEX[torch_tag],
             ],
         )
-        if platform.system() == "Linux":
-            if torch_tag == "cu118":
-                pip_install(
-                    py,
-                    [
-                        "onnxruntime-gpu==1.20.1",
-                        "--index-url",
-                        ORT_CUDA11_INDEX,
-                    ],
-                )
-            else:
-                pip_install(py, ["onnxruntime-gpu==1.22.0"])
-        elif platform.system() == "Windows":
-            # rembg needs ORT; prefer GPU build when CUDA mode is selected
-            pip_install(py, ["onnxruntime-gpu==1.22.0"])
+        if platform.system() in {"Linux", "Windows"}:
+            # CUDA 11.8 builds live on Microsoft's dedicated feed; CUDA 12
+            # builds use the normal PyPI package.
+            pip_install(py, onnxruntime_gpu_install_args(torch_tag))
     elif mode == "directml":
         if platform.system() != "Windows":
             raise SystemExit("DirectML installation is supported only on Windows.")

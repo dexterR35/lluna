@@ -5,6 +5,20 @@ import torch
 
 logger = logging.getLogger(__name__)
 
+_SUPPORTED_ONNX_ACCELERATORS = frozenset(
+    {
+        "DmlExecutionProvider",
+        "ROCMExecutionProvider",
+        "MIGraphXExecutionProvider",
+        "VitisAIExecutionProvider",
+        "OpenVINOExecutionProvider",
+        "MetalExecutionProvider",
+        "CoreMLExecutionProvider",
+        "CUDAExecutionProvider",
+    }
+)
+
+
 class HardwareAccelerator:
 
     # Class variable holding the singleton instance
@@ -37,7 +51,7 @@ class HardwareAccelerator:
         self.__onnx_providers = [
             provider
             for provider in profile.capabilities.onnx_providers
-            if provider != "CPUExecutionProvider"
+            if provider in _SUPPORTED_ONNX_ACCELERATORS
         ]
 
     def check_directml_available(self):
@@ -58,16 +72,7 @@ class HardwareAccelerator:
                     "CPUExecutionProvider"
                 ]:
                     continue
-                if provider not in [
-                    "DmlExecutionProvider",         # DirectML, for Windows GPU
-                    "ROCMExecutionProvider",        # AMD ROCm
-                    "MIGraphXExecutionProvider",    # AMD MIGraphX
-                    "VitisAIExecutionProvider",     # AMD VitisAI, for RyzenAI & Windows; performance similar to DirectML in practice
-                    "OpenVINOExecutionProvider",    # Intel GPU
-                    "MetalExecutionProvider",       # Apple macOS
-                    "CoreMLExecutionProvider",      # Apple macOS
-                    "CUDAExecutionProvider",        # Nvidia GPU
-                ]:
+                if provider not in _SUPPORTED_ONNX_ACCELERATORS:
                     logger.info("Unsupported ONNX provider skipped: %s", provider)
                     continue
                 logger.info("ONNX execution provider detected: %s", provider)
@@ -113,12 +118,10 @@ class HardwareAccelerator:
         if not self.__enabled:
             return ["CPUExecutionProvider"]
         providers = []
-        # Prefer CUDA when both Torch and ORT report it (rembg / OCR)
-        try:
-            import onnxruntime as ort
-            available = set(ort.get_available_providers())
-        except ModuleNotFoundError:
-            return ["CPUExecutionProvider"]
+        # Initialization already filters ORT's compiled-in provider list by
+        # native-library readiness. Do not re-read get_available_providers()
+        # here: it can advertise CUDA/TensorRT even when their DLLs cannot load.
+        available = set(self.__onnx_providers)
 
         preferred = [
             "CUDAExecutionProvider",
@@ -143,7 +146,11 @@ class HardwareAccelerator:
 
         # Any other detected accelerators from initialize()
         for name in self.__onnx_providers:
-            if name not in providers and name in available:
+            if (
+                name in _SUPPORTED_ONNX_ACCELERATORS
+                and name not in providers
+                and name in available
+            ):
                 providers.append(name)
 
         if "CPUExecutionProvider" not in providers:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import Callable, List, Optional, Union
 
@@ -10,6 +11,8 @@ from PIL import Image, ImageOps
 
 from backend.tools.constant import BgRemoveMode
 from backend.tools.hardware_accelerator import HardwareAccelerator
+
+logger = logging.getLogger(__name__)
 
 # 0 = keep original resolution (no downsample). Set >0 only as an optional safety cap.
 MAX_LONG_EDGE = 0
@@ -62,7 +65,17 @@ class BackgroundRemover:
             ) from e
 
         providers = self._resolve_providers()
-        self._session = new_session(self.mode.value, providers=providers)
+        try:
+            self._session = new_session(self.mode.value, providers=providers)
+        except Exception:
+            if providers == ["CPUExecutionProvider"]:
+                raise
+            logger.warning(
+                "Accelerated Remove BG session failed; retrying with CPU",
+                exc_info=True,
+            )
+            providers = ["CPUExecutionProvider"]
+            self._session = new_session(self.mode.value, providers=providers)
         try:
             self._active_providers = list(self._session.inner_session.get_providers())
         except Exception:

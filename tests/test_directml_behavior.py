@@ -40,3 +40,24 @@ def test_cuda_fallback_after_directml_failure(monkeypatch) -> None:
     )
     monkeypatch.setitem(sys.modules, "torch_directml", fake)
     assert _accelerator(dml=True, cuda=True).device == torch.device("cuda:0")
+
+
+def test_tensorrt_is_never_forwarded_to_onnx_sessions(monkeypatch) -> None:
+    fake_ort = types.SimpleNamespace(
+        get_available_providers=lambda: [
+            "TensorrtExecutionProvider",
+            "CUDAExecutionProvider",
+            "CPUExecutionProvider",
+        ]
+    )
+    monkeypatch.setitem(sys.modules, "onnxruntime", fake_ort)
+    accelerator = _accelerator(dml=False, cuda=True)
+    accelerator._HardwareAccelerator__onnx_providers = [
+        "TensorrtExecutionProvider",
+        "CUDAExecutionProvider",
+    ]
+
+    assert accelerator.get_onnx_execution_providers() == [
+        "CUDAExecutionProvider",
+        "CPUExecutionProvider",
+    ]

@@ -24,6 +24,20 @@ def test_explicit_directml_and_mps_modes() -> None:
     assert install.choose_mode(cuda, "mps", True) == ("mps", "")
 
 
+def test_onnxruntime_gpu_package_matches_torch_cuda_major() -> None:
+    assert install.onnxruntime_gpu_install_args("cu118") == [
+        "onnxruntime-gpu==1.20.1",
+        "--index-url",
+        install.ORT_CUDA11_INDEX,
+    ]
+    assert install.onnxruntime_gpu_install_args("cu126") == [
+        "onnxruntime-gpu==1.22.0"
+    ]
+    assert install.onnxruntime_gpu_install_args("cu128") == [
+        "onnxruntime-gpu==1.22.0"
+    ]
+
+
 @pytest.mark.installer
 def test_launchers_resolve_the_repository_and_preserve_arguments() -> None:
     shell = Path("run_gui.sh").read_text(encoding="utf-8")
