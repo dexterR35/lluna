@@ -288,6 +288,9 @@ class BgProtectDialog(QDialog):
         self.canvas.set_image(rgba)
         if mask is not None:
             self.canvas.set_mask(mask)
+        # This editor is keep-only: green overlay means these pixels must remain
+        # opaque after background removal, whether painted or AI-selected.
+        self.canvas.set_active_layer_protect(True, record_history=False)
         self.canvas.set_tool(RetouchTool.MASK)
         # Small images: prefer ~100% instead of stretching Fit across a huge pane
         iw, ih = rgba.size
@@ -321,7 +324,7 @@ class BgProtectDialog(QDialog):
         self.btn_done.setEnabled(not busy)
         for btn in self._tool_buttons.values():
             btn.setEnabled(not busy)
-        self.btn_clear.setEnabled(not busy and self.canvas.has_painted_mask())
+        self.btn_clear.setEnabled(not busy and self.canvas.has_active_mask())
         self.btn_undo.setEnabled(not busy and self.canvas.can_undo())
         self.btn_redo.setEnabled(not busy and self.canvas.can_redo())
 
@@ -381,7 +384,7 @@ class BgProtectDialog(QDialog):
         self.btn_redo.setEnabled(self.canvas.can_redo())
 
     def _refresh_clear_button(self):
-        self.btn_clear.setEnabled(self.canvas.has_painted_mask())
+        self.btn_clear.setEnabled(self.canvas.has_active_mask())
 
     def _alert(self, title: str, content: str):
         box = MessageBox(title, content, self)
@@ -391,7 +394,9 @@ class BgProtectDialog(QDialog):
         box.exec()
 
     def _on_done(self):
-        mask = self.canvas.get_mask()
+        # A protect-only layer intentionally subtracts from a retouch composite,
+        # so export the keep layer itself rather than a fill-minus-protect mask.
+        mask = self.canvas.get_protect_mask()
         empty = mask is None or not np.any(mask)
         if empty:
             if self._had_initial_mask:

@@ -883,7 +883,7 @@ class BgRemoveInterface(ContentPage):
                     name = Path(task_item.path).name
                     protect_path = (
                         task_item.protect_mask_path
-                        if protect_mode and _task_has_protect_mask(task_item)
+                        if _task_has_protect_mask(task_item)
                         else None
                     )
                     diag.run(f"processing  {name}  model={mode_value}")

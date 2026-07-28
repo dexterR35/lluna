@@ -314,12 +314,13 @@ class RetouchCanvas(QWidget):
         self.layers_changed.emit()
         self.image_changed.emit()
 
-    def set_active_layer_protect(self, protect: bool):
+    def set_active_layer_protect(self, protect: bool, *, record_history: bool = True):
         if self._mask_stack is None:
             return
         if self._mask_stack.active.protect == bool(protect):
             return
-        self._push_undo()
+        if record_history:
+            self._push_undo()
         self._mask_stack.set_active_protect(protect)
         self._refresh_display(immediate=True)
         self.layers_changed.emit()

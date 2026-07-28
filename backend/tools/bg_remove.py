@@ -201,19 +201,22 @@ def merge_protect_into_mask(
 
     BiRefNet has no protect input — we union the keep-mask into the model
     mask so protected pixels stay opaque when alpha is applied to the photo.
-    Soft brush edges use per-pixel max (model vs protect).
+    Any deliberately marked keep pixel is forced fully opaque. This makes the
+    protect contract deterministic even when the editor brush has soft edges.
     """
     base = model_mask.convert("L")
     w, h = base.size
     keep = _load_mask_l(protect, (w, h))
     model_a = np.asarray(base, dtype=np.uint8)
     keep_a = np.asarray(keep, dtype=np.uint8)
-    if not np.any(keep_a):
+    keep_binary = keep_a > 0
+    if not np.any(keep_binary):
         return base
-    merged = np.maximum(model_a, keep_a)
+    merged = model_a.copy()
+    merged[keep_binary] = 255
     if log is not None:
-        pixels = int(np.count_nonzero(keep_a > 0))
-        forced = int(np.count_nonzero((keep_a > model_a) & (keep_a > 0)))
+        pixels = int(np.count_nonzero(keep_binary))
+        forced = int(np.count_nonzero(keep_binary & (model_a < 255)))
         log(
             f"Protect mask: {pixels:,} px marked keep, "
             f"{forced:,} px forced opaque over model cut ({w}x{h})"
@@ -237,11 +240,10 @@ def apply_protect_mask(
     arr = np.asarray(out).copy()
     h, w = arr.shape[:2]
     keep_img = _load_mask_l(mask, (w, h))
-    strength = np.asarray(keep_img, dtype=np.float32) / 255.0
-    if not np.any(strength):
+    keep = np.asarray(keep_img, dtype=np.uint8) > 0
+    if not np.any(keep):
         return out
-
-    keep = strength > 1.0 / 255.0
+    strength = keep.astype(np.float32)
     if source is not None:
         src_pil = BackgroundRemover._to_pil_rgb(source)
         if src_pil.size != (w, h):
