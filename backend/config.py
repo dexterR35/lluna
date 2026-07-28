@@ -70,7 +70,8 @@ class Config(QConfig):
     zoomStep = 1.25
     # 0 = original image size (no downsample). Applies to all previews/dialogs.
     previewMaxSide = 0
-    retouchPreviewMaxSide = 0
+    # Retouch edits stay full-resolution; only the interactive viewport is capped.
+    retouchPreviewMaxSide = 2048
     checkerboardTile = 12
     selectionEdgeSize = 10
 

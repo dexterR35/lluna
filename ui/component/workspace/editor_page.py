@@ -9,7 +9,16 @@ from typing import Optional, Tuple, Union
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QGuiApplication
-from PySide6.QtWidgets import QDialog, QHBoxLayout, QLayout, QSizePolicy, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QDialog,
+    QFrame,
+    QHBoxLayout,
+    QLayout,
+    QScrollArea,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
+)
 
 from backend.config import config
 from ui.component.workspace.workspace_page import SectionCard
@@ -94,16 +103,30 @@ class EditorPage(QWidget):
         left.addWidget(self.preview_section, 1)
         root.addLayout(left, 1)
 
-        self.right_rail = QWidget(self)
+        self.rail_scroll = QScrollArea(self)
+        self.rail_scroll.setObjectName("WorkspaceRightRailScroll")
+        self.rail_scroll.setWidgetResizable(True)
+        self.rail_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.rail_scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        self.rail_scroll.setFixedWidth(WORKSPACE["rail_width"])
+        self.rail_scroll.setStyleSheet(
+            "QScrollArea { background: transparent; border: none; }"
+            "QScrollArea > QWidget > QWidget { background: transparent; }"
+        )
+
+        self.right_rail = QWidget()
         self.right_rail.setObjectName("WorkspaceRightRail")
-        self.right_rail.setFixedWidth(WORKSPACE["rail_width"])
+        self.right_rail.setMinimumWidth(max(160, WORKSPACE["rail_width"] - 18))
         self.right_rail.setSizePolicy(
-            QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
         )
         self.rail_layout = QVBoxLayout(self.right_rail)
         self.rail_layout.setContentsMargins(PAGE["spacing"], 0, 0, 0)
         self.rail_layout.setSpacing(WORKSPACE["rail_spacing"])
-        root.addWidget(self.right_rail, 0)
+        self.rail_scroll.setWidget(self.right_rail)
+        root.addWidget(self.rail_scroll, 0)
 
     def add_section(
         self,

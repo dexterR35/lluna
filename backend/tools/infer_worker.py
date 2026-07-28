@@ -551,7 +551,8 @@ def _job_lama_retouch(run_id, payload, on_progress, heartbeat_log, evt_queue) ->
     import numpy as np
     from PIL import Image
 
-    from backend.tools.inpaint_release import get_retouch_lama, release_retouch_lama
+    from backend.media.mask_layers import mask_roi
+    from backend.tools.inpaint_release import get_retouch_lama
     from backend.tools.job_config import apply_hardware_from_payload
     from backend.tools.vram_budget import VramBudgetError, preflight_lama
 
@@ -566,34 +567,50 @@ def _job_lama_retouch(run_id, payload, on_progress, heartbeat_log, evt_queue) ->
     on_progress(run_id, 10)
     rgba = Image.open(image_path).convert("RGBA")
     w, h = rgba.size
+    mask = np.array(Image.open(mask_path).convert("L"))
+    lama_mask = (mask > 32).astype(np.uint8) * 255
+    roi = mask_roi(
+        lama_mask,
+        padding=int(payload.get("roi_padding", 96)),
+        align=8,
+    )
+    if roi is None:
+        _emit(evt_queue, error(run_id, "Retouch mask is empty"))
+        return
+    left, top, right, bottom = roi
+    roi_w, roi_h = right - left, bottom - top
     try:
-        preflight_lama(h, w)
+        preflight_lama(roi_h, roi_w)
     except VramBudgetError as e:
         _emit(evt_queue, error(run_id, str(e)))
         return
 
-    mask = np.array(Image.open(mask_path).convert("L"))
     arr = np.asarray(rgba)
     # Cutout-aware: subject only — do not use original photo BG.
     rgb = _lama_rgb_context(arr)
-    lama_mask = (mask > 32).astype(np.uint8) * 255
+    rgb_roi = np.ascontiguousarray(rgb[top:bottom, left:right])
+    mask_roi_arr = np.ascontiguousarray(lama_mask[top:bottom, left:right])
 
     on_progress(run_id, 40)
-    heartbeat_log(run_id, "LAMA inpainting…")
+    heartbeat_log(
+        run_id,
+        f"LAMA inpainting ROI {roi_w}×{roi_h} of {w}×{h}…",
+    )
     try:
         lama = get_retouch_lama(model_path)
-        out_rgb = lama.inpaint(rgb, lama_mask)
+        out_rgb_roi = lama.inpaint(rgb_roi, mask_roi_arr)
     except Exception as e:
         traceback.print_exc()
         empty_cuda_cache()
         _emit(evt_queue, error(run_id, str(e)))
         return
 
-    out_arr = np.zeros((h, w, 4), dtype=np.uint8)
-    out_arr[:, :, :3] = out_rgb
-    # Keep source alpha outside the fill; filled region becomes opaque.
-    out_arr[:, :, 3] = arr[:, :, 3]
+    out_arr = arr.copy()
     fill = lama_mask > 0
+    roi_fill = mask_roi_arr > 0
+    out_patch = out_arr[top:bottom, left:right, :3]
+    out_patch[roi_fill] = out_rgb_roi[roi_fill]
+    # Keep source alpha outside the fill; filled region becomes opaque.
     out_arr[fill, 3] = 255
     Image.fromarray(out_arr, "RGBA").save(output_path, format="PNG")
     on_progress(run_id, 100)

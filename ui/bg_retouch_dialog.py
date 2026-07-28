@@ -15,10 +15,11 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
     QButtonGroup,
+    QFileDialog,
     QSizePolicy,
 )
 from qfluentwidgets import (
-    BodyLabel, FluentIcon, ProgressBar,
+    BodyLabel, ComboBox, FluentIcon, LineEdit, ProgressBar,
 )
 
 from backend.config import BASE_DIR, config, tr
@@ -27,6 +28,7 @@ from ui.component.controls.button_styles import make_button, make_toggle_button,
 from ui.component.controls.slider_styles import PrimarySlider
 from ui.component.workspace.editor_page import EditorPage
 from ui.component.preview.retouch_canvas import RetouchCanvas, RetouchTool
+from ui.component.select_object_controller import SelectObjectController
 from ui.theme import DIALOG, FORM, PRIMARY, SECTION, TEXT, TEXT_SECONDARY, BG
 
 
@@ -46,6 +48,7 @@ _KIND_BRUSH = "brush"
 _KIND_LASSO = "lasso"
 _KIND_PEN = "pen"
 _KIND_RECT = "rect"
+_KIND_AI = "ai"
 
 
 class BgRetouchDialog(QDialog):
@@ -88,6 +91,13 @@ class BgRetouchDialog(QDialog):
         self._tool_kind = _KIND_BRUSH
         self._brush_mode = RetouchTool.ERASE_ALPHA
         self._mask_paint_mode = RetouchTool.MASK  # MASK or ERASE_MASK
+        self._select_busy = False
+
+        self.select_controller = SelectObjectController(self)
+        self.select_controller.busy_changed.connect(self._on_select_busy)
+        self.select_controller.failed.connect(self._on_select_failed)
+        self.select_controller.finished.connect(self._on_select_finished)
+        self.select_controller.progress.connect(self._progress.emit)
 
         self.canvas = RetouchCanvas(self)
         self._pending_rgba = rgba
@@ -136,6 +146,7 @@ class BgRetouchDialog(QDialog):
                 (_KIND_LASSO, tr["BgRetouch"]["ToolLasso"]),
                 (_KIND_PEN, tr["BgRetouch"]["ToolPen"]),
                 (_KIND_RECT, tr["BgRetouch"]["ToolRect"]),
+                (_KIND_AI, "AI object"),
             ],
             2,
         )
@@ -143,6 +154,16 @@ class BgRetouchDialog(QDialog):
         for kind, btn in self._kind_buttons.items():
             self._kind_group.addButton(btn)
             btn.clicked.connect(lambda checked=False, k=kind: self._select_kind(k))
+
+        self.ai_name_edit = LineEdit(tools_body)
+        self.ai_name_edit.setPlaceholderText("Object name, or click the object")
+        self.ai_name_edit.returnPressed.connect(self._run_select_from_text)
+        tools_layout.addWidget(self.ai_name_edit)
+        self.btn_ai_run = make_button(
+            "Select object", "secondary", tools_body
+        )
+        self.btn_ai_run.clicked.connect(self._run_select_from_text)
+        tools_layout.addWidget(self.btn_ai_run)
 
         self.editor.add_section(tr["BgRetouch"]["Tools"], tools_body)
 
@@ -205,6 +226,9 @@ class BgRetouchDialog(QDialog):
         )
         self.btn_mask_clear.clicked.connect(self._on_clear_mask)
         mask_act_row.addWidget(self.btn_mask_clear)
+        self.btn_mask_invert = make_button("Invert", "secondary", brush_body)
+        self.btn_mask_invert.clicked.connect(self.canvas.invert_mask)
+        mask_act_row.addWidget(self.btn_mask_invert)
         mask_act_wrap = QWidget(brush_body)
         mask_act_wrap.setLayout(mask_act_row)
         brush_layout.addWidget(mask_act_wrap)
@@ -251,7 +275,135 @@ class BgRetouchDialog(QDialog):
         self.canvas.set_hardness(60)
         self.hardness_label.setText("60%")
 
+        opacity_wrap = QWidget(brush_body)
+        opacity_col = QVBoxLayout(opacity_wrap)
+        opacity_col.setContentsMargins(0, 0, 0, 0)
+        opacity_col.setSpacing(FORM["tight_spacing"])
+        opacity_header = QHBoxLayout()
+        opacity_header.addWidget(_rail_label("Opacity", opacity_wrap))
+        self.opacity_label = BodyLabel("100%", opacity_wrap)
+        self.opacity_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        opacity_header.addWidget(self.opacity_label, 1)
+        opacity_col.addLayout(opacity_header)
+        self.opacity_slider = PrimarySlider(Qt.Horizontal, opacity_wrap)
+        self.opacity_slider.setRange(1, 100)
+        self.opacity_slider.setValue(100)
+        self.opacity_slider.valueChanged.connect(self._on_opacity)
+        opacity_col.addWidget(self.opacity_slider)
+        brush_layout.addWidget(opacity_wrap)
+
+        spacing_wrap = QWidget(brush_body)
+        spacing_col = QVBoxLayout(spacing_wrap)
+        spacing_col.setContentsMargins(0, 0, 0, 0)
+        spacing_col.setSpacing(FORM["tight_spacing"])
+        spacing_header = QHBoxLayout()
+        spacing_header.addWidget(_rail_label("Spacing", spacing_wrap))
+        self.spacing_label = BodyLabel("25%", spacing_wrap)
+        self.spacing_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        spacing_header.addWidget(self.spacing_label, 1)
+        spacing_col.addLayout(spacing_header)
+        self.spacing_slider = PrimarySlider(Qt.Horizontal, spacing_wrap)
+        self.spacing_slider.setRange(1, 100)
+        self.spacing_slider.setValue(25)
+        self.spacing_slider.valueChanged.connect(self._on_spacing)
+        spacing_col.addWidget(self.spacing_slider)
+        brush_layout.addWidget(spacing_wrap)
+        self.canvas.set_spacing(25)
+
         self.editor.add_section(tr["BgRetouch"].get("Brush", "Brush"), brush_body)
+
+        # --- Independent fill/protect mask layers ---
+        layers_body = QWidget(rail)
+        layers_layout = QVBoxLayout(layers_body)
+        layers_layout.setContentsMargins(0, 0, 0, 0)
+        layers_layout.setSpacing(SECTION["spacing"])
+        self.layer_combo = ComboBox(layers_body)
+        self.layer_combo.currentIndexChanged.connect(self._on_layer_selected)
+        layers_layout.addWidget(self.layer_combo)
+
+        layer_row = QHBoxLayout()
+        layer_row.setSpacing(gap)
+        self.btn_layer_add = make_button("+ Fill", "secondary", layers_body)
+        self.btn_layer_add.clicked.connect(
+            lambda: self.canvas.add_mask_layer(protect=False)
+        )
+        layer_row.addWidget(self.btn_layer_add)
+        self.btn_layer_protect = make_button("+ Protect", "secondary", layers_body)
+        self.btn_layer_protect.clicked.connect(
+            lambda: self.canvas.add_mask_layer(protect=True)
+        )
+        layer_row.addWidget(self.btn_layer_protect)
+        self.btn_layer_delete = make_button("Delete", "secondary", layers_body)
+        self.btn_layer_delete.clicked.connect(self.canvas.remove_active_layer)
+        layer_row.addWidget(self.btn_layer_delete)
+        layers_layout.addLayout(layer_row)
+
+        role_row = QHBoxLayout()
+        role_row.setSpacing(gap)
+        self.btn_role_fill = make_toggle_button("Fill layer", layers_body)
+        self.btn_role_fill.clicked.connect(
+            lambda: self.canvas.set_active_layer_protect(False)
+        )
+        role_row.addWidget(self.btn_role_fill)
+        self.btn_role_protect = make_toggle_button("Protect layer", layers_body)
+        self.btn_role_protect.clicked.connect(
+            lambda: self.canvas.set_active_layer_protect(True)
+        )
+        role_row.addWidget(self.btn_role_protect)
+        layers_layout.addLayout(role_row)
+        self.btn_layer_visible = make_toggle_button("Visible", layers_body)
+        self.btn_layer_visible.clicked.connect(
+            lambda checked=False: self.canvas.set_active_layer_visible(
+                not self.canvas.active_layer_is_visible()
+            )
+        )
+        layers_layout.addWidget(self.btn_layer_visible)
+        self.editor.add_section("Mask layers", layers_body)
+
+        # --- Mask refinement ---
+        refine_body = QWidget(rail)
+        refine_layout = QVBoxLayout(refine_body)
+        refine_layout.setContentsMargins(0, 0, 0, 0)
+        refine_layout.setSpacing(SECTION["spacing"])
+        self.refine_radius = PrimarySlider(Qt.Horizontal, refine_body)
+        self.refine_radius.setRange(1, 32)
+        self.refine_radius.setValue(4)
+        refine_layout.addWidget(_rail_label("Refine radius", refine_body))
+        refine_layout.addWidget(self.refine_radius)
+        self._refine_buttons, refine_wrap = _grid_buttons(
+            refine_body,
+            [
+                ("feather", "Feather"),
+                ("smooth", "Smooth"),
+                ("grow", "Expand"),
+                ("shrink", "Shrink"),
+                ("edge", "Edge-aware"),
+            ],
+            2,
+        )
+        for operation, button in self._refine_buttons.items():
+            button.setCheckable(False)
+            button.clicked.connect(
+                lambda checked=False, op=operation: self._refine_mask(op)
+            )
+        refine_layout.addWidget(refine_wrap)
+        self.editor.add_section("Mask refinement", refine_body)
+
+        # --- Mask project persistence ---
+        files_body = QWidget(rail)
+        files_layout = QGridLayout(files_body)
+        files_layout.setContentsMargins(0, 0, 0, 0)
+        files_layout.setSpacing(gap)
+        self.btn_mask_save = make_button("Save project", "secondary", files_body)
+        self.btn_mask_save.clicked.connect(self._save_mask_project)
+        files_layout.addWidget(self.btn_mask_save, 0, 0)
+        self.btn_mask_load = make_button("Load project", "secondary", files_body)
+        self.btn_mask_load.clicked.connect(self._load_mask_project)
+        files_layout.addWidget(self.btn_mask_load, 0, 1)
+        self.btn_mask_export = make_button("Export PNG", "secondary", files_body)
+        self.btn_mask_export.clicked.connect(self._export_mask_png)
+        files_layout.addWidget(self.btn_mask_export, 1, 0, 1, 2)
+        self.editor.add_section("Mask files", files_body)
 
         # --- Selection ---
         sel_body = QWidget(rail)
@@ -277,6 +429,25 @@ class BgRetouchDialog(QDialog):
         )
         self.btn_fill.clicked.connect(self._apply_lama)
         sel_layout.addWidget(self.btn_fill)
+
+        mask_sel_row = QGridLayout()
+        mask_sel_row.setSpacing(gap)
+        self.btn_sel_add = make_button("Add to mask", "secondary", sel_body)
+        self.btn_sel_add.clicked.connect(
+            lambda: self.canvas.apply_selection_to_mask("add")
+        )
+        mask_sel_row.addWidget(self.btn_sel_add, 0, 0)
+        self.btn_sel_subtract = make_button("Subtract", "secondary", sel_body)
+        self.btn_sel_subtract.clicked.connect(
+            lambda: self.canvas.apply_selection_to_mask("subtract")
+        )
+        mask_sel_row.addWidget(self.btn_sel_subtract, 0, 1)
+        self.btn_sel_protect = make_button("Protect", "secondary", sel_body)
+        self.btn_sel_protect.clicked.connect(
+            lambda: self.canvas.apply_selection_to_mask("protect")
+        )
+        mask_sel_row.addWidget(self.btn_sel_protect, 1, 0, 1, 2)
+        sel_layout.addLayout(mask_sel_row)
 
         undo_row = QHBoxLayout()
         undo_row.setSpacing(gap)
@@ -330,9 +501,12 @@ class BgRetouchDialog(QDialog):
         self._lama_done.connect(self._on_lama_done)
         self._status.connect(self.status.setText)
         self._progress.connect(self._on_progress)
+        self.select_controller.status.connect(self.status.setText)
         self.canvas.history_changed.connect(self._refresh_history_buttons)
         self.canvas.selection_changed.connect(self._refresh_selection_buttons)
         self.canvas.image_changed.connect(self._refresh_mask_buttons)
+        self.canvas.layers_changed.connect(self._refresh_layer_controls)
+        self.canvas.select_object_clicked.connect(self._on_select_click)
 
         self._kind_buttons[_KIND_BRUSH].setChecked(True)
         self._mode_buttons[RetouchTool.ERASE_ALPHA].setChecked(True)
@@ -341,6 +515,7 @@ class BgRetouchDialog(QDialog):
         self._refresh_history_buttons()
         self._refresh_selection_buttons()
         self._refresh_mask_buttons()
+        self._refresh_layer_controls()
 
         self._progress_timer = QTimer(self)
         self._progress_timer.setInterval(180)
@@ -397,6 +572,8 @@ class BgRetouchDialog(QDialog):
             self.canvas.set_tool(RetouchTool.PEN)
         elif kind == _KIND_RECT:
             self.canvas.set_tool(RetouchTool.RECT)
+        elif kind == _KIND_AI:
+            self.canvas.set_tool(RetouchTool.SELECT_OBJECT)
 
     def _select_brush_mode(self, mode: RetouchTool):
         self._brush_mode = mode
@@ -431,9 +608,12 @@ class BgRetouchDialog(QDialog):
         has = self.canvas.has_selection() and not self._busy
         self.btn_remove.setEnabled(has)
         self.btn_clear_sel.setEnabled(has)
+        self.btn_sel_add.setEnabled(has)
+        self.btn_sel_subtract.setEnabled(has)
+        self.btn_sel_protect.setEnabled(has)
 
     def _refresh_mask_buttons(self):
-        has_mask = self.canvas.has_painted_mask() and not self._busy
+        has_mask = self.canvas.has_active_mask() and not self._busy
         self.btn_mask_clear.setEnabled(has_mask)
 
     def _on_remove_selection(self):
@@ -457,6 +637,137 @@ class BgRetouchDialog(QDialog):
     def _on_hardness(self, value: int):
         self.canvas.set_hardness(value)
         self.hardness_label.setText(f"{value}%")
+
+    def _on_opacity(self, value: int):
+        self.canvas.set_opacity(value)
+        self.opacity_label.setText(f"{value}%")
+
+    def _on_spacing(self, value: int):
+        self.canvas.set_spacing(value)
+        self.spacing_label.setText(f"{value}%")
+
+    def _on_layer_selected(self, index: int):
+        if index >= 0 and index != self.canvas.active_layer_index():
+            self.canvas.set_active_layer(index)
+
+    def _refresh_layer_controls(self):
+        descriptions = self.canvas.layer_descriptions()
+        active = self.canvas.active_layer_index()
+        self.layer_combo.blockSignals(True)
+        self.layer_combo.clear()
+        self.layer_combo.addItems(descriptions)
+        if descriptions:
+            self.layer_combo.setCurrentIndex(active)
+        self.layer_combo.blockSignals(False)
+        protect = self.canvas.active_layer_is_protect()
+        self.btn_role_fill.setChecked(not protect)
+        self.btn_role_protect.setChecked(protect)
+        paint_toggle_button(self.btn_role_fill)
+        paint_toggle_button(self.btn_role_protect)
+        self.btn_layer_visible.setChecked(self.canvas.active_layer_is_visible())
+        paint_toggle_button(self.btn_layer_visible)
+        self.btn_layer_delete.setEnabled(bool(descriptions) and not self._busy)
+
+    def _refine_mask(self, operation: str):
+        if not self.canvas.has_active_mask():
+            self.status.setText("Paint or select a mask before refining it.")
+            return
+        self.canvas.refine_mask(operation, self.refine_radius.value())
+        self.status.setText(f"Mask {operation} applied.")
+
+    def _save_mask_project(self):
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save mask project",
+            "",
+            "Midgard mask project (*.npz)",
+        )
+        if not path:
+            return
+        if not path.lower().endswith(".npz"):
+            path += ".npz"
+        try:
+            self.canvas.save_mask_layers(path)
+            self.status.setText(f"Mask project saved: {os.path.basename(path)}")
+        except Exception as exc:
+            self.status.setText(f"Could not save mask project: {exc}")
+
+    def _load_mask_project(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Load mask",
+            "",
+            "Masks (*.npz *.png *.jpg *.jpeg *.webp)",
+        )
+        if not path:
+            return
+        try:
+            if path.lower().endswith(".npz"):
+                self.canvas.load_mask_layers(path)
+            else:
+                self.canvas.set_mask(np.asarray(Image.open(path).convert("L")))
+            self.status.setText(f"Mask loaded: {os.path.basename(path)}")
+        except Exception as exc:
+            self.status.setText(f"Could not load mask: {exc}")
+
+    def _export_mask_png(self):
+        mask = self.canvas.get_mask()
+        if mask is None:
+            return
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export composite mask",
+            "",
+            "PNG mask (*.png)",
+        )
+        if not path:
+            return
+        if not path.lower().endswith(".png"):
+            path += ".png"
+        try:
+            Image.fromarray(mask, mode="L").save(path, format="PNG")
+            self.status.setText(f"Mask exported: {os.path.basename(path)}")
+        except Exception as exc:
+            self.status.setText(f"Could not export mask: {exc}")
+
+    def _on_select_busy(self, busy: bool):
+        self._select_busy = bool(busy)
+        self._set_busy(bool(busy))
+        if not busy:
+            self.progress_panel.setVisible(False)
+
+    def _on_select_failed(self, message: str):
+        self.status.setText(message)
+
+    def _on_select_finished(self, mask):
+        if mask is None:
+            return
+        self.canvas.union_object_mask(mask)
+        self.status.setText("AI object mask added to the active layer.")
+
+    def _on_select_click(self, x: int, y: int):
+        if self._busy or self.canvas.tool != RetouchTool.SELECT_OBJECT:
+            return
+        image = self.canvas.get_image()
+        if image is not None:
+            self.select_controller.run(
+                image,
+                click_xy=(x, y),
+                text=self.ai_name_edit.text().strip(),
+            )
+
+    def _run_select_from_text(self):
+        if self._busy:
+            return
+        text = self.ai_name_edit.text().strip()
+        if not text:
+            self.status.setText("Enter an object name or click an object in the image.")
+            return
+        image = self.canvas.get_image()
+        if image is None:
+            return
+        self._select_kind(_KIND_AI)
+        self.select_controller.run(image, text=text)
 
     @Slot(int)
     def _on_progress(self, value: int):
@@ -488,9 +799,33 @@ class BgRetouchDialog(QDialog):
         self.btn_done.setEnabled(editable)
         self.btn_remove.setEnabled(editable and self.canvas.has_selection())
         self.btn_clear_sel.setEnabled(editable and self.canvas.has_selection())
-        self.btn_mask_clear.setEnabled(editable and self.canvas.has_painted_mask())
+        self.btn_sel_add.setEnabled(editable and self.canvas.has_selection())
+        self.btn_sel_subtract.setEnabled(editable and self.canvas.has_selection())
+        self.btn_sel_protect.setEnabled(editable and self.canvas.has_selection())
+        self.btn_mask_clear.setEnabled(editable and self.canvas.has_active_mask())
         self.radius_slider.setEnabled(editable)
         self.hardness_slider.setEnabled(editable)
+        self.opacity_slider.setEnabled(editable)
+        self.spacing_slider.setEnabled(editable)
+        self.refine_radius.setEnabled(editable)
+        self.layer_combo.setEnabled(editable)
+        self.ai_name_edit.setEnabled(editable)
+        self.btn_ai_run.setEnabled(editable)
+        for button in (
+            self.btn_layer_add,
+            self.btn_layer_protect,
+            self.btn_layer_delete,
+            self.btn_role_fill,
+            self.btn_role_protect,
+            self.btn_layer_visible,
+            self.btn_mask_invert,
+            self.btn_mask_save,
+            self.btn_mask_load,
+            self.btn_mask_export,
+        ):
+            button.setEnabled(editable)
+        for button in self._refine_buttons.values():
+            button.setEnabled(editable)
         for btn in self._kind_buttons.values():
             btn.setEnabled(editable)
         for btn in self._mode_buttons.values():
@@ -511,6 +846,9 @@ class BgRetouchDialog(QDialog):
             self._progress_timer.stop()
 
     def _on_cancel_clicked(self):
+        if self._select_busy:
+            self.select_controller.cancel()
+            return
         if self._busy:
             self._cancel_lama()
             return
@@ -627,6 +965,7 @@ class BgRetouchDialog(QDialog):
                 "mask_path": mask_path,
                 "output_path": out_path,
                 "model_path": path,
+                "roi_padding": 128,
                 "hardware_acceleration": bool(config.hardwareAcceleration.value),
             },
             on_progress=on_progress,

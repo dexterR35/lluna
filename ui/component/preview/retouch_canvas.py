@@ -272,6 +272,9 @@ class RetouchCanvas(QWidget):
         mask = self.get_mask()
         return mask is not None and bool(np.any(mask))
 
+    def has_active_mask(self) -> bool:
+        return self._mask is not None and bool(np.any(self._mask))
+
     def layer_descriptions(self) -> list[str]:
         if self._mask_stack is None:
             return []
@@ -325,6 +328,21 @@ class RetouchCanvas(QWidget):
     def active_layer_is_protect(self) -> bool:
         return bool(self._mask_stack and self._mask_stack.active.protect)
 
+    def set_active_layer_visible(self, visible: bool):
+        if self._mask_stack is None:
+            return
+        visible = bool(visible)
+        if self._mask_stack.active.visible == visible:
+            return
+        self._push_undo()
+        self._mask_stack.active.visible = visible
+        self._refresh_display(immediate=True)
+        self.layers_changed.emit()
+        self.image_changed.emit()
+
+    def active_layer_is_visible(self) -> bool:
+        return bool(self._mask_stack and self._mask_stack.active.visible)
+
     def _sync_active_mask(self):
         self._mask = (
             self._mask_stack.active.mask if self._mask_stack is not None else None
@@ -357,17 +375,23 @@ class RetouchCanvas(QWidget):
         self.image_changed.emit()
 
     def mask_for_fill(self) -> np.ndarray | None:
-        """Object mask layer for LAMA (SAM2 layer + optional lasso selection)."""
-        painted = self.get_mask()
+        """Visible fill layers plus selection, minus every visible protect layer."""
+        painted = self.get_fill_mask()
+        protected = self.get_protect_mask()
         sel = self.selection_as_mask()
         if painted is None and sel is None:
             return None
         if painted is None:
-            return sel if sel is not None and np.any(sel) else None
-        if sel is None or not np.any(sel):
-            return painted if np.any(painted) else None
-        combined = painted.copy()
-        np.maximum(combined, sel, out=combined)
+            combined = sel.copy()
+        else:
+            combined = painted.copy()
+            if sel is not None and np.any(sel):
+                np.maximum(combined, sel, out=combined)
+        if protected is not None and np.any(protected):
+            combined = np.maximum(
+                0,
+                combined.astype(np.int16) - protected.astype(np.int16),
+            ).astype(np.uint8)
         return combined if np.any(combined) else None
 
     def clear_selection(self):
@@ -385,6 +409,38 @@ class RetouchCanvas(QWidget):
         if not self.has_selection():
             return None
         return self._selection.copy()
+
+    def apply_selection_to_mask(self, operation: str):
+        if (
+            not self.has_selection()
+            or self._selection is None
+            or self._mask is None
+            or self._mask_stack is None
+        ):
+            return
+        self._push_undo()
+        if operation == "add":
+            np.maximum(self._mask, self._selection, out=self._mask)
+        elif operation == "subtract":
+            reduced = np.maximum(
+                0,
+                self._mask.astype(np.int16)
+                - self._selection.astype(np.int16),
+            )
+            self._mask[:] = reduced.astype(np.uint8)
+        elif operation == "protect":
+            self._mask_stack.set_active_protect(True)
+            np.maximum(self._mask, self._selection, out=self._mask)
+        else:
+            raise ValueError(f"unknown selection mask operation: {operation}")
+        self._selection = None
+        self._sel_points.clear()
+        self._rect_origin = None
+        self._selecting = False
+        self._refresh_display(immediate=True)
+        self.selection_changed.emit()
+        self.layers_changed.emit()
+        self.image_changed.emit()
 
     def remove_selection(self):
         """Erase alpha inside closed selection, then clear selection."""
@@ -420,7 +476,8 @@ class RetouchCanvas(QWidget):
             # Fallback: current image (restore still works for erased subject)
             self._original = self._rgba.copy()
         self._original_arr = None  # lazy - built on first Restore stamp
-        self._mask = np.zeros((h, w), dtype=np.uint8)
+        self._mask_stack = MaskLayerStack(w, h)
+        self._sync_active_mask()
         self._selection = None
         self._sel_points.clear()
         self._rect_origin = None
@@ -436,6 +493,7 @@ class RetouchCanvas(QWidget):
         self._update_cursor()
         self.history_changed.emit()
         self.selection_changed.emit()
+        self.layers_changed.emit()
         self.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def get_image(self) -> Image.Image | None:
@@ -447,16 +505,28 @@ class RetouchCanvas(QWidget):
         return self._original.copy() if self._original is not None else None
 
     def get_mask(self) -> np.ndarray | None:
-        return None if self._mask is None else self._mask.copy()
+        if self._mask_stack is None:
+            return None
+        return self._mask_stack.composite()
+
+    def get_fill_mask(self) -> np.ndarray | None:
+        if self._mask_stack is None:
+            return None
+        return self._mask_stack.fill_mask()
+
+    def get_protect_mask(self) -> np.ndarray | None:
+        if self._mask_stack is None:
+            return None
+        return self._mask_stack.protect_mask()
 
     def set_mask(self, mask: np.ndarray | None):
         """Replace painted mask (resized to image size). Does not push undo."""
-        if self._rgba is None or self._mask is None:
+        if self._rgba is None or self._mask is None or self._mask_stack is None:
             return
         self._commit_rgba_arr()
         h, w = self._mask.shape[:2]
         if mask is None:
-            self._mask.fill(0)
+            self._mask_stack.clear_all()
         else:
             arr = np.asarray(mask)
             if arr.ndim != 2:
@@ -467,19 +537,64 @@ class RetouchCanvas(QWidget):
                         (w, h), Image.Resampling.BILINEAR
                     )
                 )
-            self._mask = arr.astype(np.uint8, copy=True)
+            self._mask_stack = MaskLayerStack(w, h)
+            self._mask_stack.active.mask[:] = arr.astype(np.uint8, copy=False)
+            self._sync_active_mask()
         self._undo.clear()
         self._redo.clear()
         self._refresh_display(immediate=True)
         self.history_changed.emit()
+        self.layers_changed.emit()
         self.image_changed.emit()
 
     def clear_mask(self):
         if self._mask is None or not np.any(self._mask):
             return
         self._push_undo()
-        self._mask.fill(0)
+        if self._mask_stack is not None:
+            self._mask_stack.clear_active()
         self._refresh_display(immediate=True)
+        self.image_changed.emit()
+
+    def invert_mask(self):
+        if self._mask_stack is None:
+            return
+        self._push_undo()
+        self._mask_stack.invert_active()
+        self._refresh_display(immediate=True)
+        self.image_changed.emit()
+
+    def refine_mask(self, operation: str, radius: int = 3):
+        if self._mask_stack is None or self._rgba is None:
+            return
+        self._commit_rgba_arr()
+        self._push_undo()
+        guide = np.asarray(self._rgba)
+        self._mask_stack.transform_active(
+            operation,
+            radius=radius,
+            guide_rgba=guide,
+        )
+        self._refresh_display(immediate=True)
+        self.image_changed.emit()
+
+    def save_mask_layers(self, path: str):
+        if self._mask_stack is None:
+            raise ValueError("no mask canvas is loaded")
+        self._mask_stack.save(path)
+
+    def load_mask_layers(self, path: str):
+        if self._rgba is None:
+            return
+        loaded = MaskLayerStack.load(path)
+        if (loaded.width, loaded.height) != self._rgba.size:
+            raise ValueError("mask project dimensions do not match the image")
+        self._push_undo()
+        self._mask_stack = loaded
+        self._sync_active_mask()
+        self.clear_selection()
+        self._refresh_display(immediate=True)
+        self.layers_changed.emit()
         self.image_changed.emit()
 
     def apply_rgb_patch(self, rgb: np.ndarray, mask: np.ndarray):
@@ -488,57 +603,103 @@ class RetouchCanvas(QWidget):
         self._commit_rgba_arr()
         self._push_undo()
         arr = np.asarray(self._rgba).copy()
-        m = mask > 127  # soft mask threshold for LAMA paste
-        arr[m, :3] = rgb[m]
-        arr[m, 3] = 255
+        m = mask > 0
+        blend = (mask.astype(np.float32) / 255.0)[..., np.newaxis]
+        current_rgb = arr[:, :, :3].astype(np.float32)
+        result_rgb = np.asarray(rgb)[:, :, :3].astype(np.float32)
+        arr[:, :, :3] = np.clip(
+            current_rgb * (1.0 - blend) + result_rgb * blend,
+            0,
+            255,
+        ).astype(np.uint8)
+        alpha = arr[:, :, 3].astype(np.float32)
+        arr[:, :, 3] = np.where(
+            m,
+            np.clip(alpha + (255.0 - alpha) * blend[:, :, 0], 0, 255),
+            alpha,
+        ).astype(np.uint8)
         self._rgba = Image.fromarray(arr, "RGBA")
         self._rgba_arr = None
-        self._mask.fill(0)
+        if self._mask_stack is not None:
+            self._mask_stack.clear_all()
+            self._sync_active_mask()
         self._base_checker = None
         # Selection was used as LAMA region - clear it
         self._selection = None
         self._sel_points.clear()
         self._refresh_display(immediate=True)
         self.selection_changed.emit()
+        self.layers_changed.emit()
         self.image_changed.emit()
 
     def undo(self):
         if not self._interaction_enabled:
             return
-        if not self._undo or self._rgba is None or self._mask is None:
+        if (
+            not self._undo
+            or self._rgba is None
+            or self._mask is None
+            or self._mask_stack is None
+        ):
             return
         self._commit_rgba_arr()
-        self._redo.append((self._rgba.copy(), self._mask.copy()))
-        rgba, mask = self._undo.pop()
+        self._redo.append(self._history_snapshot())
+        rgba, layers, active, selection = self._undo.pop()
         self._rgba = rgba
         self._rgba_arr = None
-        self._mask = mask
+        self._mask_stack.restore(layers, active)
+        self._sync_active_mask()
+        self._selection = None if selection is None else selection.copy()
         self._base_checker = None
         self._refresh_display(immediate=True)
         self.history_changed.emit()
+        self.selection_changed.emit()
+        self.layers_changed.emit()
         self.image_changed.emit()
 
     def redo(self):
         if not self._interaction_enabled:
             return
-        if not self._redo or self._rgba is None or self._mask is None:
+        if (
+            not self._redo
+            or self._rgba is None
+            or self._mask is None
+            or self._mask_stack is None
+        ):
             return
         self._commit_rgba_arr()
-        self._undo.append((self._rgba.copy(), self._mask.copy()))
-        rgba, mask = self._redo.pop()
+        self._undo.append(self._history_snapshot())
+        rgba, layers, active, selection = self._redo.pop()
         self._rgba = rgba
         self._rgba_arr = None
-        self._mask = mask
+        self._mask_stack.restore(layers, active)
+        self._sync_active_mask()
+        self._selection = None if selection is None else selection.copy()
         self._base_checker = None
         self._refresh_display(immediate=True)
         self.history_changed.emit()
+        self.selection_changed.emit()
+        self.layers_changed.emit()
         self.image_changed.emit()
 
+    def _history_snapshot(
+        self,
+    ) -> tuple[Image.Image, list[MaskLayer], int, np.ndarray | None]:
+        assert self._rgba is not None
+        assert self._mask_stack is not None
+        selection = None if self._selection is None else self._selection.copy()
+        return (
+            self._rgba.copy(),
+            self._mask_stack.clone_layers(),
+            self._mask_stack.active_index,
+            selection,
+        )
+
     def _push_undo(self):
-        if self._rgba is None or self._mask is None:
+        if self._rgba is None or self._mask is None or self._mask_stack is None:
             return
         self._commit_rgba_arr()
-        self._undo.append((self._rgba.copy(), self._mask.copy()))
+        self._undo.append(self._history_snapshot())
         if len(self._undo) > config.retouchMaxHistory:
             self._undo.pop(0)
         self._redo.clear()
@@ -917,8 +1078,8 @@ class RetouchCanvas(QWidget):
         x0, y0 = self._stroke_last
         x1, y1 = pt
         dist = max(abs(x1 - x0), abs(y1 - y0))
-        # Step ~1/3 radius so soft kernels overlap smoothly
-        step = max(1, self._radius // 3)
+        # User-controlled spacing is a fraction of brush diameter.
+        step = max(1, int(round(self._radius * 2 * self._spacing)))
         if dist <= step:
             self._stamp_brush(x1, y1)
             self._stroke_last = pt
@@ -946,6 +1107,10 @@ class RetouchCanvas(QWidget):
         if self._mask is None or self._rgba is None:
             return
         brush = _kernel(self._radius, self._hardness)
+        if self._opacity < 0.999:
+            brush = np.clip(
+                brush.astype(np.float32) * self._opacity, 0, 255
+            ).astype(np.uint8)
         r = self._radius
         h, w = self._mask.shape
         y0, y1 = max(0, iy - r), min(h, iy + r + 1)
@@ -1077,8 +1242,11 @@ class RetouchCanvas(QWidget):
             )
 
         base = self._base_checker
+        fill_mask = self.get_fill_mask()
+        protect_mask = self.get_protect_mask()
         need_paint = (
-            (self._mask is not None and np.any(self._mask))
+            (fill_mask is not None and np.any(fill_mask))
+            or (protect_mask is not None and np.any(protect_mask))
             or self.has_selection()
             or bool(self._sel_points)
         )
@@ -1087,13 +1255,23 @@ class RetouchCanvas(QWidget):
             painter = QPainter(out)
             painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
 
-            if self._mask is not None and np.any(self._mask):
+            if fill_mask is not None and np.any(fill_mask):
                 self._draw_overlay_mask(
                     painter,
-                    self._mask,
+                    fill_mask,
                     base.width(),
                     base.height(),
                     (255, 48, 48),
+                    config.retouchMaskOverlayAlpha,
+                )
+
+            if protect_mask is not None and np.any(protect_mask):
+                self._draw_overlay_mask(
+                    painter,
+                    protect_mask,
+                    base.width(),
+                    base.height(),
+                    (42, 210, 120),
                     config.retouchMaskOverlayAlpha,
                 )
 
