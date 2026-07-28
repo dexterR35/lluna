@@ -89,10 +89,10 @@ class HardwareAccelerator:
     def accelerator_name(self):
         if not self.__enabled:
             return "CPU"
-        if self.__dml:
-            return "DirectML"
         if self.__cuda:
             return "GPU"
+        if self.__dml:
+            return "DirectML"
         if self.__mps:
             return "MPS"
         elif len(self.__onnx_providers) > 0:
@@ -215,6 +215,8 @@ class HardwareAccelerator:
         Running SubtitleDetect in a separate process is also a valid approach.
         """
         if self.__enabled:
+            if self.__cuda:
+                return torch.device("cuda:0")
             if self.__dml:
                 try:
                     import torch_directml
@@ -226,8 +228,6 @@ class HardwareAccelerator:
                         "DirectML initialization failed; trying another backend: %s",
                         type(exc).__name__,
                     )
-            if self.__cuda:
-                return torch.device("cuda:0")
             if self.__mps:
                 return torch.device("mps")
         return torch.device("cpu")

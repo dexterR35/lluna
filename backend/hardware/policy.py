@@ -20,11 +20,12 @@ def select_execution_policy(
     if not acceleration_enabled:
         return ExecutionPolicy("cpu", "cpu", ("Hardware acceleration is disabled.",))
     caps = profile.capabilities
-    # Preserve Midgard's verified legacy priority while making it deterministic.
-    if caps.torch_directml:
-        return ExecutionPolicy("directml", "privateuseone", ("DirectML is available.",))
+    # CUDA is the preferred backend whenever it is usable. DirectML and MPS
+    # remain GPU fallbacks for machines without CUDA.
     if caps.torch_cuda:
         return ExecutionPolicy("cuda", "cuda:0", ("Torch CUDA is available.",))
+    if caps.torch_directml:
+        return ExecutionPolicy("directml", "privateuseone", ("DirectML is available.",))
     if caps.torch_mps:
         return ExecutionPolicy("mps", "mps", ("Torch MPS is available.",))
     return ExecutionPolicy("cpu", "cpu", ("No supported accelerator is available.",))

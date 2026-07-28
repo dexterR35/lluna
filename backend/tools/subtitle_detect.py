@@ -1,3 +1,4 @@
+import logging
 from functools import cached_property
 
 import cv2
@@ -12,6 +13,9 @@ from backend.models.paths import SubtitleModelPaths
 from backend.scenedetect import scene_detect
 from backend.scenedetect.detectors import ContentDetector
 from backend.tools.inpaint_tools import is_frame_number_in_ab_sections
+
+logger = logging.getLogger(__name__)
+
 
 class SubtitleDetect:
     """
@@ -51,7 +55,10 @@ class SubtitleDetect:
     @cached_property
     def text_detector(self):
         from backend.tools.paddle_cdn_patch import strip_paddle_cdn_hoster_check
-        from backend.tools.paddle_runtime import disable_paddle_background_services
+        from backend.tools.paddle_runtime import (
+            disable_paddle_background_services,
+            preferred_paddle_device,
+        )
 
         # Local PP-OCR under backend/models/V5 - strip PaddleX CDN hoster check
         disable_paddle_background_services()
@@ -73,12 +80,29 @@ class SubtitleDetect:
             )
         except Exception:
             pass
-        return TextDetection(
-            model_name=self.model_paths.detection_model_name,
-            model_dir=str(self.model_paths.detection_dir),
-            device="cpu",
-            enable_hpi=enable_hpi,
+        hw = HardwareAccelerator.instance()
+        device = preferred_paddle_device(
+            paddle,
+            acceleration_enabled=hw.has_cuda(),
         )
+        options = {
+            "model_name": self.model_paths.detection_model_name,
+            "model_dir": str(self.model_paths.detection_dir),
+            "enable_hpi": enable_hpi,
+        }
+        try:
+            detector = TextDetection(device=device, **options)
+        except Exception:
+            if device == "cpu":
+                raise
+            logger.warning(
+                "Paddle OCR GPU initialization failed; retrying on CPU",
+                exc_info=True,
+            )
+            device = "cpu"
+            detector = TextDetection(device=device, **options)
+        logger.info("Paddle OCR device: %s", device)
+        return detector
 
     def detect_subtitle(self, img):
         temp_list = []

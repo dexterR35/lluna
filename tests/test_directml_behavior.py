@@ -42,6 +42,13 @@ def test_cuda_fallback_after_directml_failure(monkeypatch) -> None:
     assert _accelerator(dml=True, cuda=True).device == torch.device("cuda:0")
 
 
+def test_cuda_has_priority_when_multiple_torch_backends_are_reported() -> None:
+    accelerator = _accelerator(dml=True, cuda=True, mps=True)
+
+    assert accelerator.device == torch.device("cuda:0")
+    assert accelerator.accelerator_name == "GPU"
+
+
 def test_tensorrt_is_never_forwarded_to_onnx_sessions(monkeypatch) -> None:
     fake_ort = types.SimpleNamespace(
         get_available_providers=lambda: [

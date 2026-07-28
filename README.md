@@ -406,6 +406,32 @@ work. A Midgard source-code license does not replace third-party model licenses.
 | macOS + MPS | Apple Silicon PyTorch acceleration | ONNX features may use CPU; generation is unavailable. |
 | macOS + CPU | Intel Mac or fallback | No CUDA-only generation. |
 
+### GPU-first model policy
+
+Hardware acceleration is enabled by default. Midgard always tries the fastest
+supported backend in this order:
+
+1. NVIDIA CUDA
+2. DirectML on Windows when CUDA is unavailable
+3. Apple MPS on supported Macs
+4. CPU
+
+The exact support depends on the model framework:
+
+| Model family | Preferred acceleration | Fallback |
+|---|---|---|
+| BiRefNet, U2-Net, IS-Net, BRIA RMBG | ONNX CUDA, then DirectML where installed | ONNX CPU |
+| PP-OCRv5 text detection | Paddle CUDA | Paddle CPU |
+| Real-ESRGAN and MIRNet | Selected PyTorch GPU backend | CPU |
+| SAM2 and Grounding DINO | Selected PyTorch GPU backend | CPU |
+| STTN, LaMa, and ProPainter | CUDA where supported; selected PyTorch backend for compatible paths | CPU |
+| FLUX.2, SDXL Turbo, and SD 1.5 generation | CUDA | No CPU mode in this release |
+| OpenCV inpainting | CPU | Not applicable |
+
+An installed model is not permanently assigned to the computer on which it was
+downloaded. The inference device is selected at runtime. Run `install.bat` or
+`install.sh` on each computer so its framework packages match that machine.
+
 ## Troubleshooting
 
 ### ONNX Runtime reports missing `cublas64_13.dll` or `cublasLt64_13.dll`

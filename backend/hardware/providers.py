@@ -41,6 +41,7 @@ def _register_windows_cuda_dll_directories(site_packages: Path) -> None:
     if nvidia_root.is_dir():
         directories.extend(sorted(nvidia_root.glob("*/bin")))
 
+    newly_registered: list[str] = []
     for directory in directories:
         resolved = str(directory.resolve())
         if not directory.is_dir() or resolved in _WINDOWS_DLL_DIRECTORIES:
@@ -52,6 +53,21 @@ def _register_windows_cuda_dll_directories(site_packages: Path) -> None:
         # The handle must stay alive or Windows removes the directory again.
         _WINDOWS_DLL_DIRECTORY_HANDLES.append(handle)
         _WINDOWS_DLL_DIRECTORIES.add(resolved)
+        newly_registered.append(resolved)
+    if newly_registered:
+        # ORT CUDA 11 delay-loads split cuDNN component DLLs during session
+        # creation. Those lookups use PATH rather than Python's DLL handles.
+        current = os.environ.get("PATH", "")
+        existing = {
+            entry.casefold()
+            for entry in current.split(os.pathsep)
+            if entry
+        }
+        additions = [
+            entry for entry in newly_registered if entry.casefold() not in existing
+        ]
+        if additions:
+            os.environ["PATH"] = os.pathsep.join([*additions, current])
 
 
 def _cuda_provider_library_ready(ort) -> bool:

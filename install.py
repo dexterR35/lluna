@@ -599,6 +599,43 @@ def onnxruntime_gpu_install_args(torch_tag: str) -> list[str]:
     return ["onnxruntime-gpu==1.22.0"]
 
 
+def installed_torch_backend(py: Path) -> tuple[str, str]:
+    """Return (backend, CUDA tag) for the environment's current Torch build."""
+    script = (
+        "import importlib.util, torch; "
+        "cuda = str(torch.version.cuda or ''); "
+        "tag = ('cu' + cuda.replace('.', '')) if cuda else ''; "
+        "dml = importlib.util.find_spec('torch_directml') is not None; "
+        "print(('directml' if dml else ('cuda' if cuda else 'cpu')) + '|' + tag)"
+    )
+    try:
+        output = subprocess.check_output(
+            [str(py), "-c", script],
+            text=True,
+            stderr=subprocess.DEVNULL,
+            timeout=30,
+        ).strip()
+        backend, _, tag = output.partition("|")
+        return backend, tag
+    except (
+        OSError,
+        subprocess.CalledProcessError,
+        subprocess.TimeoutExpired,
+        ValueError,
+    ):
+        return "", ""
+
+
+def torch_backend_matches(py: Path, mode: str, torch_tag: str) -> bool:
+    backend, installed_tag = installed_torch_backend(py)
+    if mode == "cuda":
+        return backend == "cuda" and installed_tag == torch_tag
+    if mode == "directml":
+        return backend == "directml"
+    # CPU and MPS use the platform's standard non-CUDA Torch wheel.
+    return backend == "cpu"
+
+
 def prepare_pip(py: Path) -> None:
     """Upgrade installer tooling once, not before every dependency group."""
     run(
@@ -617,6 +654,8 @@ def prepare_pip(py: Path) -> None:
 
 def install_packages(py: Path, mode: str, torch_tag: str) -> None:
     prepare_pip(py)
+    if not torch_backend_matches(py, mode, torch_tag):
+        pip_uninstall(py, ["torch", "torchvision", "torch-directml"])
     # These distributions expose the same ``onnxruntime`` import and must not
     # coexist. Removing all variants also repairs environments that drifted to
     # an incompatible CUDA-major wheel.
@@ -624,6 +663,10 @@ def install_packages(py: Path, mode: str, torch_tag: str) -> None:
         py,
         ["onnxruntime", "onnxruntime-gpu", "onnxruntime-directml"],
     )
+    if mode == "cuda" and torch_tag == "cu118":
+        pip_uninstall(py, ["paddlepaddle"])
+    else:
+        pip_uninstall(py, ["paddlepaddle-gpu"])
     if mode == "cuda":
         log(f"\n{_NO_CUDA_TOOLKIT_NOTE}")
         if torch_tag not in TORCH_INDEX or torch_tag == "cpu":

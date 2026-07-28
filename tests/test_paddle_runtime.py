@@ -4,7 +4,10 @@ import os
 import sys
 
 from backend.hardware import providers
-from backend.tools.paddle_runtime import disable_paddle_background_services
+from backend.tools.paddle_runtime import (
+    disable_paddle_background_services,
+    preferred_paddle_device,
+)
 
 
 def test_paddle_capability_probe_does_not_import_runtime(monkeypatch) -> None:
@@ -71,3 +74,54 @@ def test_paddle_background_dump_threads_are_forced_off(monkeypatch) -> None:
 
     assert os.environ["FLAGS_bvar_dump"] == "false"
     assert os.environ["FLAGS_mbvar_dump"] == "false"
+
+
+def test_paddle_prefers_gpu_zero_when_cuda_is_usable() -> None:
+    fake = type(
+        "FakePaddle",
+        (),
+        {
+            "is_compiled_with_cuda": staticmethod(lambda: True),
+            "device": type(
+                "Device",
+                (),
+                {"cuda": type("Cuda", (), {"device_count": staticmethod(lambda: 1)})},
+            ),
+        },
+    )
+
+    assert preferred_paddle_device(fake, acceleration_enabled=True) == "gpu:0"
+
+
+def test_paddle_falls_back_to_cpu_without_enabled_usable_cuda() -> None:
+    no_cuda = type(
+        "NoCudaPaddle",
+        (),
+        {"is_compiled_with_cuda": staticmethod(lambda: False)},
+    )
+    broken_cuda = type(
+        "BrokenCudaPaddle",
+        (),
+        {
+            "is_compiled_with_cuda": staticmethod(lambda: True),
+            "device": type(
+                "Device",
+                (),
+                {
+                    "cuda": type(
+                        "Cuda",
+                        (),
+                        {
+                            "device_count": staticmethod(
+                                lambda: (_ for _ in ()).throw(RuntimeError("driver"))
+                            )
+                        },
+                    )
+                },
+            ),
+        },
+    )
+
+    assert preferred_paddle_device(no_cuda, acceleration_enabled=True) == "cpu"
+    assert preferred_paddle_device(broken_cuda, acceleration_enabled=True) == "cpu"
+    assert preferred_paddle_device(broken_cuda, acceleration_enabled=False) == "cpu"

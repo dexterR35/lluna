@@ -38,6 +38,18 @@ def test_onnxruntime_gpu_package_matches_torch_cuda_major() -> None:
     ]
 
 
+def test_torch_backend_match_requires_the_selected_profile(monkeypatch) -> None:
+    monkeypatch.setattr(
+        install,
+        "installed_torch_backend",
+        lambda py: ("cuda", "cu126"),
+    )
+
+    assert install.torch_backend_matches(Path("python"), "cuda", "cu126")
+    assert not install.torch_backend_matches(Path("python"), "cuda", "cu118")
+    assert not install.torch_backend_matches(Path("python"), "cpu", "")
+
+
 @pytest.mark.installer
 def test_launchers_resolve_the_repository_and_preserve_arguments() -> None:
     shell = Path("run_gui.sh").read_text(encoding="utf-8")
