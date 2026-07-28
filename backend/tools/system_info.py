@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import getpass
+import json
 import os
 import platform
 import socket
+import sys
 from dataclasses import dataclass
 from datetime import datetime
 from functools import lru_cache
@@ -114,27 +116,26 @@ def _cpu_summary() -> str:
 
 
 def _gpu_summary() -> tuple[str, str]:
-    """Return (gpu_label, accelerator_label)."""
-    accel = "CPU"
-    gpu = "CPU only"
+    """Return installer-captured GPU info without importing ML frameworks."""
     try:
-        from backend.tools.hardware_accelerator import HardwareAccelerator
+        from backend.core.paths import PATHS
 
-        hw = HardwareAccelerator.instance()
-        accel = hw.accelerator_name
-        if hw.has_cuda():
-            import torch
-
-            gpu = torch.cuda.get_device_name(0)
-            vram = hw.get_available_vram_mb()
-            if vram > 0:
-                gpu = f"{gpu} · {vram / 1024:.1f} GB free"
-        elif hw.has_mps():
-            gpu = "Apple Metal (MPS)"
-        elif accel not in ("CPU",):
-            gpu = accel
-    except Exception:
-        pass
+        state = json.loads(PATHS.runtime_file.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        state = {}
+    accel = str(state.get("accel") or "cpu").upper()
+    name = str(state.get("gpu_name") or "").strip()
+    total_vram = float(state.get("total_vram_mb") or 0)
+    if name:
+        gpu = name
+        if total_vram > 0:
+            gpu = f"{gpu} · {total_vram / 1024:.1f} GB"
+    elif accel == "MPS":
+        gpu = "Apple Metal (MPS)"
+    elif accel == "DIRECTML":
+        gpu = "DirectML device"
+    else:
+        gpu = "CPU only"
     if len(gpu) > 48:
         gpu = gpu[:45] + "…"
     return gpu, accel
@@ -332,10 +333,14 @@ def _app_cpu_percent() -> float | None:
 
 
 def _gpu_used_mb() -> tuple[float | None, float | None]:
+    module = sys.modules.get("backend.tools.hardware_accelerator")
+    if module is None:
+        return None, None
     try:
-        from backend.tools.hardware_accelerator import HardwareAccelerator
-
-        hw = HardwareAccelerator.instance()
+        accelerator_type = getattr(module, "HardwareAccelerator")
+        hw = getattr(accelerator_type, "_instance", None)
+        if hw is None:
+            return None, None
         if not hw.has_cuda():
             return None, None
         free_mb, total_mb = hw.get_vram_mb()

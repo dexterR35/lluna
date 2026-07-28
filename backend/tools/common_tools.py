@@ -4,7 +4,6 @@ import ctypes
 
 import cv2
 import numpy as np
-from fsplit.filesplit import Filesplit
 
 video_extensions = {
     '.mp4', '.m4a', '.m4v', '.f4v', '.f4a', '.m4b', '.m4r', '.f4b', '.mov',
@@ -39,6 +38,8 @@ def is_video_or_image(filename):
 
 def merge_big_file_if_not_exists(dir, file, man_filename = None):
     if file not in os.listdir(dir):
+        from fsplit.filesplit import Filesplit
+
         fs = Filesplit()
         if man_filename is not None:
             fs.man_filename = man_filename

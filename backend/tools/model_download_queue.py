@@ -79,8 +79,8 @@ class ModelDownloadQueue:
             if self._worker is None or not self._worker.is_alive():
                 self._worker = threading.Thread(target=self._worker_loop, daemon=True)
                 self._worker.start()
-            self._notify()
-            return pos
+        self._notify()
+        return pos
 
     def job_state(self, kind: str, key: str) -> JobState:
         with self._lock:
@@ -131,11 +131,14 @@ class ModelDownloadQueue:
                 if not self._queue:
                     self._current = None
                     self._worker = None
-                    self._notify()
-                    return
-                job = self._queue.pop(0)
-                self._current = job
-                self._notify()
+                    should_exit = True
+                else:
+                    should_exit = False
+                    job = self._queue.pop(0)
+                    self._current = job
+            self._notify()
+            if should_exit:
+                return
 
             err: Optional[BaseException] = None
             try:

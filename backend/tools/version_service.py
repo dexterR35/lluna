@@ -1,83 +1,32 @@
-# coding: utf-8
-import re
-import os
-import sys
-import requests
+"""Compatibility facade for the non-Qt source-release update service."""
 
-from PySide6.QtCore import QVersionNumber
+from __future__ import annotations
 
-from backend.config import VERSION, PROJECT_UPDATE_URLS, tr
+from urllib.request import getproxies
+
+from backend.core.build_info import BUILD_INFO
+from backend.updates.service import UpdateResult, check_for_update
 
 
 class VersionService:
-    """ Version service """
+    def __init__(self) -> None:
+        self.current_version = BUILD_INFO.version
+        self.latest_version = BUILD_INFO.version
+        # Historical misspelling retained for current UI callers.
+        self.lastest_version = BUILD_INFO.version
+        self.last_result: UpdateResult | None = None
 
-    def __init__(self):
-        self.current_version = VERSION
-        self.lastest_version = VERSION
-        self.version_pattern = re.compile(r'v*((\d+)\.(\d+)\.(\d+))')
-        self.api_endpoints = PROJECT_UPDATE_URLS
-
-    def get_latest_version(self):
-        """ get latest version """
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36 Edg/112.0.1722.64"
-        }
-
-        proxy = self.get_system_proxy()
-        proxies = {
-            "http": proxy,
-            "https": proxy
-        }
-
-        # Try each API endpoint in turn
-        for url in self.api_endpoints:
-            try:
-                response = requests.get(url, headers=headers, timeout=5, allow_redirects=True, proxies=proxies)
-                response.raise_for_status()
-                
-                # Parse version
-                version = response.json()['tag_name']  # type:str
-                match = self.version_pattern.search(version)
-                if not match:
-                    continue  # Version format mismatch; try next API
-
-                self.lastest_version = match.group(1)
-                print(tr['VersionService']['VersionInfo'].format(VERSION, self.lastest_version))
-                return self.lastest_version
-            except Exception as e:
-                print(tr['VersionService']['RequestError'].format(url, str(e)))
-                continue  # On error, try next API
-        
-        # All APIs failed; return current version
-        return VERSION
+    def get_latest_version(self) -> str:
+        self.last_result = check_for_update()
+        if self.last_result.latest_version:
+            self.latest_version = self.last_result.latest_version
+            self.lastest_version = self.latest_version
+        return self.latest_version
 
     def has_new_version(self) -> bool:
-        """ check whether there is a new version """
-        version = QVersionNumber.fromString(self.get_latest_version())
-        current_version = QVersionNumber.fromString(self.current_version)
-        return version > current_version
+        self.get_latest_version()
+        return bool(self.last_result and self.last_result.available)
 
-    def get_system_proxy(self):
-        """ get system proxy """
-        if sys.platform == "win32":
-            try:
-                import winreg
-
-                with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r'Software\Microsoft\Windows\CurrentVersion\Internet Settings') as key:
-                    enabled, _ = winreg.QueryValueEx(key, 'ProxyEnable')
-
-                    if enabled:
-                        return "http://" + winreg.QueryValueEx(key, 'ProxyServer')
-            except:
-                pass
-        elif sys.platform == "darwin":
-            s = os.popen('scutil --proxy').read()
-            info = dict(re.findall(r'(?m)^\s+([A-Z]\w+)\s+:\s+(\S+)', s))
-
-            if info.get('HTTPEnable') == '1':
-                return f"http://{info['HTTPProxy']}:{info['HTTPPort']}"
-            elif info.get('ProxyAutoConfigEnable') == '1':
-                return info['ProxyAutoConfigURLString']
-
-        return os.environ.get("http_proxy")
+    def get_system_proxy(self) -> str | None:
+        proxies = getproxies()
+        return proxies.get("https") or proxies.get("http")

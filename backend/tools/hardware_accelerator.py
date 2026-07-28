@@ -1,9 +1,9 @@
-import traceback
 import importlib.util
+import logging
 
 import torch
 
-from backend.config import tr
+logger = logging.getLogger(__name__)
 
 class HardwareAccelerator:
 
@@ -27,13 +27,21 @@ class HardwareAccelerator:
         self.__device = None
 
     def initialize(self):
-        self.check_directml_available()
-        self.check_cuda_available()
-        self.check_mps_available()
-        self.load_onnx_providers()
+        """Populate the legacy adapter from the process-wide normalized profile."""
+        from backend.hardware.detector import get_hardware_profile
+
+        profile = get_hardware_profile()
+        self.__dml = profile.capabilities.torch_directml
+        self.__cuda = profile.capabilities.torch_cuda
+        self.__mps = profile.capabilities.torch_mps
+        self.__onnx_providers = [
+            provider
+            for provider in profile.capabilities.onnx_providers
+            if provider != "CPUExecutionProvider"
+        ]
 
     def check_directml_available(self):
-        self.__dml = importlib.util.find_spec("torch_directml")
+        self.__dml = importlib.util.find_spec("torch_directml") is not None
 
     def check_cuda_available(self):
         self.__cuda = torch.cuda.is_available()
@@ -60,12 +68,12 @@ class HardwareAccelerator:
                     "CoreMLExecutionProvider",      # Apple macOS
                     "CUDAExecutionProvider",        # Nvidia GPU
                 ]:
-                    print(tr['Main']['OnnxExecutionProviderNotSupportedSkipped'].format(provider))
+                    logger.info("Unsupported ONNX provider skipped: %s", provider)
                     continue
-                print(tr['Main']['OnnxExecutionProviderDetected'].format(provider))
+                logger.info("ONNX execution provider detected: %s", provider)
                 self.__onnx_providers.append(provider)
-        except ModuleNotFoundError as e:
-            print(tr['Main']['OnnxRuntimeNotInstall'])
+        except ModuleNotFoundError:
+            logger.info("ONNX Runtime is not installed; CPU framework fallback remains")
 
     def has_accelerator(self):
         if not self.__enabled:
@@ -195,7 +203,7 @@ class HardwareAccelerator:
                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
             UnicodeDecodeError: 'utf-8' codec can't decode byte 0xb2 in position 344: invalid start bn 344: invalid start byte
         onnxruntime-directml 1.21.1 works, but fails on Win10 and works on Win11.
-        To avoid conflicts and rewriting a QPT smart deploy flow, use lazy init and keep
+        To avoid conflicts between provider runtimes, use lazy initialization and keep
         onnxruntime-directml 1.20.1.
         Running SubtitleDetect in a separate process is also a valid approach.
         """
@@ -203,11 +211,14 @@ class HardwareAccelerator:
             if self.__dml:
                 try:
                     import torch_directml
-                    return torch_directml.device(torch_directml.default_device())
                     self.__dml = True
-                except:
-                    traceback.print_exc()
+                    return torch_directml.device(torch_directml.default_device())
+                except Exception as exc:
                     self.__dml = False
+                    logger.warning(
+                        "DirectML initialization failed; trying another backend: %s",
+                        type(exc).__name__,
+                    )
             if self.__cuda:
                 return torch.device("cuda:0")
             if self.__mps:

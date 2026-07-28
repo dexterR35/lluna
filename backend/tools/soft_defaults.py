@@ -3,19 +3,23 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from typing import Optional, Tuple
 
-ROOT = Path(__file__).resolve().parents[2]
-RUNTIME_FILE = ROOT / "midgard_runtime.json"
+from backend.core.atomic import atomic_write_json
+from backend.core.paths import PATHS
+
+RUNTIME_FILE = PATHS.runtime_file
+logger = logging.getLogger(__name__)
 
 
 def read_runtime() -> dict:
     try:
         if RUNTIME_FILE.is_file():
             return json.loads(RUNTIME_FILE.read_text(encoding="utf-8"))
-    except Exception:
-        pass
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        logger.warning("Could not read runtime state: %s", type(exc).__name__)
     return {}
 
 
@@ -23,9 +27,9 @@ def write_runtime_patch(patch: dict) -> None:
     data = read_runtime()
     data.update(patch)
     try:
-        RUNTIME_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
-    except Exception:
-        pass
+        atomic_write_json(RUNTIME_FILE, data)
+    except OSError as exc:
+        logger.warning("Could not save runtime state: %s", type(exc).__name__)
 
 
 def detect_vram_and_cap() -> Tuple[float, Optional[str]]:
@@ -33,12 +37,15 @@ def detect_vram_and_cap() -> Tuple[float, Optional[str]]:
     total = 0.0
     cap = None
     try:
-        from backend.tools.hardware_accelerator import HardwareAccelerator
+        from backend.hardware.detector import get_hardware_profile
 
-        hw = HardwareAccelerator.instance()
-        _free, total = hw.get_vram_mb()
-    except Exception:
-        total = 0.0
+        profile = get_hardware_profile()
+        gpu = profile.primary_gpu
+        if gpu is not None:
+            total = gpu.total_vram_mb
+            cap = gpu.compute_capability or None
+    except (ImportError, OSError, RuntimeError) as exc:
+        logger.warning("Hardware profile unavailable: %s", type(exc).__name__)
 
     runtime = read_runtime()
     if total <= 0 and runtime.get("total_vram_mb"):
@@ -46,27 +53,9 @@ def detect_vram_and_cap() -> Tuple[float, Optional[str]]:
             total = float(runtime["total_vram_mb"])
         except (TypeError, ValueError):
             pass
-    cap = runtime.get("compute_cap")
+    cap = cap or runtime.get("compute_cap")
     if not cap:
-        try:
-            import subprocess
-            import shutil
-
-            smi = shutil.which("nvidia-smi")
-            if smi:
-                out = subprocess.check_output(
-                    [smi, "--query-gpu=memory.total,compute_cap", "--format=csv,noheader,nounits"],
-                    text=True,
-                    timeout=10,
-                ).strip()
-                if out:
-                    parts = [p.strip() for p in out.splitlines()[0].split(",")]
-                    if len(parts) >= 1 and total <= 0:
-                        total = float(parts[0])
-                    if len(parts) >= 2:
-                        cap = parts[1]
-        except Exception:
-            pass
+        cap = None
     if total > 0 or cap:
         write_runtime_patch({"total_vram_mb": total or None, "compute_cap": cap})
     return total, cap

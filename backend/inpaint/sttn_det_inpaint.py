@@ -5,11 +5,6 @@ import numpy as np
 import torch
 from torchvision import transforms
 from typing import List
-import sys
-import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from backend.config import config
 from backend.inpaint.sttn.network_sttn import InpaintGenerator
 from backend.inpaint.utils.sttn_utils import Stack, ToTorchFormatTensor
 from backend.tools.inpaint_tools import get_inpaint_area_by_mask
@@ -21,7 +16,14 @@ _to_tensors = transforms.Compose([
 ])
 
 class STTNDetInpaint:
-    def __init__(self, device, model_path):
+    def __init__(
+        self,
+        device,
+        model_path,
+        *,
+        neighbor_stride: int = 5,
+        reference_length: int = 10,
+    ):
         self.device = device
         # 1. Create InpaintGenerator and move it to the selected device
         self.model = InpaintGenerator().to(self.device)
@@ -32,8 +34,8 @@ class STTNDetInpaint:
         # Model input width and height
         self.model_input_width, self.model_input_height = 432, 240
         # Set neighboring frame stride
-        self.neighbor_stride = config.sttnNeighborStride.value
-        self.ref_length = config.sttnReferenceLength.value
+        self.neighbor_stride = neighbor_stride
+        self.ref_length = reference_length
 
     def __call__(self, input_frames: List[np.ndarray], input_mask: np.ndarray):
         """

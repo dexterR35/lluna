@@ -2,8 +2,6 @@ import multiprocessing
 import cv2
 import numpy as np
 
-from backend.config import config
-
 
 def is_cuda_oom_error(exc: BaseException) -> bool:
     """True when the exception looks like GPU / CUDA memory exhaustion."""
@@ -68,20 +66,20 @@ def batch_generator(data, max_batch_size):
     if last_batch_start < n_samples:
         yield data[last_batch_start:]
 
-def create_mask(size, coords_list):
+def create_mask(size, coords_list, *, expansion_px: int = 10):
     mask = np.zeros(size, dtype="uint8")
     if coords_list:
         for coords in coords_list:
             xmin, xmax, ymin, ymax = coords
             # Expand by a few pixels so boxes are not too small
-            x1 = xmin - config.subtitleAreaDeviationPixel.value
+            x1 = xmin - expansion_px
             if x1 < 0:
                 x1 = 0
-            y1 = ymin - config.subtitleAreaDeviationPixel.value
+            y1 = ymin - expansion_px
             if y1 < 0:
                 y1 = 0
-            x2 = xmax + config.subtitleAreaDeviationPixel.value
-            y2 = ymax + config.subtitleAreaDeviationPixel.value
+            x2 = xmax + expansion_px
+            y2 = ymax + expansion_px
             cv2.rectangle(mask, (x1, y1),
                           (x2, y2), (255, 255, 255), thickness=-1)
     return mask

@@ -1,6 +1,4 @@
 import os
-import time
-import sys
 import gc
 from typing import List
 
@@ -10,9 +8,6 @@ import numpy as np
 from tqdm import tqdm
 from torchvision import transforms
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from backend.config import config
 from backend.inpaint.sttn.auto_sttn import InpaintGenerator
 from backend.inpaint.utils.sttn_utils import Stack, ToTorchFormatTensor
 from backend.tools.inpaint_tools import get_inpaint_area_by_mask, is_frame_number_in_ab_sections
@@ -26,7 +21,14 @@ _to_tensors = transforms.Compose([
 ])
 
 class STTNInpaint:
-    def __init__(self, device, model_path):
+    def __init__(
+        self,
+        device,
+        model_path,
+        *,
+        neighbor_stride: int = 5,
+        reference_length: int = 10,
+    ):
         self.device = device
         # 1. Create InpaintGenerator and move it to the selected device
         self.model = InpaintGenerator().to(self.device)
@@ -37,8 +39,8 @@ class STTNInpaint:
         # Model input width and height
         self.model_input_width, self.model_input_height = 640, 120
         # Set neighboring frame stride
-        self.neighbor_stride = config.sttnNeighborStride.value
-        self.ref_length = config.sttnReferenceLength.value
+        self.neighbor_stride = neighbor_stride
+        self.ref_length = reference_length
 
     def __call__(self, input_frames: List[np.ndarray], input_mask: np.ndarray):
         """
@@ -179,9 +181,24 @@ class STTNAutoInpaint:
         # Return video reader and frame info
         return reader, frame_info
 
-    def __init__(self, device, model_path, video_path, mask_path=None, clip_gap=None):
+    def __init__(
+        self,
+        device,
+        model_path,
+        video_path,
+        mask_path=None,
+        clip_gap=50,
+        *,
+        neighbor_stride: int = 5,
+        reference_length: int = 10,
+    ):
         # Initialize STTNInpaint video inpainting instance
-        self.sttn_inpaint = STTNInpaint(device, model_path)
+        self.sttn_inpaint = STTNInpaint(
+            device,
+            model_path,
+            neighbor_stride=neighbor_stride,
+            reference_length=reference_length,
+        )
         try:
             from backend.tools.inpaint_release import register_video_inpaint_model
             register_video_inpaint_model(self.sttn_inpaint)
@@ -196,10 +213,7 @@ class STTNAutoInpaint:
             f"{os.path.basename(self.video_path).rsplit('.', 1)[0]}_no_sub.mp4"
         )
         # Max frames loaded per processing chunk
-        if clip_gap is None:
-            self.clip_gap = config.getSttnMaxLoadNum()
-        else:
-            self.clip_gap = clip_gap
+        self.clip_gap = clip_gap
 
     def __call__(self, input_mask=None, input_sub_remover=None, tbar=None):
         reader = None
@@ -339,14 +353,3 @@ class STTNAutoInpaint:
                 prefetcher.release()
             if writer:
                 writer.release()
-
-
-if __name__ == '__main__':
-    mask_path = '../../test/test.png'
-    video_path = '../../test/test.mp4'
-    # Record start time
-    start = time.time()
-    sttn_video_inpaint = STTNAutoInpaint(video_path, mask_path, clip_gap=config.getSttnMaxLoadNum())
-    sttn_video_inpaint()
-    print(f'video generated at {sttn_video_inpaint.video_out_path}')
-    print(f'time cost: {time.time() - start}')

@@ -1,8 +1,6 @@
 # --- Midgard local / generated ---
 /midgardEnv/
 /midgard_runtime.json
-/run_gui.sh
-/run_gui.bat
 /config/config.json
 /config/pending_model_downloads.json
 /config/model_download_cancel.flag

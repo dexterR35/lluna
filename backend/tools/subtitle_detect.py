@@ -1,14 +1,14 @@
-import sys
 from functools import cached_property
 
 import cv2
 from tqdm import tqdm
 
-from .model_config import ModelConfig
 from .hardware_accelerator import HardwareAccelerator
 from .common_tools import get_readable_path
 from .ocr import get_coordinates
-from backend.config import config, tr
+from backend.configuration.models import SubtitleSettings
+from backend.i18n.translations import get_translations
+from backend.models.paths import SubtitleModelPaths
 from backend.scenedetect import scene_detect
 from backend.scenedetect.detectors import ContentDetector
 from backend.tools.inpaint_tools import is_frame_number_in_ab_sections
@@ -21,9 +21,19 @@ class SubtitleDetect:
     # Sample interval; adaptively set from video FPS in _init_sample_step
     SAMPLE_STEP = 3
 
-    def __init__(self, video_path, sub_areas=[]):
+    def __init__(
+        self,
+        video_path,
+        sub_areas=None,
+        *,
+        settings: SubtitleSettings,
+        model_paths: SubtitleModelPaths,
+    ):
         self.video_path = video_path
-        self.sub_areas = sub_areas
+        self.sub_areas = list(sub_areas or ())
+        self.settings = settings
+        self.model_paths = model_paths
+        self.tr = get_translations()
         self._init_sample_step()
 
     def _init_sample_step(self):
@@ -41,14 +51,15 @@ class SubtitleDetect:
     @cached_property
     def text_detector(self):
         from backend.tools.paddle_cdn_patch import strip_paddle_cdn_hoster_check
+        from backend.tools.paddle_runtime import disable_paddle_background_services
 
         # Local PP-OCR under backend/models/V5 - strip PaddleX CDN hoster check
+        disable_paddle_background_services()
         strip_paddle_cdn_hoster_check()
 
         import paddle
         paddle.disable_signal_handler()
         from paddleocr import TextDetection
-        model_config = ModelConfig()
         # enable_hpi requires the optional paddlex ultra-infer plugin.
         # Do not infer it from onnx_providers: when HW accel is off,
         # onnx_providers falls back to ["CPUExecutionProvider"] and would
@@ -63,8 +74,8 @@ class SubtitleDetect:
         except Exception:
             pass
         return TextDetection(
-            model_name=model_config.DET_MODEL_NAME,
-            model_dir=model_config.DET_MODEL_DIR,
+            model_name=self.model_paths.detection_model_name,
+            model_dir=str(self.model_paths.detection_dir),
             device="cpu",
             enable_hpi=enable_hpi,
         )
@@ -100,13 +111,23 @@ class SubtitleDetect:
     def find_subtitle_frame_no(self, sub_remover=None):
         video_cap = cv2.VideoCapture(get_readable_path(self.video_path))
         frame_count = video_cap.get(cv2.CAP_PROP_FRAME_COUNT)
-        tbar = tqdm(total=int(frame_count), unit='frame', position=0, file=sys.__stdout__, desc='Subtitle Finding')
+        tbar = tqdm(
+            total=int(frame_count),
+            unit="frame",
+            position=0,
+            desc="Subtitle Finding",
+            disable=bool(sub_remover and sub_remover.gui_mode),
+        )
         current_frame_no = 0
         # Phase 1: sample detection - run OCR only every sample_step frames
         sampled_results = {}  # frame_no -> temp_list
         if sub_remover:
-            sub_remover.append_output(tr['Main']['ProcessingStartFindingSubtitles'])
+            sub_remover.append_output(
+                self.tr["Main"]["ProcessingStartFindingSubtitles"]
+            )
         while video_cap.isOpened():
+            if sub_remover:
+                sub_remover.cancellation_token.raise_if_cancelled()
             ret, frame = video_cap.read()
             # Failed to read frame (reached end of video)
             if not ret:
@@ -125,6 +146,7 @@ class SubtitleDetect:
             if sub_remover:
                 sub_remover.progress_total = (100 * float(current_frame_no) / float(frame_count)) // 2
         video_cap.release()
+        tbar.close()
         # Phase 2: interpolate - if two sampled frames both have subtitles, mark middle frames too
         subtitle_frame_no_box_dict = {}
         detected_nos = sorted(sampled_results.keys())
@@ -140,7 +162,9 @@ class SubtitleDetect:
             subtitle_frame_no_box_dict[detected_nos[-1]] = sampled_results[detected_nos[-1]]
         subtitle_frame_no_box_dict = self.unify_regions(subtitle_frame_no_box_dict)
         if sub_remover:
-            sub_remover.append_output(tr['Main']['FinishedFindingSubtitles'])
+            sub_remover.append_output(
+                self.tr["Main"]["FinishedFindingSubtitles"]
+            )
         new_subtitle_frame_no_box_dict = dict()
         for key in subtitle_frame_no_box_dict.keys():
             if len(subtitle_frame_no_box_dict[key]) > 0:
@@ -185,14 +209,17 @@ class SubtitleDetect:
                 scene_div_frame_no_list.append(start.frame_num + 1)
         return scene_div_frame_no_list
 
-    @staticmethod
-    def are_similar(region1, region2):
+    def are_similar(self, region1, region2):
         """Return whether two regions are similar."""
         xmin1, xmax1, ymin1, ymax1 = region1
         xmin2, xmax2, ymin2, ymax2 = region2
 
-        return abs(xmin1 - xmin2) <= config.subtitleAreaPixelToleranceXPixel.value and abs(xmax1 - xmax2) <= config.subtitleAreaPixelToleranceXPixel.value and \
-            abs(ymin1 - ymin2) <= config.subtitleAreaPixelToleranceYPixel.value and abs(ymax1 - ymax2) <= config.subtitleAreaPixelToleranceYPixel.value
+        return (
+            abs(xmin1 - xmin2) <= self.settings.box_tolerance_x_px
+            and abs(xmax1 - xmax2) <= self.settings.box_tolerance_x_px
+            and abs(ymin1 - ymin2) <= self.settings.box_tolerance_y_px
+            and abs(ymax1 - ymax2) <= self.settings.box_tolerance_y_px
+        )
 
     def unify_regions(self, raw_regions):
         """Unify consecutive similar regions while preserving list structure."""

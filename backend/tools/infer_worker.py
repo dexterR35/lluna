@@ -93,6 +93,10 @@ def _release_all_except(keep: Optional[str] = None) -> None:
 
 def infer_worker_main(cmd_queue, evt_queue, hardware_accel: bool = True) -> None:
     """Child process entry: long-lived control loop."""
+    from backend.tools.paddle_runtime import disable_paddle_background_services
+
+    # Must happen before hardware/framework detection can import native code.
+    disable_paddle_background_services()
     ensure_expandable_segments()
     try:
         from backend.tools.paddle_cdn_patch import strip_paddle_cdn_hoster_check
@@ -101,15 +105,17 @@ def infer_worker_main(cmd_queue, evt_queue, hardware_accel: bool = True) -> None
     except Exception:
         pass
     try:
-        from backend.config import config
+        from backend.tools.hardware_accelerator import HardwareAccelerator
 
-        config.set(config.hardwareAcceleration, bool(hardware_accel))
-    except Exception:
-        pass
+        HardwareAccelerator.instance().set_enabled(bool(hardware_accel))
+    except (ImportError, RuntimeError) as exc:
+        _emit(evt_queue, log(0, f"Hardware initialization degraded: {type(exc).__name__}"))
 
     cancel_event = threading.Event()
     active_run_id: Optional[int] = None
     busy = False
+    state_lock = threading.RLock()
+    job_thread: Optional[threading.Thread] = None
     last_activity = time.monotonic()
     stop = False
 
@@ -125,9 +131,6 @@ def infer_worker_main(cmd_queue, evt_queue, hardware_accel: bool = True) -> None
 
     def run_job(run_id: int, job_type: str, payload: Dict[str, Any]) -> None:
         nonlocal busy, active_run_id, last_activity
-        busy = True
-        active_run_id = run_id
-        cancel_event.clear()
         last_activity = time.monotonic()
         try:
             _release_all_except(keep=job_type)
@@ -151,8 +154,9 @@ def infer_worker_main(cmd_queue, evt_queue, hardware_accel: bool = True) -> None
             traceback.print_exc()
             _emit(evt_queue, error(run_id, str(e)))
         finally:
-            busy = False
-            active_run_id = None
+            with state_lock:
+                busy = False
+                active_run_id = None
             last_activity = time.monotonic()
             empty_cuda_cache()
 
@@ -174,16 +178,21 @@ def infer_worker_main(cmd_queue, evt_queue, hardware_accel: bool = True) -> None
             continue
 
         if msg == CmdMsg.RELEASE.value:
-            if not busy:
+            with state_lock:
+                can_release = not busy
+            if can_release:
                 _release_all_except(keep=None)
             last_activity = time.monotonic()
             continue
 
         if msg == CmdMsg.CANCEL.value:
             rid = data.get("run_id")
-            if active_run_id is not None and (rid is None or int(rid) == int(active_run_id)):
+            with state_lock:
+                current_run_id = active_run_id
+            if current_run_id is not None and (
+                rid is None or int(rid) == int(current_run_id)
+            ):
                 cancel_event.set()
-                # Soft cancel only helps enhance; rembg/subtitle rely on process kill from parent.
                 try:
                     from backend.tools.image_enhance import cancel_enhance
 
@@ -209,14 +218,30 @@ def infer_worker_main(cmd_queue, evt_queue, hardware_accel: bool = True) -> None
             run_id = int(data.get("run_id", 0))
             job_type = str(data.get("job_type", ""))
             payload = data.get("payload") or {}
-            if busy:
+            with state_lock:
+                if busy:
+                    rejected = True
+                else:
+                    rejected = False
+                    busy = True
+                    active_run_id = run_id
+                    cancel_event.clear()
+                    job_thread = threading.Thread(
+                        target=run_job,
+                        args=(run_id, job_type, payload),
+                        daemon=True,
+                        name=f"infer-job-{run_id}",
+                    )
+                    job_thread.start()
+            if rejected:
                 _emit(evt_queue, error(run_id, "Worker busy"))
-                continue
-            # Run job inline (single-flight). Parent must not double-start.
-            run_job(run_id, job_type, payload)
             continue
 
-    _release_all_except(keep=None)
+    cancel_event.set()
+    if job_thread is not None and job_thread.is_alive():
+        job_thread.join(timeout=3.0)
+    if job_thread is None or not job_thread.is_alive():
+        _release_all_except(keep=None)
     empty_cuda_cache()
 
 
@@ -651,80 +676,110 @@ def _job_select_subject(run_id, payload, on_progress, heartbeat_log, evt_queue) 
 
 def _job_subtitle(run_id, payload, cancel_event, on_progress, heartbeat_log, evt_queue) -> None:
     import cv2
+    from dataclasses import replace
 
-    from backend.main import SubtitleRemover
     from backend.tools.job_config import apply_subtitle_job_config
-    from backend.tools.vram_budget import VramBudgetError, pick_video_load_num
+    from backend.tools.vram_budget import VramBudgetError
+    from backend.configuration.models import SubtitleSettings
+    from backend.diagnostics.errors import CancellationError
+    from backend.media.progress import CancellationToken
+    from backend.services.subtitle_removal import (
+        SubtitleRemovalRequest,
+        SubtitleRemovalService,
+    )
 
-    # Use the GUI's selected models for this job (worker config is otherwise stale)
-    apply_subtitle_job_config(payload)
-
-    video_path = payload["video_path"]
-    output_path = payload["output_path"]
-    options = payload.get("options") or {}
-
-    try:
-        from backend.config import config as _cfg
-
-        heartbeat_log(
-            run_id,
-            "Starting subtitle removal "
-            f"(inpaint={_cfg.inpaintMode.value.value}, "
-            f"detect={_cfg.subtitleDetectMode.value.value})…",
-        )
-    except Exception:
-        heartbeat_log(run_id, "Starting subtitle removal…")
+    settings = apply_subtitle_job_config(payload)
+    request = SubtitleRemovalRequest.from_payload(payload, settings)
+    heartbeat_log(
+        run_id,
+        "Starting subtitle removal "
+        f"(inpaint={settings.inpaint_mode}, "
+        f"detect={settings.subtitle_detect_mode})…",
+    )
     on_progress(run_id, 1)
 
     # VRAM preflight from video resolution before loading heavy models
     try:
-        from backend.config import config
-        from backend.tools.constant import InpaintMode
-
-        cap = cv2.VideoCapture(video_path)
+        cap = cv2.VideoCapture(str(request.input_path))
         w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
         h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
         cap.release()
         if h > 0 and w > 0:
-            mode = config.inpaintMode.value
-            if mode == InpaintMode.PROPAINTER:
-                bud = pick_video_load_num(
-                    h, w, int(config.propainterMaxLoadNum.value), propainter=True
+            from backend.hardware.detector import get_hardware_profile
+            from backend.models.policy import video_frame_policy
+
+            profile = get_hardware_profile()
+            if settings.inpaint_mode == "propainter":
+                configured = settings.propainter_max_load_num
+                policy = video_frame_policy(
+                    profile,
+                    configured=configured,
+                    width=w,
+                    height=h,
+                    propainter=True,
                 )
-                if bud.param is not None:
-                    options = dict(options)
-                    heartbeat_log(run_id, f"VRAM budget: propainterMaxLoadNum={bud.param}")
-            elif mode in (InpaintMode.STTN_AUTO, InpaintMode.STTN_DET):
-                bud = pick_video_load_num(
-                    h, w, int(config.getSttnMaxLoadNum()), propainter=False
+                settings = replace(
+                    settings,
+                    propainter_max_load_num=policy.effective,
                 )
-                if bud.param is not None:
-                    heartbeat_log(run_id, f"VRAM budget: sttn load~{bud.param}")
+                heartbeat_log(
+                    run_id,
+                    "Frame policy: "
+                    f"configured={policy.configured}, "
+                    f"recommended={policy.recommended}, "
+                    f"effective={policy.effective}"
+                    + (f" ({policy.reason})" if policy.reason else ""),
+                )
+            elif settings.inpaint_mode in {"sttn-auto", "sttn-det"}:
+                configured = settings.sttn_max_load_num
+                policy = video_frame_policy(
+                    profile,
+                    configured=configured,
+                    width=w,
+                    height=h,
+                    propainter=False,
+                )
+                settings = replace(
+                    settings,
+                    sttn_max_load_num=policy.effective,
+                )
+                heartbeat_log(
+                    run_id,
+                    "Frame policy: "
+                    f"configured={policy.configured}, "
+                    f"recommended={policy.recommended}, "
+                    f"effective={policy.effective}"
+                    + (f" ({policy.reason})" if policy.reason else ""),
+                )
     except VramBudgetError as e:
         _emit(evt_queue, error(run_id, str(e)))
         return
     except Exception:
         traceback.print_exc()
 
-    sr = SubtitleRemover(video_path, True)
-    sr.video_out_path = output_path
-    for key, val in options.items():
-        setattr(sr, key, val)
-
-    def prog(p, is_finished=False):
-        if cancel_event.is_set():
-            return
-        on_progress(run_id, int(p) if not is_finished else 100)
-
-    sr.add_progress_listener(lambda p, fin: prog(p, fin))
-    sr.append_output = lambda *args: heartbeat_log(run_id, " ".join(str(a) for a in args))
-    sr.manage_process = lambda pid: heartbeat_log(run_id, f"child_pid={pid}")
-    sr.update_preview_with_comp = lambda *args: _emit(
-        evt_queue, preview(run_id, args=args)
+    request = SubtitleRemovalRequest(
+        input_path=request.input_path,
+        output_path=request.output_path,
+        settings=settings,
+        subtitle_areas=request.subtitle_areas,
+        ab_sections=request.ab_sections,
     )
-
     try:
-        sr.run()
+        service = SubtitleRemovalService()
+        service.run(
+            request,
+            cancellation_token=CancellationToken(cancel_event),
+            on_progress=lambda event: on_progress(
+                run_id, event.overall_progress
+            ),
+            on_log=lambda message: heartbeat_log(run_id, message),
+            on_preview=lambda *args: _emit(
+                evt_queue, preview(run_id, args=args)
+            ),
+        )
+    except CancellationError:
+        _emit(evt_queue, error(run_id, "__cancelled__"))
+        return
     except Exception as e:
         traceback.print_exc()
         _emit(evt_queue, error(run_id, str(e)))
@@ -739,7 +794,7 @@ def _job_subtitle(run_id, payload, cancel_event, on_progress, heartbeat_log, evt
         empty_cuda_cache()
 
     on_progress(run_id, 100)
-    _emit(evt_queue, result(run_id, output_path))
+    _emit(evt_queue, result(run_id, str(request.output_path)))
 
 
 def _temp_png(prefix: str) -> str:

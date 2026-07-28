@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING, List
 
 from backend.tools.first_run_downloads import (
     dispatch_scheduled_downloads,
-    seed_first_run_downloads,
 )
 from backend.tools.model_download_registry import (
     KIND_ENHANCE,
@@ -40,7 +39,6 @@ def prepare_restart_pending() -> List[PendingDownload]:
 def restart_pending_downloads(settings: "AdvancedSettingInterface") -> None:
     """After GUI opens: enqueue pending downloads one at a time."""
     prepare_restart_pending()
-    seed_first_run_downloads()
     pending = ModelDownloadRegistry.instance().list_pending()
     if not pending:
         return

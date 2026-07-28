@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import json
 import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, List, Optional, Tuple
+
+from backend.core.atomic import atomic_write_json
+from backend.core.paths import AppPaths
 
 # (kind, key) e.g. ("enhance", "x2plus"), ("select_object", "fast")
 PendingItem = Tuple[str, str]
@@ -29,16 +33,13 @@ class PendingDownload:
 
 
 def _pending_path() -> Path:
-    # Project root config/ (same tree as config/config.json)
-    root = Path(__file__).resolve().parents[2]
-    path = root / "config"
+    path = AppPaths.resolve().config_dir
     path.mkdir(parents=True, exist_ok=True)
     return path / "pending_model_downloads.json"
 
 
 def _cancel_flag_path() -> Path:
-    root = Path(__file__).resolve().parents[2]
-    path = root / "config"
+    path = AppPaths.resolve().config_dir
     path.mkdir(parents=True, exist_ok=True)
     return path / "model_download_cancel.flag"
 
@@ -175,7 +176,16 @@ class ModelDownloadRegistry:
             return []
         try:
             raw = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
+        except json.JSONDecodeError:
+            backup = path.with_name(
+                f"{path.name}.corrupt-{int(time.time())}"
+            )
+            try:
+                path.replace(backup)
+            except OSError:
+                pass
+            return []
+        except OSError:
             return []
         out: List[PendingItem] = []
         if not isinstance(raw, list):
@@ -195,7 +205,7 @@ class ModelDownloadRegistry:
         path = _pending_path()
         payload = [{"kind": k, "key": v} for k, v in items]
         try:
-            path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+            atomic_write_json(path, payload)
         except OSError:
             pass
 

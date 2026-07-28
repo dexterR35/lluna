@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
-import os
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Set
 
+from backend.models.metadata import ExpectedFile
+from backend.models.registry import (
+    REALESRGAN_X2_ARTIFACT,
+    REALESRGAN_X4_ARTIFACT,
+)
 from backend.tools.constant import EnhanceMode
 
 
@@ -18,6 +22,8 @@ class EnhanceModelInfo:
     """Translation key under [EnhanceMode] / [EnhanceModelDesc]."""
     desc_key: str
     download_url: str
+    version: str
+    artifact: ExpectedFile
     """Recommended default (badge only; On/Off still works)."""
     is_default: bool = False
 
@@ -31,6 +37,8 @@ MODEL_CATALOG: List[EnhanceModelInfo] = [
             "https://github.com/xinntao/Real-ESRGAN/releases/download/"
             "v0.2.1/RealESRGAN_x2plus.pth"
         ),
+        version="v0.2.1",
+        artifact=REALESRGAN_X2_ARTIFACT,
         is_default=True,
     ),
     EnhanceModelInfo(
@@ -41,6 +49,8 @@ MODEL_CATALOG: List[EnhanceModelInfo] = [
             "https://github.com/xinntao/Real-ESRGAN/releases/download/"
             "v0.1.0/RealESRGAN_x4plus.pth"
         ),
+        version="v0.1.0",
+        artifact=REALESRGAN_X4_ARTIFACT,
         is_default=False,
     ),
 ]
@@ -54,9 +64,9 @@ _NONE_ENABLED = "__none__"
 
 
 def models_dir() -> Path:
-    from backend.config import BASE_DIR
+    from backend.core.paths import PATHS
 
-    path = Path(BASE_DIR) / "models" / "realesrgan"
+    path = PATHS.models_dir / "realesrgan"
     path.mkdir(parents=True, exist_ok=True)
     return path
 
@@ -67,10 +77,31 @@ def model_file_path(mode: EnhanceMode) -> Path:
 
 def is_model_installed(mode: EnhanceMode) -> bool:
     path = model_file_path(mode)
+    info = catalog_info(mode)
     try:
-        return path.is_file() and path.stat().st_size > 0
+        return (
+            info is not None
+            and path.is_file()
+            and path.stat().st_size == info.artifact.size_bytes
+        )
     except OSError:
         return False
+
+
+def verify_installed_model(mode: EnhanceMode) -> Path:
+    """Return the weight path only when it matches the reviewed manifest."""
+    from backend.models.artifacts import ArtifactVerificationError
+    from backend.models.verifier import verify_file
+
+    info = catalog_info(mode)
+    if info is None:
+        raise ValueError(f"Unknown enhance model: {mode}")
+    result = verify_file(models_dir(), info.artifact)
+    if not result.valid:
+        raise ArtifactVerificationError(
+            f"{mode.value} failed integrity verification: {result.reason}"
+        )
+    return result.path
 
 
 def catalog_info(mode: EnhanceMode) -> Optional[EnhanceModelInfo]:
@@ -205,14 +236,14 @@ def install_model(mode: EnhanceMode) -> None:
     discard_partial(mode)
 
     try:
+        from backend.models.artifacts import promote_verified_artifact
+
         reg.check_cancelled()
         urllib.request.urlretrieve(
             info.download_url, str(tmp), reporthook=urllib_cancel_reporthook
         )
         reg.check_cancelled()
-        if not tmp.is_file() or tmp.stat().st_size <= 0:
-            raise RuntimeError(f"Download finished but file empty: {tmp}")
-        os.replace(str(tmp), str(dest))
+        promote_verified_artifact(tmp, dest, info.artifact)
     except DownloadCancelled:
         discard_partial(mode)
         reg.fail(KIND_ENHANCE, mode.value, keep_pending=True)
@@ -232,7 +263,6 @@ def install_model(mode: EnhanceMode) -> None:
 
 def ensure_model_installed(mode: EnhanceMode) -> Path:
     """Install if missing (blocking). Returns weight path."""
-    path = model_file_path(mode)
     if not is_model_installed(mode):
         install_model(mode)
-    return path
+    return verify_installed_model(mode)

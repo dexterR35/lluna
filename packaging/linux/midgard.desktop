@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Midgard
+Comment=Local AI image and video tools
+Exec=Midgard
+Icon=midgard
+Terminal=false
+Categories=Graphics;AudioVideo;
+StartupNotify=true

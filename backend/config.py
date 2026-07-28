@@ -1,4 +1,4 @@
-import os
+import logging
 from io import StringIO
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -17,16 +17,19 @@ from backend.tools.constant import (
     LowLightMode,
     GenerateMode,
 )
-import configparser
+from backend.core.build_info import (
+    PROJECT_HOME_URL,
+    PROJECT_ISSUES_URL,
+    PROJECT_RELEASES_URL,
+    PROJECT_UPDATE_URLS,
+    VERSION,
+)
+from backend.configuration.recovery import backup_if_corrupt_json
+from backend.core.atomic import atomic_write_json
+from backend.core.paths import PATHS
+from backend.i18n.translations import get_translations
 
-# Project version
-VERSION = "1.4.0"
-PROJECT_HOME_URL = "https://github.com/midgard-app/midgard"
-PROJECT_ISSUES_URL = PROJECT_HOME_URL + "/issues"
-PROJECT_RELEASES_URL = PROJECT_HOME_URL + "/releases"
-PROJECT_UPDATE_URLS = [
-    "https://api.github.com/repos/midgard-app/midgard/releases/latest",
-]
+logger = logging.getLogger(__name__)
 
 # Hardware acceleration master switch
 HARDWARE_ACCELERATION_OPTION = True
@@ -36,6 +39,12 @@ _EPHEMERAL_CONFIG_GROUPS = frozenset({"UI", "Window", "QFluentWidgets"})
 
 
 class Config(QConfig):
+    schemaVersion = RangeConfigItem(
+        "Meta",
+        "SchemaVersion",
+        1,
+        RangeValidator(1, 1),
+    )
     # Window size - fixed default, always centered (not persisted)
     windowW = 1280
     windowH = 750
@@ -221,7 +230,11 @@ class Config(QConfig):
     sttnReferenceLength = RangeConfigItem("Sttn", "ReferenceLength", 10, RangeValidator(1, 100))
     # Maximum number of frames STTN processes at once
     sttnMaxLoadNum = RangeConfigItem("Sttn", "MaxLoadNum", 50, RangeValidator(1, 300))
-    getSttnMaxLoadNum = lambda self: max(self.sttnMaxLoadNum.value, self.sttnNeighborStride.value * self.sttnReferenceLength.value)
+    getSttnMaxLoadNum = lambda self: max(
+        self.sttnMaxLoadNum.value,
+        self.sttnNeighborStride.value,
+        self.sttnReferenceLength.value,
+    )
     
     # The following parameters only apply when using the PROPAINTER algorithm
     # Set based on your GPU VRAM: larger max concurrent images improve quality but need more VRAM
@@ -245,20 +258,27 @@ class Config(QConfig):
             items.pop(group, None)
         return items
 
+    def save(self):
+        """Persist qfluent settings atomically."""
+        target = Path(self._cfg.file)
+        atomic_write_json(target, self._cfg.toDict())
 
-CONFIG_FILE = 'config/config.json'
+
+CONFIG_FILE = str(PATHS.config_file)
+corrupt_backup = backup_if_corrupt_json(CONFIG_FILE)
+if corrupt_backup is not None:
+    logger.warning(
+        "Recovered corrupt GUI configuration to %s",
+        corrupt_backup.name,
+    )
 config = Config()
 qconfig.load(CONFIG_FILE, config)
 
 # Theme is hardcoded in ui.theme - keep in memory only, never from/to JSON
 qconfig.set(config.themeMode, Theme.DARK, save=False)
 
-# No %-interpolation - UI strings may contain "100%" etc.
-tr = configparser.ConfigParser(interpolation=None)
-TRANSLATION_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'interface', 'en.ini')
-tr.read(TRANSLATION_FILE, encoding='utf-8')
+TRANSLATION_FILE = str(PATHS.translation_file)
+tr = get_translations()
 
 # Project base directory
-BASE_DIR = str(Path(os.path.abspath(__file__)).parent)
-
-os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
+BASE_DIR = str(PATHS.project_root / "backend")

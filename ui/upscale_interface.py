@@ -25,6 +25,9 @@ from backend.tools.enhance_models import (
 from backend.tools.enhance_options import EnhanceOptions
 from backend.tools.infer_client import InferClient
 from backend.tools.infer_protocol import JobType
+from backend.hardware.detector import get_hardware_profile
+from backend.settings.model_schemas import UpscaleSettings
+from backend.settings.presets import Preset, ResolutionContext, resolve
 from ui.component.controls.inputs import make_section_combo, refresh_combo
 from ui.component.preview.before_after_preview import BeforeAfterPreview
 from ui.component.workspace.action_bar import RailActions
@@ -64,6 +67,7 @@ class UpscaleInterface(ContentPage):
     processing_changed = Signal(bool)
     save_enabled_signal = Signal(bool)
     alert_signal = Signal(str, str)
+    recommendation_signal = Signal(str)
 
     def __init__(self, parent=None):
         super().__init__("UpscaleInterface", parent=parent)
@@ -75,6 +79,7 @@ class UpscaleInterface(ContentPage):
         self._processing = False
         self._external_gpu_busy = False
         self._active_run_id: int | None = None
+        self._preset = Preset.BALANCED
 
         self.__init_widgets()
         self.append_log_signal.connect(self.append_log)
@@ -88,6 +93,7 @@ class UpscaleInterface(ContentPage):
         self.task_error_signal.connect(self._on_task_error)
         self.save_enabled_signal.connect(self.action_bar.set_save_enabled)
         self.alert_signal.connect(self._show_alert)
+        self.recommendation_signal.connect(self.recommendation_label.setText)
         self.append_output(tr["Upscale"]["EmptyStateHint"])
         self._refresh_model_combo()
 
@@ -122,6 +128,26 @@ class UpscaleInterface(ContentPage):
         )
         self.model_combo = self.model_field.control
         settings_layout.addWidget(self.model_field)
+
+        self.preset_field = make_section_combo(
+            settings_host,
+            label="Preset",
+            tooltip="Choose a hardware-aware speed, quality, or memory strategy.",
+            fetch=lambda: list(Preset),
+            label_of=lambda preset: preset.value.replace("-", " ").title(),
+            data_of=lambda preset: preset.value,
+            current=self._preset.value,
+            on_change=self._on_preset_selected,
+        )
+        self.preset_combo = self.preset_field.control
+        self.preset_combo.setAccessibleName("Upscale preset")
+        settings_layout.addWidget(self.preset_field)
+        self.recommendation_label = BodyLabel(
+            "Balanced uses automatic tiling for the detected hardware.", settings_host
+        )
+        self.recommendation_label.setWordWrap(True)
+        self.recommendation_label.setAccessibleName("Effective upscale settings")
+        settings_layout.addWidget(self.recommendation_label)
 
         denoise_row = QWidget(settings_host)
         denoise_layout = QHBoxLayout(denoise_row)
@@ -189,6 +215,16 @@ class UpscaleInterface(ContentPage):
         except Exception:
             pass
 
+    def _on_preset_selected(self, data):
+        try:
+            self._preset = Preset(str(data))
+            self.recommendation_label.setText(
+                f"{self._preset.value.replace('-', ' ').title()} will be resolved "
+                "for the image and available memory when processing starts."
+            )
+        except ValueError:
+            self._preset = Preset.BALANCED
+
     def _on_denoise_changed(self, checked: bool):
         config.set(config.enhanceDenoiseEnabled, bool(checked))
 
@@ -213,6 +249,8 @@ class UpscaleInterface(ContentPage):
         return EnhanceOptions(
             denoise=bool(self.denoise_switch.isChecked()),
             denoise_strength=base.denoise_strength,
+            max_long_edge=base.max_long_edge,
+            tile_size=base.tile_size,
         )
 
     def refresh_models(self):
@@ -263,6 +301,7 @@ class UpscaleInterface(ContentPage):
         self.action_bar.set_reset_enabled(idle)
         self.action_bar.set_save_enabled(idle and self._current_has_unsaved_preview())
         self.model_combo.setEnabled(idle and self.model_combo.count() > 0)
+        self.preset_combo.setEnabled(idle)
         self.denoise_switch.setEnabled(idle)
         if self._processing:
             self.action_bar.set_running(True)
@@ -546,12 +585,14 @@ class UpscaleInterface(ContentPage):
                     preview_path = _preview_temp_path(task_item.path)
                     name = Path(task_item.path).name
                     diag.run(f"upscale processing  {name}  model={mode_value}")
+                    effective = self._resolve_settings(task_item.path, mode_value)
 
                     ok = self._run_worker_process(
                         task_item.path,
                         preview_path,
                         mode_value,
                         opts,
+                        effective_settings=effective,
                         display_name=name,
                     )
                     if self._stop_event.is_set():
@@ -585,6 +626,37 @@ class UpscaleInterface(ContentPage):
         self._worker_thread = threading.Thread(target=task, daemon=True)
         self._worker_thread.start()
 
+    def _resolve_settings(self, input_path: str, mode_value: str) -> dict:
+        with Image.open(input_path) as image:
+            width, height = image.size
+        defaults = UpscaleSettings(
+            model=mode_value,
+            scale_factor=2 if "x2" in mode_value.lower() else 4,
+            max_long_edge=int(config.enhanceMaxLongEdge.value),
+        )
+        result = resolve(
+            defaults,
+            configured=defaults,
+            preset=self._preset,
+            context=ResolutionContext(
+                task="upscale",
+                model=mode_value,
+                hardware=get_hardware_profile(),
+                input_width=width,
+                input_height=height,
+            ),
+        )
+        tile = result.values["tile_size"]
+        message = (
+            f"Configured tile: {tile.configured or 'Auto'} · "
+            f"Recommended: {tile.recommended or 'Auto'} · "
+            f"Effective: {tile.effective or 'Auto'}"
+        )
+        self.recommendation_signal.emit(message)
+        for warning in result.warnings:
+            self.append_log_signal.emit([warning])
+        return result.settings.to_snapshot()
+
     def _run_worker_process(
         self,
         input_path: str,
@@ -592,6 +664,7 @@ class UpscaleInterface(ContentPage):
         mode_value: str,
         opts: EnhanceOptions,
         *,
+        effective_settings: dict | None = None,
         display_name: str | None = None,
     ) -> bool:
         task_index = self.current_processing_task_index
@@ -657,6 +730,8 @@ class UpscaleInterface(ContentPage):
             "denoise": opts.denoise,
             "denoise_strength": opts.denoise_strength.value,
             "hardware_acceleration": bool(config.hardwareAcceleration.value),
+            "preset": self._preset.value,
+            "effective_settings": effective_settings or {},
         }
 
         client = InferClient.instance()

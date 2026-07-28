@@ -1,0 +1,4 @@
+# Install Torch/Torchvision from the CUDA index selected by install.py first.
+-r requirements.txt
+paddlepaddle==3.0.0
+onnxruntime-gpu==1.22.0

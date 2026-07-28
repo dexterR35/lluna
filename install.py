@@ -9,6 +9,8 @@ Usage:
   python install.py
   python install.py --mode cpu
   python install.py --mode cuda --yes
+  python install.py --mode directml --yes
+  python install.py --mode mps --yes
 """
 
 from __future__ import annotations
@@ -26,6 +28,7 @@ from typing import Optional
 ROOT = Path(__file__).resolve().parent
 VENV_NAME = "midgardEnv"
 RUNTIME_FILE = ROOT / "midgard_runtime.json"
+SUPPORTED_PYTHON = (3, 12)
 
 TORCH_VERSION = "2.7.0"
 TORCHVISION_VERSION = "0.22.0"
@@ -90,11 +93,9 @@ def run(cmd: list[str], env: Optional[dict] = None) -> None:
 
 
 def find_python() -> str:
-    """Prefer 3.12, then 3.13, 3.11; otherwise current interpreter if 3.11–3.13."""
+    """Find the canonical supported Python 3.12 interpreter."""
     candidates = [
         "python3.12",
-        "python3.13",
-        "python3.11",
         "py",
     ]
     for name in candidates:
@@ -120,21 +121,44 @@ def find_python() -> str:
                 stderr=subprocess.DEVNULL,
             ).strip()
             major, minor = map(int, out.split("."))
-            if (major, minor) in {(3, 11), (3, 12), (3, 13)}:
+            if (major, minor) == SUPPORTED_PYTHON:
                 return path
         except (subprocess.CalledProcessError, FileNotFoundError, ValueError):
             continue
 
     vi = sys.version_info
-    if (vi.major, vi.minor) in {(3, 11), (3, 12), (3, 13)}:
+    if (vi.major, vi.minor) == SUPPORTED_PYTHON:
         return sys.executable
 
-    log(
-        f"Warning: preferred Python 3.11–3.13 not found. "
-        f"Using {sys.executable} ({vi.major}.{vi.minor}). "
-        f"Some packages may lack wheels."
+    raise SystemExit(
+        "Midgard requires 64-bit Python 3.12. Install Python 3.12 and rerun "
+        "this installer."
     )
-    return sys.executable
+
+
+def python_version(python_bin: str | Path) -> tuple[int, int, int]:
+    output = subprocess.check_output(
+        [
+            str(python_bin),
+            "-c",
+            "import struct,sys; print(sys.version_info.major, "
+            "sys.version_info.minor, struct.calcsize('P') * 8)",
+        ],
+        text=True,
+        stderr=subprocess.STDOUT,
+        timeout=15,
+    ).strip()
+    major, minor, bits = (int(part) for part in output.split())
+    return major, minor, bits
+
+
+def validate_python(python_bin: str | Path) -> None:
+    major, minor, bits = python_version(python_bin)
+    if (major, minor) != SUPPORTED_PYTHON or bits != 64:
+        raise SystemExit(
+            f"Unsupported interpreter: Python {major}.{minor} {bits}-bit. "
+            "Midgard requires 64-bit Python 3.12."
+        )
 
 
 def detect_cuda() -> CudaInfo:
@@ -488,7 +512,7 @@ def choose_mode(
             return cuda_tag_override
         return cuda.torch_tag or "cu118"
 
-    if forced in {"cuda", "cpu"}:
+    if forced in {"cuda", "cpu", "directml", "mps"}:
         mode = forced
         if mode == "cuda" and not cuda.available:
             log("CUDA was requested but not detected. Falling back to CPU.")
@@ -533,6 +557,7 @@ def ensure_venv(python_bin: str) -> Path:
     venv_dir = ROOT / VENV_NAME
     py = venv_python(venv_dir)
     if py.exists():
+        validate_python(py)
         log(f"Using existing venv: {venv_dir}")
         return venv_dir
     log(f"Creating venv with {python_bin} → {venv_dir}")
@@ -556,11 +581,27 @@ def ensure_venv(python_bin: str) -> Path:
 
 
 def pip_install(py: Path, args: list[str]) -> None:
-    run([str(py), "-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"])
     run([str(py), "-m", "pip", "install", *args])
 
 
+def prepare_pip(py: Path) -> None:
+    """Upgrade installer tooling once, not before every dependency group."""
+    run(
+        [
+            str(py),
+            "-m",
+            "pip",
+            "install",
+            "--upgrade",
+            "pip",
+            "setuptools",
+            "wheel",
+        ]
+    )
+
+
 def install_packages(py: Path, mode: str, torch_tag: str) -> None:
+    prepare_pip(py)
     if mode == "cuda":
         log(f"\n{_NO_CUDA_TOOLKIT_NOTE}")
         if torch_tag not in TORCH_INDEX or torch_tag == "cpu":
@@ -610,7 +651,22 @@ def install_packages(py: Path, mode: str, torch_tag: str) -> None:
                 pip_install(py, ["onnxruntime-gpu==1.22.0"])
         elif platform.system() == "Windows":
             # rembg needs ORT; prefer GPU build when CUDA mode is selected
-            pip_install(py, ["onnxruntime-gpu"])
+            pip_install(py, ["onnxruntime-gpu==1.22.0"])
+    elif mode == "directml":
+        if platform.system() != "Windows":
+            raise SystemExit("DirectML installation is supported only on Windows.")
+        pip_install(py, [f"paddlepaddle=={PADDLE_VERSION}", "-i", PADDLE_CPU_INDEX])
+        pip_install(py, ["torch-directml==0.2.5.dev240914"])
+        pip_install(py, ["onnxruntime-directml==1.20.1"])
+    elif mode == "mps":
+        if platform.system() != "Darwin":
+            raise SystemExit("MPS installation is supported only on macOS.")
+        pip_install(py, [f"paddlepaddle=={PADDLE_VERSION}", "-i", PADDLE_CPU_INDEX])
+        pip_install(
+            py,
+            [f"torch=={TORCH_VERSION}", f"torchvision=={TORCHVISION_VERSION}"],
+        )
+        pip_install(py, ["onnxruntime==1.22.0"])
     else:
         pip_install(
             py,
@@ -630,15 +686,17 @@ def install_packages(py: Path, mode: str, torch_tag: str) -> None:
             ],
         )
         # CPU onnxruntime for rembg / OCR helpers
-        pip_install(py, ["onnxruntime"])
+        pip_install(py, ["onnxruntime==1.22.0"])
 
-    pip_install(py, ["-r", str(ROOT / "requirements.txt")])
-    # Ensure rembg is present (also listed in requirements.txt)
-    pip_install(py, ["rembg>=2.0.60"])
-    # Select Object (SAM2 + Grounding DINO via Hugging Face transformers)
-    pip_install(py, ["transformers>=4.48.0", "huggingface_hub>=0.26.0"])
-    # Generate (FLUX.2 klein via Diffusers) — weights installed from Settings
-    pip_install(py, ["diffusers>=0.37.1", "accelerate>=1.0.0"])
+    pip_install(
+        py,
+        [
+            "-r",
+            str(ROOT / "requirements.txt"),
+            "-c",
+            str(ROOT / "constraints.txt"),
+        ],
+    )
 
 
 def verify_python_packages(py: Path) -> None:
@@ -646,32 +704,38 @@ def verify_python_packages(py: Path) -> None:
     log("\nVerifying Python packages…")
     script = r"""
 checks = [
-    ("torch", "import torch"),
-    ("transformers", "import transformers"),
-    ("huggingface_hub", "import huggingface_hub"),
-    ("diffusers", "import diffusers"),
-    ("accelerate", "import accelerate"),
-    ("Sam2Model", "from transformers import Sam2Model, Sam2Processor"),
+    ("torch", "import torch", True),
+    ("cv2", "import cv2", True),
+    ("PIL", "from PIL import Image", True),
+    ("PySide6", "import PySide6", True),
+    ("qfluentwidgets", "import qfluentwidgets", True),
+    ("paddle", "import paddle", True),
+    ("transformers", "import transformers", False),
+    ("huggingface_hub", "import huggingface_hub", False),
+    ("diffusers", "import diffusers", False),
+    ("accelerate", "import accelerate", False),
+    ("Sam2Model", "from transformers import Sam2Model, Sam2Processor", False),
     (
         "Grounding DINO",
         "from transformers import AutoModelForZeroShotObjectDetection, AutoProcessor",
+        False,
     ),
-    ("rembg", "import rembg"),
-    ("onnxruntime", "import onnxruntime"),
-    ("cv2", "import cv2"),
-    ("PIL", "from PIL import Image"),
+    ("rembg", "import rembg", False),
+    ("onnxruntime", "import onnxruntime", False),
 ]
 failed = []
-for name, stmt in checks:
+for name, stmt, required in checks:
     try:
         exec(stmt, {})
         print(f"  OK {name}")
     except Exception as e:
-        print(f"  FAIL {name}: {e}")
-        failed.append(name)
+        level = "FAIL" if required else "OPTIONAL"
+        print(f"  {level} {name}: {e}")
+        if required:
+            failed.append(name)
 if failed:
     raise SystemExit("Missing or broken packages: " + ", ".join(failed))
-print("  All package checks passed.")
+print("  All required package checks passed.")
 """
     run([str(py), "-c", script])
 
@@ -894,13 +958,18 @@ def write_runtime(mode: str, torch_tag: str, gpu_name: str, compute_cap: str = "
 
 
 def write_launchers(venv_dir: Path) -> None:
-    py = venv_python(venv_dir)
     if platform.system() == "Windows":
         bat = ROOT / "run_gui.bat"
         bat.write_text(
             f'@echo off\r\n'
+            f'setlocal\r\n'
             f'cd /d "%~dp0"\r\n'
-            f'"{py}" gui.py %*\r\n',
+            f'if not exist "midgardEnv\\Scripts\\python.exe" (\r\n'
+            f'  echo Midgard environment is missing. Run install.bat first.\r\n'
+            f'  exit /b 2\r\n'
+            f')\r\n'
+            f'"midgardEnv\\Scripts\\python.exe" gui.py %*\r\n'
+            f'exit /b %errorlevel%\r\n',
             encoding="utf-8",
         )
         log(f"Wrote {bat.name}")
@@ -909,8 +978,13 @@ def write_launchers(venv_dir: Path) -> None:
         sh.write_text(
             "#!/usr/bin/env bash\n"
             "set -euo pipefail\n"
-            f'cd "$(dirname "$0")"\n'
-            f'exec "{py}" gui.py "$@"\n',
+            'script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"\n'
+            'cd "$script_dir"\n'
+            'if [[ ! -x "$script_dir/midgardEnv/bin/python" ]]; then\n'
+            '  echo "Midgard environment is missing. Run ./install.sh first." >&2\n'
+            '  exit 2\n'
+            'fi\n'
+            'exec "$script_dir/midgardEnv/bin/python" gui.py "$@"\n',
             encoding="utf-8",
         )
         sh.chmod(sh.stat().st_mode | 0o111)
@@ -925,7 +999,7 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument(
         "--mode",
-        choices=["cuda", "cpu", "auto"],
+        choices=["cuda", "cpu", "directml", "mps", "auto"],
         default="auto",
         help="Force install mode (default: auto-detect then prompt)",
     )
@@ -943,9 +1017,14 @@ def parse_args() -> argparse.Namespace:
         help="Non-interactive: use detected default (CUDA if available, else CPU)",
     )
     p.add_argument(
-        "--skip-rembg-models",
+        "--schedule-default-models",
         action="store_true",
-        help="Skip downloading default Remove BG weights (install defaults or optionals from Settings)",
+        help="Schedule recommended models for first launch (default: no model downloads)",
+    )
+    p.add_argument(
+        "--validate-only",
+        action="store_true",
+        help="Validate an existing environment without installing packages",
     )
     return p.parse_args()
 
@@ -960,11 +1039,14 @@ def main() -> int:
 
     cuda = detect_cuda()
     forced = None if args.mode == "auto" else args.mode
+    if forced is None and platform.system() == "Darwin":
+        forced = "mps"
     mode, torch_tag = choose_mode(
         cuda, forced, args.yes, cuda_tag_override=args.cuda_tag
     )
 
     python_bin = find_python()
+    validate_python(python_bin)
     log(f"\nPython: {python_bin}")
     log(f"Install mode: {mode.upper()}" + (f" ({torch_tag})" if torch_tag else ""))
     if mode == "cuda" and cuda.tag_reason and not args.cuda_tag:
@@ -975,8 +1057,12 @@ def main() -> int:
     if not py.exists():
         raise SystemExit(f"venv python missing: {py}")
 
-    install_packages(py, mode, torch_tag or "cu118")
+    if not args.validate_only:
+        install_packages(py, mode, torch_tag or "cu118")
     verify_python_packages(py)
+    if args.validate_only:
+        log("\nExisting environment validation passed.")
+        return 0
     merge_script = (
         "import sys; sys.path.insert(0, %r); "
         "from install import verify_models; verify_models()"
@@ -990,10 +1076,11 @@ def main() -> int:
     except Exception as e:
         log(f"  (model download cancel hook: {e})")
 
-    seed_default_model_downloads(py, skip_rembg=args.skip_rembg_models)
-    if args.skip_rembg_models:
-        log("  Remove BG defaults skipped (--skip-rembg-models) — install from Settings.")
-    log("  Default models (incl. Real-ESRGAN ×2) download one at a time when you open the GUI.")
+    if args.schedule_default_models:
+        seed_default_model_downloads(py)
+        log("  Recommended models will download one at a time after first launch.")
+    else:
+        log("  No optional models scheduled. Install models from the Models settings.")
 
     write_runtime(
         mode,
@@ -1009,10 +1096,8 @@ def main() -> int:
     log("=" * 60)
     if platform.system() == "Windows":
         log("  GUI:  run_gui.bat")
-        log(f"  CLI:  {py} backend\\main.py -i video.mp4")
     else:
         log("  GUI:  ./run_gui.sh")
-        log(f"  CLI:  {py} backend/main.py -i video.mp4")
     log("")
     return 0
 

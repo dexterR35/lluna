@@ -1,9 +1,25 @@
-import os
+import logging
 import stat
 
 import platform
+from pathlib import Path
+
+from backend.core.paths import PATHS
+from backend.diagnostics.errors import DependencyError
 from .common_tools import merge_big_file_if_not_exists
-from backend.config import BASE_DIR
+
+logger = logging.getLogger(__name__)
+
+
+def resolve_ffmpeg_path(base_dir: str | Path, system: str) -> Path:
+    root = Path(base_dir)
+    if system == "Windows":
+        return root / "win_x64" / "ffmpeg.exe"
+    if system == "Linux":
+        return root / "linux_x64" / "ffmpeg"
+    if system == "Darwin":
+        return root / "macos" / "ffmpeg"
+    raise DependencyError(f"FFmpeg is not bundled for {system}.")
 
 class FFmpegCLI:
     
@@ -20,16 +36,22 @@ class FFmpegCLI:
         return cls._instance
     
     def __init__(self):
-        os.chmod(self.ffmpeg_path, stat.S_IRWXU + stat.S_IRWXG + stat.S_IRWXO)
+        path = Path(self.ffmpeg_path)
+        if not path.is_file():
+            raise DependencyError(f"FFmpeg executable is missing: {path}")
+        if platform.system() != "Windows":
+            try:
+                path.chmod(path.stat().st_mode | stat.S_IXUSR)
+            except OSError as exc:
+                logger.warning(
+                    "Could not mark FFmpeg executable: %s", type(exc).__name__
+                )
         
     @property
     def ffmpeg_path(self):
         system = platform.system()
+        ffmpeg_root = PATHS.project_root / "backend" / "ffmpeg"
         if system == "Windows":
-            ffmpeg_dir = os.path.join(BASE_DIR, 'ffmpeg', 'win_x64')
-            merge_big_file_if_not_exists(ffmpeg_dir, 'ffmpeg.exe')
-            return os.path.join(ffmpeg_dir, 'ffmpeg.exe')
-        elif system == "Linux":
-            return os.path.join(BASE_DIR, 'ffmpeg',  'linux_x64', 'ffmpeg')
-        else:
-            return os.path.join(BASE_DIR, 'ffmpeg', 'macos', 'ffmpeg')
+            directory = ffmpeg_root / "win_x64"
+            merge_big_file_if_not_exists(str(directory), "ffmpeg.exe")
+        return str(resolve_ffmpeg_path(ffmpeg_root, system))

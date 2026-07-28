@@ -17,7 +17,6 @@ from backend.config import config, tr
 from backend.tools import diag
 from backend.tools.constant import InpaintMode
 from backend.tools.job_config import snapshot_subtitle_config
-from backend.tools.subtitle_remover_remote_call import SubtitleRemoverRemoteCall
 from backend.tools.process_manager import ProcessManager
 from backend.tools.common_tools import get_readable_path, is_image_file, read_image
 
@@ -124,7 +123,7 @@ class HomeInterface(ContentPage):
         self.task_list_component.task_deleted.connect(self.on_task_deleted)
 
         self.body.addWidget(self.workspace)
-    
+
     def on_scroll_change(self, value):
         """Deprecated: LogPanel owns scroll behavior."""
         pass
@@ -635,30 +634,6 @@ class HomeInterface(ContentPage):
             self.append_log_signal.emit([f"Error: {e}"])
             self.toggle_buttons_signal.emit(True)
 
-    @staticmethod
-    def remover_process(queue, video_path, output_path, options):
-        """Legacy entry kept for compatibility; prefer InferClient subtitle jobs."""
-        sr = None
-        try:
-            from backend.main import SubtitleRemover
-            sr = SubtitleRemover(video_path, True)
-            sr.video_out_path = output_path
-            for key in options:
-                setattr(sr, key, options[key])
-            sr.add_progress_listener(lambda progress, isFinished: SubtitleRemoverRemoteCall.remote_call_update_progress(queue, progress, isFinished))
-            sr.append_output = lambda *args: SubtitleRemoverRemoteCall.remote_call_append_log(queue, args)
-            sr.manage_process = lambda pid: SubtitleRemoverRemoteCall.remote_call_manage_process(queue, pid)
-            sr.update_preview_with_comp = lambda *args: SubtitleRemoverRemoteCall.remote_call_update_preview_with_comp(queue, args)
-            sr.run()
-        except Exception as e:
-            traceback.print_exc()
-            SubtitleRemoverRemoteCall.remote_call_catch_error(queue, e)
-        finally:
-            if sr:
-                sr.isFinished = True
-                sr.vsf_running = False
-            SubtitleRemoverRemoteCall.remote_call_finish(queue)
-
     # run_subtitle_remover_process method
     def run_subtitle_remover_process(self, video_path, output_path, options):
         """
@@ -994,4 +969,3 @@ class HomeInterface(ContentPage):
         except Exception as e:
             print(f"Error during close window:", e)
         super().closeEvent(event)
-    

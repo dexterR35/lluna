@@ -43,9 +43,9 @@ _NONE_ENABLED = "__none__"
 
 
 def models_dir() -> Path:
-    from backend.config import BASE_DIR
+    from backend.core.paths import PATHS
 
-    path = Path(BASE_DIR) / "models" / "mirnet"
+    path = PATHS.models_dir / "mirnet"
     path.mkdir(parents=True, exist_ok=True)
     return path
 

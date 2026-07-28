@@ -3,19 +3,21 @@
 from __future__ import annotations
 
 import os
+import logging
 from pathlib import Path
 from typing import Optional
 
+from backend.core.atomic import atomic_write_text
+
 _ENV_KEYS = ("HF_TOKEN", "HUGGING_FACE_HUB_TOKEN")
+logger = logging.getLogger(__name__)
 
 
 def token_file_path() -> Path:
     """Local secret file (gitignored) — never commit this."""
-    from backend.config import BASE_DIR
+    from backend.core.paths import AppPaths
 
-    # Project root config/ next to config.json
-    root = Path(BASE_DIR).resolve().parent
-    return root / "config" / "hf_token"
+    return AppPaths.resolve().config_dir / "hf_token"
 
 
 def resolve_hf_token() -> Optional[str]:
@@ -51,11 +53,11 @@ def save_hf_token(token: str) -> Path:
         raise ValueError("HF token is empty.")
     path = token_file_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text + "\n", encoding="utf-8")
+    atomic_write_text(path, text + "\n")
     try:
         path.chmod(0o600)
-    except OSError:
-        pass
+    except OSError as exc:
+        logger.warning("Could not restrict token-file permissions: %s", type(exc).__name__)
     apply_hf_token_to_env()
     return path
 
@@ -65,8 +67,8 @@ def clear_hf_token() -> None:
     try:
         if path.is_file():
             path.unlink()
-    except OSError:
-        pass
+    except OSError as exc:
+        logger.warning("Could not remove token file: %s", type(exc).__name__)
     for key in _ENV_KEYS:
         os.environ.pop(key, None)
 

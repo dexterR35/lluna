@@ -22,6 +22,7 @@ from backend.tools.enhance_options import EnhanceOptions
 from backend.tools.image_denoise import denoise_rgb, verify_rgb
 from backend.tools.realesrgan_arch import RRDBNet
 from backend.tools.vram_budget import (
+    TILE_CANDIDATES,
     VramBudgetError,
     next_smaller_tile,
     pick_enhance_tile,
@@ -472,7 +473,11 @@ def enhance_rgba(
         _validate_rgba(arr)
         h, w = arr.shape[:2]
         long_edge = max(h, w)
-        max_edge = _max_long_edge()
+        max_edge = (
+            max(MIN_LONG_EDGE, min(MAX_LONG_EDGE, int(opts.max_long_edge)))
+            if opts.max_long_edge > 0
+            else _max_long_edge()
+        )
         scale = float(native_scale(mode))
 
         # Already at/over cap: fit to max, no enlarge
@@ -508,7 +513,14 @@ def enhance_rgba(
         _p(30)
         _check_cancel(cancel_event, generation)
 
-        budget = pick_enhance_tile(h, w, int(scale), max_edge)
+        candidates = TILE_CANDIDATES
+        if opts.tile_size > 0:
+            candidates = tuple(
+                value for value in TILE_CANDIDATES if value <= opts.tile_size
+            ) or (opts.tile_size,)
+        budget = pick_enhance_tile(
+            h, w, int(scale), max_edge, candidates=candidates
+        )
         tile = budget.tile
         upsampler = _get_upsampler(mode, tile=tile)
         _p(32)

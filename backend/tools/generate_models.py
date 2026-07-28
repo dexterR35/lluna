@@ -81,9 +81,9 @@ _NONE_ENABLED = "__none__"
 
 
 def models_dir() -> Path:
-    from backend.config import BASE_DIR
+    from backend.core.paths import PATHS
 
-    path = Path(BASE_DIR) / "models" / "generate"
+    path = PATHS.models_dir / "generate"
     path.mkdir(parents=True, exist_ok=True)
     return path
 

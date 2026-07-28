@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from enum import Enum, unique
 from typing import Any, Dict, Optional, Tuple
+
+from backend.application.jobs import JobPhase
 
 
 @unique
@@ -44,6 +47,51 @@ class EvtMsg(str, Enum):
 
 # Wire format: (msg: str, payload: dict)
 Msg = Tuple[str, Dict[str, Any]]
+PROTOCOL_VERSION = 1
+
+
+@dataclass(frozen=True)
+class JobRequest:
+    job_id: int
+    task: JobType
+    payload: Dict[str, Any]
+    protocol_version: int = PROTOCOL_VERSION
+
+    def to_wire(self) -> Msg:
+        return start_job(self.job_id, self.task, self.payload)
+
+
+@dataclass(frozen=True)
+class JobProgress:
+    job_id: int
+    phase: JobPhase
+    overall: int
+    message: str = ""
+
+    def to_payload(self) -> Dict[str, Any]:
+        return {
+            "run_id": self.job_id,
+            "phase": self.phase.value,
+            "p": max(0, min(100, int(self.overall))),
+            "message": self.message,
+        }
+
+
+@dataclass(frozen=True)
+class JobResult:
+    job_id: int
+    output_paths: tuple[str, ...]
+    warnings: tuple[str, ...] = ()
+    timings_ms: Dict[str, int] | None = None
+
+
+@dataclass(frozen=True)
+class JobError:
+    job_id: int
+    code: str
+    message: str
+    retryable: bool = False
+    actions: tuple[str, ...] = ()
 
 
 def cmd(kind: CmdMsg, **payload: Any) -> Msg:

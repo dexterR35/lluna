@@ -19,7 +19,7 @@ transformers>=4.48.0
 huggingface_hub>=0.26.0
 diffusers>=0.37.1
 accelerate>=1.0.0
-# torch and torchvision are installed separately (see Dockerfile for platform-specific versions)
+# Torch, Paddle, and ONNX variants are selected by install.py/backend group files.
 
 # Training only
 #matplotlib

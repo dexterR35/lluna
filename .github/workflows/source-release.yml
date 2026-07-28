@@ -1,0 +1,46 @@
+name: Source Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Validate tag and version
+        if: github.ref_type == 'tag'
+        run: |
+          version="$(python -c 'from backend.core.build_info import VERSION; print(VERSION)')"
+          test "${GITHUB_REF_NAME}" = "v${version}"
+      - name: Build source archives
+        run: |
+          prefix="midgard-${GITHUB_REF_NAME#v}"
+          git archive --format=tar.gz --prefix="${prefix}/" -o "${prefix}.tar.gz" HEAD
+          git archive --format=zip --prefix="${prefix}/" -o "${prefix}.zip" HEAD
+          sha256sum "${prefix}.tar.gz" "${prefix}.zip" > SHA256SUMS
+      - name: Generate dependency SBOM
+        run: |
+          python -m pip install cyclonedx-bom==7.2.1
+          cyclonedx-py requirements requirements.txt -o midgard-sbom.json
+      - name: Publish source release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "${GITHUB_REF_NAME}"
+          --verify-tag --generate-notes
+          midgard-*.tar.gz midgard-*.zip SHA256SUMS midgard-sbom.json

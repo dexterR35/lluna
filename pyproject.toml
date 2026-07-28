@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "midgard"
+version = "1.4.0"
+description = "Source-based local AI media tools desktop application"
+requires-python = "==3.12.*"
+license = { file = "LICENSE" }
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-config --strict-markers"
+testpaths = ["tests"]
+markers = [
+    "unit: isolated deterministic unit tests",
+    "integration: safe local integration tests",
+    "gui: headless PySide6 tests",
+    "hardware: real hardware probe tests",
+    "network: tests that explicitly require network access",
+    "gpu: tests that require any GPU",
+    "cuda: tests that require CUDA",
+    "directml: tests that require DirectML",
+    "mps: tests that require Apple MPS",
+    "slow: tests that exceed the normal focused-suite budget",
+    "model_download: tests that download model artifacts",
+    "installer: installer and launcher tests",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+exclude = [
+    "backend/scenedetect",
+    "backend/inpaint/video",
+]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "B", "S"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]

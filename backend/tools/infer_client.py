@@ -106,7 +106,6 @@ class InferClient:
 
     HARD_CANCEL_TYPES = {
         JobType.BG_REMOVE.value,
-        JobType.SUBTITLE.value,
         JobType.LAMA_RETOUCH.value,
         JobType.SELECT_SUBJECT.value,
         JobType.GENERATE.value,
@@ -125,6 +124,7 @@ class InferClient:
         self._last_heartbeat = 0.0
         self._last_activity = time.monotonic()
         self._hw_accel: Optional[bool] = None
+        self._ready_event = threading.Event()
         self._stopping = False
         self._shutdown_done = False
         self._state_lock = threading.RLock()
@@ -159,6 +159,7 @@ class InferClient:
 
     def ensure_started(self) -> None:
         hw = self._desired_hw()
+        spawned = False
         with self._state_lock:
             if self._process is not None and self._process.is_alive():
                 if self._hw_accel is not None and self._hw_accel != hw:
@@ -166,6 +167,15 @@ class InferClient:
                 else:
                     return
             self._spawn_unlocked(hw)
+            spawned = True
+        if spawned and not self._ready_event.wait(timeout=5.0):
+            from backend.diagnostics.errors import WorkerStartupError
+
+            with self._state_lock:
+                self._kill_worker_unlocked(reason="startup_handshake_timeout")
+            raise WorkerStartupError(
+                "The inference worker did not answer its startup handshake."
+            )
 
     def _spawn_unlocked(self, hw: bool) -> None:
         from backend.tools.infer_worker import infer_worker_main
@@ -180,6 +190,7 @@ class InferClient:
             daemon=True,
         )
         self._process.start()
+        self._ready_event.clear()
         self._hw_accel = hw
         ProcessManager.instance().add_process(self._process, name="infer-worker")
         diag.worker(
@@ -199,6 +210,8 @@ class InferClient:
             )
             self._watchdog_thread.start()
             diag.worker("START  infer-watchdog thread")
+        assert self._cmd_queue is not None
+        self._cmd_queue.put(proto_ping())
 
     def _read_events(self) -> None:
         while not self._stopping:
@@ -223,6 +236,10 @@ class InferClient:
 
     def _dispatch_event(self, msg: str, data: Dict[str, Any]) -> None:
         run_id = data.get("run_id")
+        if msg == EvtMsg.PONG.value and run_id is None:
+            self._ready_event.set()
+            diag.worker("READY  infer-worker handshake complete")
+            return
         with self._state_lock:
             active = self._active
             if active is None:
@@ -353,6 +370,7 @@ class InferClient:
     def _kill_worker_unlocked(self, reason: str = "") -> None:
         proc = self._process
         self._process = None
+        self._ready_event.clear()
         if proc is None:
             return
         pid = getattr(proc, "pid", "?")
@@ -363,7 +381,12 @@ class InferClient:
                     self._cmd_queue.put(proto_shutdown())
                 except Exception:
                     pass
-            ProcessManager.instance().terminate_by_process(proc, quiet=True)
+            if hasattr(proc, "join"):
+                proc.join(timeout=2.0)
+            if getattr(proc, "is_alive", lambda: False)():
+                ProcessManager.instance().terminate_by_process(proc, quiet=True)
+            else:
+                ProcessManager.instance().remove_process("infer-worker")
             ProcessManager.instance().remove_process("infer-worker")
         except Exception:
             traceback.print_exc()
@@ -678,11 +701,32 @@ class InferClient:
             }
 
     def shutdown(self) -> None:
+        threads: tuple[Optional[threading.Thread], ...]
+        callbacks: list[tuple[ErrorCb, DoneCb]] = []
         with self._state_lock:
             if self._shutdown_done:
                 return
             self._shutdown_done = True
             self._stopping = True
+            if self._active is not None and not self._active.finished:
+                self._active.finished = True
+                callbacks.append(
+                    (self._active.on_error, self._active.on_done)
+                )
+            if self._pending is not None:
+                callbacks.append(
+                    (
+                        self._pending.callbacks.get("on_error"),
+                        self._pending.callbacks.get("on_done"),
+                    )
+                )
+            callbacks.extend(
+                (
+                    queued.callbacks.get("on_error"),
+                    queued.callbacks.get("on_done"),
+                )
+                for queued in self._wait_queue
+            )
             self._pending = None
             self._wait_queue.clear()
             self._active = None
@@ -693,6 +737,41 @@ class InferClient:
                 except Exception:
                     pass
             self._kill_worker_unlocked(reason="shutdown")
+            threads = (self._reader_thread, self._watchdog_thread)
+        for on_error, on_done in callbacks:
+            if on_error is not None:
+                try:
+                    on_error("__cancelled__")
+                except Exception:
+                    traceback.print_exc()
+            if on_done is not None:
+                try:
+                    on_done()
+                except Exception:
+                    traceback.print_exc()
+        current = threading.current_thread()
+        for thread in threads:
+            if thread is not None and thread is not current and thread.is_alive():
+                thread.join(timeout=2.5)
+        for queue in (self._cmd_queue, self._evt_queue):
+            if queue is None:
+                continue
+            try:
+                queue.close()
+                queue.cancel_join_thread()
+            except (OSError, ValueError):
+                pass
+
+    @classmethod
+    def reset_instance_for_tests(cls) -> None:
+        """Release singleton state between repeated isolated application runs."""
+        if os.environ.get("MIDGARD_TESTING") != "1":
+            raise RuntimeError("InferClient reset is available only in tests")
+        with cls._lock:
+            instance = cls._instance
+            cls._instance = None
+        if instance is not None:
+            instance.shutdown()
 
     def temp_dir(self) -> str:
         d = os.path.join(tempfile.gettempdir(), "midgard_infer")

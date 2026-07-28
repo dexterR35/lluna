@@ -91,9 +91,9 @@ PAIR_CATALOG: List[SelectObjectPairInfo] = [
 
 
 def models_root() -> Path:
-    from backend.config import BASE_DIR
+    from backend.core.paths import PATHS
 
-    root = Path(BASE_DIR) / "models" / "select_object"
+    root = PATHS.models_dir / "select_object"
     root.mkdir(parents=True, exist_ok=True)
     return root
 

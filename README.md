@@ -89,7 +89,7 @@ Install models in **Settings → Generate Models**, then open **Generate Image**
 
 ```shell
 # 1. Clone / copy the project (keep backend/models/)
-# 2. Install (creates midgardEnv, picks CUDA or CPU, schedules default model downloads)
+# 2. Install (creates midgardEnv and selects an available backend)
 python install.py
 
 # 3. Run the GUI
@@ -144,12 +144,12 @@ Everything runs locally. Video jobs keep the original audio when merge succeeds.
 
 - MIRNet (LOL) for dark / underexposed photos
 - Images only; same-size output with VRAM-safe long-edge cap
-- MIRNet weights download on first GUI open (or **Settings → Low Light Models**)
+- MIRNet weights install from **Settings → Low Light Models**
 - Try with [`test/low_light.png`](test/low_light.png) - open in **Fix Low Light**, then **Run**
 
 ### Select Object
 
-- **Fast** pair: SAM2 Tiny + Grounding DINO Tiny (queued on first GUI open after install)
+- **Fast** pair: SAM2 Tiny + Grounding DINO Tiny (recommended in Settings)
 - **Complex** pair: SAM2 Large + DINO Base (optional, Settings)
 - Click to segment, or select by name (“person”, …)
 
@@ -211,12 +211,12 @@ python install.py
 
 The installer will:
 
-1. Prefer Python **3.12** (fallback 3.11 / 3.13)
+1. Require 64-bit Python **3.12**
 2. Detect CUDA via `nvidia-smi` (default CUDA if found, else CPU)
-3. Supports **CUDA** or **CPU** mode
+3. Support **CPU**, **CUDA**, **DirectML**, and **MPS** dependency modes
 4. Create `midgardEnv` and install Paddle, Torch, and `requirements.txt`
 5. Verify / merge core inpaint + OCR weights
-6. Schedule default **Remove BG**, **Real-ESRGAN ×2**, **MIRNet**, and **Select Object (fast)** models for the GUI download queue (one at a time on first open)
+6. Leave optional model selection to the user in Settings
 7. Write `run_gui.sh` (Linux/macOS) or `run_gui.bat` (Windows)
 
 ### Non-interactive
@@ -239,13 +239,14 @@ python install.py --mode cuda --yes
 
 Override: `python install.py --mode cuda --cuda-tag cu126 --yes`
 
-Skip rembg defaults (install later from Settings):
+Optionally schedule the recommended models for first launch:
 
 ```shell
-python install.py --skip-rembg-models --yes
+python install.py --schedule-default-models --yes
 ```
 
-On first GUI open, default models download **one at a time** (Settings queue). Real-ESRGAN ×2 is the default upscale model and appears in Settings with an **On/Off** toggle once installed. Additional models install from Settings the same way — one download at a time.
+Models selected in Settings download **one at a time**. Real-ESRGAN ×2 is
+recommended for upscaling and appears with an **On/Off** toggle once installed.
 
 ### Windows 10 / 11
 
@@ -257,18 +258,6 @@ On first GUI open, default models download **one at a time** (Settings queue). R
 python install.py
 run_gui.bat
 ```
-
-### Windows package build
-
-```bat
-pip install QPT==1.0b8 setuptools
-python backend\tools\makedist.py
-```
-
-CUDA examples: `makedist.py --cuda 11.8`, `--cuda 12.6`, `--cuda 12.8`, or `--directml`.  
-Output is under `midgard_out/`.
-
----
 
 ## Run
 
@@ -282,40 +271,11 @@ midgardEnv/bin/python gui.py
 midgardEnv\Scripts\python.exe gui.py
 ```
 
-**First open:** default models download sequentially in the background (watch progress in Settings). Manual **Install** buttons in Settings use the same queue.
+**First open:** Midgard opens without automatically downloading optional models.
+Install choices in Settings use one shared download queue.
 
-### CLI - Remove Text (video / image)
-
-```shell
-midgardEnv/bin/python backend/main.py -i test/test.mp4 -o output.mp4
-midgardEnv\Scripts\python.exe backend\main.py -i test\test.mp4 -o output.mp4
-```
-
-```text
--t / --task remove-text                 (default)
--i / --input PATH
--o / --output PATH
--c / --subtitle-area-coords YMIN YMAX XMIN XMAX   (repeatable)
---inpaint-mode {sttn-auto,sttn-det,lama,propainter,opencv}
-```
-
-### CLI - Remove BG (images)
-
-```shell
-midgardEnv/bin/python backend/main.py -t remove-bg -i photo.jpg -o cutout.png
-midgardEnv/bin/python backend/main.py -t remove-bg -i photo.jpg -o out.png --bg-model u2net_human_seg
-midgardEnv/bin/python backend/main.py -t remove-bg -i anime.png -o out.png --bg-model isnet-anime
-```
-
-```text
--t / --task remove-bg
--i / --input PATH
--o / --output PATH                      (default: <stem>_nobg.png)
---bg-model {birefnet-general,u2net_human_seg,isnet-anime,...}
---protect-mask PATH                     (optional grayscale keep-mask)
-```
-
-> Upscale, Fix Low Light, Generate Image, and Select Object are GUI-only for now.
+Media processing is GUI-only. `backend/main.py` remains an internal compatibility
+module used by the inference worker; it is not a public command-line entry point.
 
 ---
 
@@ -324,7 +284,7 @@ midgardEnv/bin/python backend/main.py -t remove-bg -i anime.png -o out.png --bg-
 Use two separate update paths:
 
 1) App code/UI updates (new Midgard version)
-- Bump `VERSION` in `backend/config.py`
+- Bump `VERSION` in `backend/core/build_info.py`
 - Publish a GitHub release
 - Users get a startup update prompt and can update source installs with:
   - `git pull`

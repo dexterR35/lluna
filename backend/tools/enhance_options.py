@@ -13,6 +13,8 @@ class EnhanceOptions:
 
     denoise: bool = False
     denoise_strength: DenoiseStrength = DenoiseStrength.SAFE
+    max_long_edge: int = 0
+    tile_size: int = 0
 
     @classmethod
     def from_config(cls) -> "EnhanceOptions":
@@ -28,7 +30,15 @@ class EnhanceOptions:
             )
         except (TypeError, ValueError):
             strength = DenoiseStrength.SAFE
-        return cls(denoise=enabled, denoise_strength=strength)
+        try:
+            max_long_edge = int(config.enhanceMaxLongEdge.value)
+        except (TypeError, ValueError):
+            max_long_edge = 0
+        return cls(
+            denoise=enabled,
+            denoise_strength=strength,
+            max_long_edge=max_long_edge,
+        )
 
     @classmethod
     def from_payload(cls, payload: dict) -> "EnhanceOptions":
@@ -38,4 +48,15 @@ class EnhanceOptions:
             strength = DenoiseStrength(str(raw))
         except ValueError:
             strength = DenoiseStrength.SAFE
-        return cls(denoise=denoise, denoise_strength=strength)
+        effective = payload.get("effective_settings") or {}
+        try:
+            max_long_edge = int(effective.get("max_long_edge") or 0)
+            tile_size = int(effective.get("tile_size") or 0)
+        except (TypeError, ValueError):
+            max_long_edge = tile_size = 0
+        return cls(
+            denoise=denoise,
+            denoise_strength=strength,
+            max_long_edge=max_long_edge,
+            tile_size=tile_size,
+        )

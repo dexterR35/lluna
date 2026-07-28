@@ -1,0 +1,22 @@
+# Canonical direct-dependency constraints. Regenerate and validate per platform
+# before a release; framework variants remain in their backend group files.
+filesplit==3.0.2
+opencv-python==4.11.0.86
+tqdm==4.67.1
+pyside6-fluent-widgets==1.7.7
+av==17.0.0
+einops==0.8.1
+paddleocr==3.4.0
+je-showinfilemanager==1.1.6a4
+scikit-image==0.25.2
+numpy==2.2.5
+matplotlib==3.10.1
+Pillow==11.2.1
+scipy==1.15.2
+requests==2.32.3
+darkdetect==0.8.0
+rembg==2.0.60
+transformers==4.48.0
+huggingface_hub==0.36.0
+diffusers==0.37.1
+accelerate==1.2.1
