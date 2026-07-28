@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QScrollArea, QSizePolicy, QFrame,
 )
 from backend.config import config
+from backend.media.mask_layers import MaskLayer, MaskLayerStack
 from ui.component.preview.zoom_chrome import ZoomChromeBar
 from ui.component.preview.zoomable_image_view import checkerboard_pixmap_from_rgba
 from ui.theme import DARK_BG, FORM, PRIMARY
@@ -85,6 +86,7 @@ class RetouchCanvas(QWidget):
     image_changed = Signal()
     history_changed = Signal()  # undo/redo availability changed
     selection_changed = Signal()
+    layers_changed = Signal()
     select_object_clicked = Signal(int, int)  # image x, y
 
     def __init__(self, parent=None):
@@ -97,10 +99,14 @@ class RetouchCanvas(QWidget):
         # Source image before BG removal - used by Restore to bring pixels back
         self._original: Image.Image | None = None
         self._original_arr: np.ndarray | None = None
+        self._mask_stack: MaskLayerStack | None = None
+        # Active layer alias retained for the hot brush-stamping path.
         self._mask: np.ndarray | None = None
         self._tool = RetouchTool.ERASE_ALPHA  # default: Photoshop-like eraser
         self._radius = 20
         self._hardness = 0.85  # 0 soft … 1 hard
+        self._opacity = 1.0
+        self._spacing = 0.33
         self._zoom = 1.0
         self._fit_mode = True
         self._painting = False
@@ -112,8 +118,12 @@ class RetouchCanvas(QWidget):
         self._interaction_enabled = True
         self._display: QPixmap | None = None
         self._base_checker: QPixmap | None = None
-        self._undo: list[tuple[Image.Image, np.ndarray]] = []
-        self._redo: list[tuple[Image.Image, np.ndarray]] = []
+        self._undo: list[
+            tuple[Image.Image, list[MaskLayer], int, np.ndarray | None]
+        ] = []
+        self._redo: list[
+            tuple[Image.Image, list[MaskLayer], int, np.ndarray | None]
+        ] = []
         self._cursor_cache_key: tuple | None = None
         self._cursor_cache: QCursor | None = None
 
@@ -230,6 +240,25 @@ class RetouchCanvas(QWidget):
     def hardness(self) -> float:
         return self._hardness
 
+    def set_opacity(self, opacity: float):
+        value = float(opacity)
+        if value > 1.0:
+            value /= 100.0
+        self._opacity = max(0.01, min(1.0, value))
+
+    def opacity(self) -> float:
+        return self._opacity
+
+    def set_spacing(self, spacing: float):
+        """Brush spacing as 1–100 percent of diameter."""
+        value = float(spacing)
+        if value > 1.0:
+            value /= 100.0
+        self._spacing = max(0.01, min(1.0, value))
+
+    def spacing(self) -> float:
+        return self._spacing
+
     def can_undo(self) -> bool:
         return bool(self._undo)
 
@@ -240,7 +269,66 @@ class RetouchCanvas(QWidget):
         return self._selection is not None and bool(np.any(self._selection))
 
     def has_painted_mask(self) -> bool:
-        return self._mask is not None and bool(np.any(self._mask))
+        mask = self.get_mask()
+        return mask is not None and bool(np.any(mask))
+
+    def layer_descriptions(self) -> list[str]:
+        if self._mask_stack is None:
+            return []
+        return [
+            f"{'Protect' if layer.protect else 'Fill'} · {layer.name}"
+            for layer in self._mask_stack.layers
+        ]
+
+    def active_layer_index(self) -> int:
+        return self._mask_stack.active_index if self._mask_stack is not None else 0
+
+    def set_active_layer(self, index: int):
+        if self._mask_stack is None:
+            return
+        self._mask_stack.set_active(index)
+        self._sync_active_mask()
+        self._refresh_display(immediate=True)
+        self.layers_changed.emit()
+
+    def add_mask_layer(self, *, protect: bool = False, name: str | None = None):
+        if self._mask_stack is None:
+            return
+        self._push_undo()
+        self._mask_stack.add_layer(name=name, protect=protect)
+        self._sync_active_mask()
+        self._refresh_display(immediate=True)
+        self.layers_changed.emit()
+        self.image_changed.emit()
+
+    def remove_active_layer(self):
+        if self._mask_stack is None:
+            return
+        self._push_undo()
+        self._mask_stack.remove_active()
+        self._sync_active_mask()
+        self._refresh_display(immediate=True)
+        self.layers_changed.emit()
+        self.image_changed.emit()
+
+    def set_active_layer_protect(self, protect: bool):
+        if self._mask_stack is None:
+            return
+        if self._mask_stack.active.protect == bool(protect):
+            return
+        self._push_undo()
+        self._mask_stack.set_active_protect(protect)
+        self._refresh_display(immediate=True)
+        self.layers_changed.emit()
+        self.image_changed.emit()
+
+    def active_layer_is_protect(self) -> bool:
+        return bool(self._mask_stack and self._mask_stack.active.protect)
+
+    def _sync_active_mask(self):
+        self._mask = (
+            self._mask_stack.active.mask if self._mask_stack is not None else None
+        )
 
     def _normalize_mask_to_canvas(self, mask: np.ndarray) -> np.ndarray | None:
         if self._mask is None or mask is None:
