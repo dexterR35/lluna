@@ -767,6 +767,12 @@ checks = [
     ("transformers", "import transformers", False),
     ("huggingface_hub", "import huggingface_hub", False),
     ("diffusers", "import diffusers", False),
+    (
+        "AutoPipelineForText2Image",
+        "from diffusers import AutoPipelineForText2Image",
+        False,
+    ),
+    ("Flux2KleinPipeline", "from diffusers import Flux2KleinPipeline", False),
     ("accelerate", "import accelerate", False),
     ("Sam2Model", "from transformers import Sam2Model, Sam2Processor", False),
     (

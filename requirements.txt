@@ -15,7 +15,7 @@ darkdetect
 je-showinfilemanager==1.1.6a4
 # rembg: install.py picks CPU vs GPU onnxruntime; keep package unpinned to [cpu]/[gpu]
 rembg>=2.0.60
-transformers>=4.48.0
+transformers>=4.56.1
 huggingface_hub>=0.26.0
 diffusers>=0.37.1
 accelerate>=1.0.0
