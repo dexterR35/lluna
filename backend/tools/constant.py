@@ -67,6 +67,8 @@ class GenerateMode(Enum):
 
     FLUX2_KLEIN_4B = "FLUX.2-klein-4B"
     FLUX2_KLEIN_9B = "FLUX.2-klein-9B"
+    FLUX2_KLEIN_BASE_4B = "FLUX.2-klein-base-4B"
+    FLUX2_KLEIN_BASE_9B = "FLUX.2-klein-base-9B"
     SDXL_TURBO = "SDXL-Turbo"
     SD15 = "SD-1.5"
 

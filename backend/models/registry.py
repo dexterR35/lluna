@@ -42,7 +42,7 @@ MODEL_REGISTRY: dict[str, M] = {
         M("grounding-dino", "Grounding DINO", "Text-guided object detection", "Transformers/PyTorch", "IDEA-Research/grounding-dino-*", "Apache-2.0 (verify selected revision)", False, "backend/models/select_object", minimum_ram_mb=8192, minimum_vram_mb=4500, compatible_backends=_TORCH_BACKENDS),
         M("flux", "FLUX.2 Klein", "Image generation", "Diffusers/PyTorch", "black-forest-labs/FLUX.2-klein-*", _UPSTREAM, True, "backend/models/generate", minimum_ram_mb=16384, minimum_vram_mb=12000, compatible_backends=("cuda",), dtype="bf16"),
         M("sdxl-turbo", "SDXL Turbo", "Image generation", "Diffusers/PyTorch", "stabilityai/sdxl-turbo", "OpenRAIL++-M (verify model card)", False, "backend/models/generate", minimum_ram_mb=16384, minimum_vram_mb=8000, compatible_backends=("cuda",), dtype="fp16"),
-        M("stable-diffusion-1.5", "Stable Diffusion 1.5", "Image generation", "Diffusers/PyTorch", "runwayml/stable-diffusion-v1-5", "CreativeML Open RAIL-M (verify revision)", False, "backend/models/generate", minimum_ram_mb=8192, minimum_vram_mb=6000, compatible_backends=("cuda",), dtype="fp16"),
+        M("stable-diffusion-1.5", "Stable Diffusion 1.5", "Image generation", "Diffusers/PyTorch", "stable-diffusion-v1-5/stable-diffusion-v1-5", "CreativeML Open RAIL-M (verify revision)", False, "backend/models/generate", minimum_ram_mb=8192, minimum_vram_mb=6000, compatible_backends=("cuda",), dtype="fp16"),
     )
 }
 

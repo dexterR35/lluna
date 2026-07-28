@@ -12,6 +12,17 @@ from backend.tools.constant import SelectObjectModelId
 
 _MARKER = ".midgard_installed"
 
+_SAM2_ALLOW_PATTERNS = (
+    "*.json",
+    "model.safetensors",
+)
+
+_DINO_ALLOW_PATTERNS = (
+    "*.json",
+    "*.txt",
+    "model.safetensors",
+)
+
 
 @unique
 class SelectObjectPairId(str, Enum):
@@ -33,6 +44,7 @@ class SelectObjectModelInfo:
     model_id: SelectObjectModelId
     hf_repo: str
     desc_key: str
+    download_allow_patterns: tuple[str, ...]
     is_default: bool = False
     is_optional: bool = False
 
@@ -42,24 +54,28 @@ MODEL_CATALOG: List[SelectObjectModelInfo] = [
         SelectObjectModelId.SAM2_TINY,
         hf_repo="facebook/sam2-hiera-tiny",
         desc_key="SAM2_TINY",
+        download_allow_patterns=_SAM2_ALLOW_PATTERNS,
         is_default=True,
     ),
     SelectObjectModelInfo(
         SelectObjectModelId.SAM2_LARGE,
         hf_repo="facebook/sam2-hiera-large",
         desc_key="SAM2_LARGE",
+        download_allow_patterns=_SAM2_ALLOW_PATTERNS,
         is_optional=True,
     ),
     SelectObjectModelInfo(
         SelectObjectModelId.DINO_TINY,
         hf_repo="IDEA-Research/grounding-dino-tiny",
         desc_key="DINO_TINY",
+        download_allow_patterns=_DINO_ALLOW_PATTERNS,
         is_default=True,
     ),
     SelectObjectModelInfo(
         SelectObjectModelId.DINO_BASE,
         hf_repo="IDEA-Research/grounding-dino-base",
         desc_key="DINO_BASE",
+        download_allow_patterns=_DINO_ALLOW_PATTERNS,
         is_optional=True,
     ),
 ]
@@ -104,6 +120,23 @@ def model_dir(model_id: SelectObjectModelId) -> Path:
 
 def catalog_info(model_id: SelectObjectModelId) -> Optional[SelectObjectModelInfo]:
     return _CATALOG.get(model_id)
+
+
+def _validate_download_snapshot(info: SelectObjectModelInfo, dest: Path) -> None:
+    required = ["config.json", "model.safetensors", "preprocessor_config.json"]
+    if info.model_id in {
+        SelectObjectModelId.SAM2_TINY,
+        SelectObjectModelId.SAM2_LARGE,
+    }:
+        required.append("processor_config.json")
+    else:
+        required.extend(["tokenizer_config.json", "vocab.txt"])
+    missing = [relative for relative in required if not (dest / relative).is_file()]
+    if missing:
+        raise RuntimeError(
+            f"Downloaded {info.model_id.value} snapshot is incomplete; missing: "
+            + ", ".join(missing)
+        )
 
 
 def is_model_installed(model_id: SelectObjectModelId) -> bool:
@@ -336,9 +369,11 @@ def install_model(model_id: SelectObjectModelId) -> Path:
             repo_id=info.hf_repo,
             local_dir=str(dest),
             local_dir_use_symlinks=False,
+            allow_patterns=list(info.download_allow_patterns),
             **snapshot_download_kwargs(),
         )
         reg.check_cancelled()
+        _validate_download_snapshot(info, dest)
     except DownloadCancelled:
         discard_partial(model_id)
         raise

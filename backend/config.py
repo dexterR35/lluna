@@ -161,7 +161,7 @@ class Config(QConfig):
     generateMode = OptionsConfigItem(
         "Generate",
         "Mode",
-        GenerateMode.FLUX2_KLEIN_4B,
+        GenerateMode.FLUX2_KLEIN_BASE_4B,
         OptionsValidator(GenerateMode),
         EnumSerializer(GenerateMode),
     )

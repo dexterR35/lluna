@@ -13,6 +13,7 @@ from backend.models.registry import MODEL_REGISTRY
 from backend.tools import enhance_models
 from backend.tools.constant import EnhanceMode
 from backend.tools.enhance_models import catalog_info
+from backend.tools.select_object_models import MODEL_CATALOG as SELECT_OBJECT_CATALOG
 
 
 def test_verified_artifact_replaces_destination_only_after_validation(tmp_path) -> None:
@@ -80,6 +81,15 @@ def test_realesrgan_download_catalog_has_pinned_artifact_integrity() -> None:
         registered = MODEL_REGISTRY[registry_id]
         assert registered.version == info.version
         assert registered.expected_files == (info.artifact,)
+
+
+def test_select_object_downloads_only_transformers_safetensors_layout() -> None:
+    for info in SELECT_OBJECT_CATALOG:
+        assert "model.safetensors" in info.download_allow_patterns
+        assert not any(
+            pattern.endswith((".bin", ".pt", ".onnx"))
+            for pattern in info.download_allow_patterns
+        )
 
 
 def test_realesrgan_installer_rejects_tampered_download(

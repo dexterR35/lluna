@@ -17,6 +17,11 @@ from backend.tools.generate_models import (
     ensure_model_installed,
     local_repo_path,
 )
+from backend.tools.generate_options import (
+    default_step_preset_for_mode,
+    resolve_guidance,
+    validate_steps_for_mode,
+)
 
 ProgressCb = Optional[Callable[[int], None]]
 CancelEvent = Optional[threading.Event]
@@ -39,8 +44,6 @@ _busy = False
 MAX_CACHED_MODELS = 1
 DEFAULT_WIDTH = 768
 DEFAULT_HEIGHT = 768
-DEFAULT_STEPS = 4
-DEFAULT_GUIDANCE = 1.0
 MIN_START_INTERVAL_MS = 400
 _last_start_monotonic = 0.0
 
@@ -243,6 +246,7 @@ class _FluxRunner(_DiffusersRunner):
             str(path),
             torch_dtype=self.dtype,
             local_files_only=True,
+            use_safetensors=True,
         )
 
 class _SdxlTurboRunner(_DiffusersRunner):
@@ -251,12 +255,16 @@ class _SdxlTurboRunner(_DiffusersRunner):
 
     def _load_pipeline(self):
         path = local_repo_path(self.mode)
+        info = catalog_info(self.mode)
+        variant = info.weight_variant if info is not None else "fp16"
         AutoT2I = _import_autot2i_pipeline_cls()
         if AutoT2I is not None:
             return AutoT2I.from_pretrained(
                 str(path),
                 torch_dtype=self.dtype,
                 local_files_only=True,
+                use_safetensors=True,
+                variant=variant,
             )
         from diffusers import DiffusionPipeline
 
@@ -264,6 +272,8 @@ class _SdxlTurboRunner(_DiffusersRunner):
             str(path),
             torch_dtype=self.dtype,
             local_files_only=True,
+            use_safetensors=True,
+            variant=variant,
         )
 
 
@@ -273,6 +283,8 @@ class _Sd15Runner(_DiffusersRunner):
 
     def _load_pipeline(self):
         path = local_repo_path(self.mode)
+        info = catalog_info(self.mode)
+        variant = info.weight_variant if info is not None else "fp16"
         SD15 = _import_sd15_pipeline_cls()
         if SD15 is not None:
             return SD15.from_pretrained(
@@ -280,6 +292,8 @@ class _Sd15Runner(_DiffusersRunner):
                 torch_dtype=self.dtype,
                 local_files_only=True,
                 safety_checker=None,
+                use_safetensors=True,
+                variant=variant,
             )
         from diffusers import DiffusionPipeline
 
@@ -287,6 +301,9 @@ class _Sd15Runner(_DiffusersRunner):
             str(path),
             torch_dtype=self.dtype,
             local_files_only=True,
+            safety_checker=None,
+            use_safetensors=True,
+            variant=variant,
         )
 
 
@@ -326,8 +343,8 @@ def generate_image(
     *,
     width: int = DEFAULT_WIDTH,
     height: int = DEFAULT_HEIGHT,
-    steps: int = DEFAULT_STEPS,
-    guidance: float = DEFAULT_GUIDANCE,
+    steps: Optional[int] = None,
+    guidance: Optional[float] = None,
     seed: Optional[int] = None,
     progress: ProgressCb = None,
     cancel_event: CancelEvent = None,
@@ -346,7 +363,11 @@ def generate_image(
     # Align to multiples of 16 (FLUX.2 klein requirement).
     width = max(64, (int(width) // 16) * 16)
     height = max(64, (int(height) // 16) * 16)
-    steps = max(1, int(steps))
+    if steps is None:
+        steps = default_step_preset_for_mode(mode).steps
+    steps = validate_steps_for_mode(mode, steps)
+    if guidance is None:
+        guidance = resolve_guidance(mode)
 
     with _cancel_lock:
         generation = _cancel_generation

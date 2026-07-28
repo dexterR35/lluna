@@ -53,7 +53,8 @@ class ModelDownloadQueue:
                 pass
 
     def _notify(self) -> None:
-        listeners = list(self._listeners)
+        with self._lock:
+            listeners = list(self._listeners)
         for cb in listeners:
             try:
                 cb()

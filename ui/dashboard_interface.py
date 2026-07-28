@@ -34,7 +34,13 @@ from backend.tools.generate_models import (
     ensure_selected_mode_valid,
     selectable_modes,
 )
-from backend.tools.generate_options import resolve_guidance, size_presets, step_presets_for_mode
+from backend.tools.generate_options import (
+    default_size_preset_for_mode,
+    default_step_preset_for_mode,
+    resolve_guidance,
+    size_presets_for_mode,
+    step_presets_for_mode,
+)
 from backend.tools.infer_client import InferClient
 from backend.tools.infer_protocol import JobType
 from backend.tools.system_info import collect_system_info, greeting_for_now
@@ -51,9 +57,8 @@ _PREVIEW_MAX = 320
 
 
 def _home_model_choices() -> list[GenerateMode]:
-    """Home dropdown keeps only FLUX 4B + SDXL Turbo."""
-    allow = {GenerateMode.FLUX2_KLEIN_4B, GenerateMode.SDXL_TURBO}
-    return [m for m in selectable_modes() if m in allow]
+    """Every installed and enabled generate model is selectable on Home."""
+    return selectable_modes()
 
 
 class _PromptBox(QWidget):
@@ -190,14 +195,18 @@ class _PromptBox(QWidget):
         current = config.generateMode.value
         modes = _home_model_choices()
         if current not in modes and modes:
-            current = GenerateMode.FLUX2_KLEIN_4B if GenerateMode.FLUX2_KLEIN_4B in modes else modes[0]
+            current = (
+                GenerateMode.FLUX2_KLEIN_BASE_4B
+                if GenerateMode.FLUX2_KLEIN_BASE_4B in modes
+                else modes[0]
+            )
             config.set(config.generateMode, current)
         items = []
         for mode in modes:
             info = catalog_info(mode)
             hint = ""
             if info is not None:
-                if mode == GenerateMode.FLUX2_KLEIN_4B:
+                if mode == GenerateMode.FLUX2_KLEIN_BASE_4B:
                     hint = hd.get("GenerateModelHintFlux4B", "Default")
                 elif mode == GenerateMode.SDXL_TURBO:
                     hint = hd.get("GenerateModelHintLight", "Light")
@@ -211,22 +220,22 @@ class _PromptBox(QWidget):
         if self.size_combo is None:
             return
         hd = tr["HomeDashboard"]
+        mode = self.selected_mode() or config.generateMode.value
         width = int(config.generateWidth.value or 768)
         height = int(config.generateHeight.value or 768)
         current_key = None
         items = []
-        for preset in size_presets():
+        presets = size_presets_for_mode(mode)
+        for preset in presets:
             label = hd.get(preset.label_key, f"{preset.width}x{preset.height}")
             items.append((label, preset.key))
             if preset.width == width and preset.height == height:
                 current_key = preset.key
         if current_key is None and items:
-            current_key = "medium"
-            for preset in size_presets():
-                if preset.key == current_key:
-                    config.set(config.generateWidth, preset.width)
-                    config.set(config.generateHeight, preset.height)
-                    break
+            default = default_size_preset_for_mode(mode)
+            current_key = default.key
+            config.set(config.generateWidth, default.width)
+            config.set(config.generateHeight, default.height)
         fill_combo(self.size_combo, items, current=current_key)
 
     def _refresh_steps_combo(self):
@@ -235,18 +244,32 @@ class _PromptBox(QWidget):
         hd = tr["HomeDashboard"]
         mode = self.selected_mode() or config.generateMode.value
         presets = step_presets_for_mode(mode)
+        if mode in {
+            GenerateMode.FLUX2_KLEIN_4B,
+            GenerateMode.FLUX2_KLEIN_9B,
+        }:
+            self.steps_combo.setToolTip(
+                hd.get(
+                    "GenerateDistilledStepsTip",
+                    "This is the 4-step Distilled checkpoint. Select the matching "
+                    "Base model for full-step generation.",
+                )
+            )
+        else:
+            self.steps_combo.setToolTip("")
         current_steps = int(config.generateSteps.value or 4)
-        current_key = presets[0].key if presets else None
-        best_gap = None
+        current_key = None
         items = []
         for preset in presets:
             label = hd.get(preset.label_key, preset.key.title())
             label = f"{label} ({preset.steps})"
             items.append((label, preset.key))
-            gap = abs(int(preset.steps) - current_steps)
-            if best_gap is None or gap < best_gap:
-                best_gap = gap
+            if int(preset.steps) == current_steps:
                 current_key = preset.key
+        if current_key is None and presets:
+            default = default_step_preset_for_mode(mode)
+            current_key = default.key
+            config.set(config.generateSteps, int(default.steps))
         fill_combo(self.steps_combo, items, current=current_key)
 
     def _on_model_changed(self, index: int):
@@ -258,6 +281,12 @@ class _PromptBox(QWidget):
         if not isinstance(mode, GenerateMode):
             mode = GenerateMode(str(mode))
         config.set(config.generateMode, mode)
+        default_size = default_size_preset_for_mode(mode)
+        default_steps = default_step_preset_for_mode(mode)
+        config.set(config.generateWidth, int(default_size.width))
+        config.set(config.generateHeight, int(default_size.height))
+        config.set(config.generateSteps, int(default_steps.steps))
+        self._refresh_size_combo()
         self._refresh_steps_combo()
 
     def _on_size_changed(self, index: int):
@@ -266,7 +295,8 @@ class _PromptBox(QWidget):
         key = self.size_combo.itemData(index)
         if key is None:
             return
-        for preset in size_presets():
+        mode = self.selected_mode() or config.generateMode.value
+        for preset in size_presets_for_mode(mode):
             if preset.key == key:
                 config.set(config.generateWidth, int(preset.width))
                 config.set(config.generateHeight, int(preset.height))
@@ -566,7 +596,11 @@ class DashboardInterface(QWidget):
 
         mode = ensure_selected_mode_valid()
         if mode not in modes:
-            mode = GenerateMode.FLUX2_KLEIN_4B if GenerateMode.FLUX2_KLEIN_4B in modes else modes[0]
+            mode = (
+                GenerateMode.FLUX2_KLEIN_BASE_4B
+                if GenerateMode.FLUX2_KLEIN_BASE_4B in modes
+                else modes[0]
+            )
             config.set(config.generateMode, mode)
             self.prompt.refresh_generate_option_combos()
 
@@ -590,7 +624,10 @@ class DashboardInterface(QWidget):
             height = int(config.generateHeight.value)
             steps = int(config.generateSteps.value)
         except (TypeError, ValueError):
-            width, height, steps = 768, 768, 4
+            default_size = default_size_preset_for_mode(mode)
+            default_steps = default_step_preset_for_mode(mode)
+            width, height = default_size.width, default_size.height
+            steps = default_steps.steps
 
         payload = {
             "prompt": prompt,

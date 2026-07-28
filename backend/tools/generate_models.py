@@ -10,6 +10,46 @@ from backend.tools.constant import GenerateMode
 
 _MARKER = ".midgard_installed"
 
+_FLUX_ALLOW_PATTERNS = (
+    "model_index.json",
+    "scheduler/*.json",
+    "text_encoder/*.json",
+    "text_encoder/*.safetensors",
+    "tokenizer/*",
+    "transformer/*.json",
+    "transformer/*.safetensors",
+    "vae/*.json",
+    "vae/*.safetensors",
+)
+
+_SDXL_TURBO_ALLOW_PATTERNS = (
+    "model_index.json",
+    "scheduler/*.json",
+    "text_encoder/config.json",
+    "text_encoder/*.fp16.safetensors",
+    "text_encoder_2/config.json",
+    "text_encoder_2/*.fp16.safetensors",
+    "tokenizer/*",
+    "tokenizer_2/*",
+    "unet/config.json",
+    "unet/*.fp16.safetensors",
+    "vae/config.json",
+    "vae/*.fp16.safetensors",
+)
+
+_SD15_ALLOW_PATTERNS = (
+    "model_index.json",
+    "feature_extractor/*.json",
+    "scheduler/*.json",
+    "text_encoder/config.json",
+    "text_encoder/*.fp16.safetensors",
+    "tokenizer/*",
+    "unet/config.json",
+    "unet/*.fp16.safetensors",
+    "vae/config.json",
+    "vae/*.fp16.safetensors",
+)
+
 
 @dataclass(frozen=True)
 class GenerateModelInfo:
@@ -18,9 +58,8 @@ class GenerateModelInfo:
     hf_repo: str
     pipeline: str
     default_guidance: float
-    step_fast: int
-    step_normal: int
-    step_quality: int
+    download_allow_patterns: tuple[str, ...]
+    weight_variant: Optional[str] = None
     is_default: bool = False
 
 
@@ -31,10 +70,8 @@ MODEL_CATALOG: List[GenerateModelInfo] = [
         hf_repo="black-forest-labs/FLUX.2-klein-4B",
         pipeline="flux",
         default_guidance=1.0,
-        step_fast=4,
-        step_normal=8,
-        step_quality=12,
-        is_default=True,
+        download_allow_patterns=_FLUX_ALLOW_PATTERNS,
+        is_default=False,
     ),
     GenerateModelInfo(
         GenerateMode.FLUX2_KLEIN_9B,
@@ -42,9 +79,25 @@ MODEL_CATALOG: List[GenerateModelInfo] = [
         hf_repo="black-forest-labs/FLUX.2-klein-9B",
         pipeline="flux",
         default_guidance=1.0,
-        step_fast=4,
-        step_normal=8,
-        step_quality=12,
+        download_allow_patterns=_FLUX_ALLOW_PATTERNS,
+        is_default=False,
+    ),
+    GenerateModelInfo(
+        GenerateMode.FLUX2_KLEIN_BASE_4B,
+        desc_key="FLUX2_KLEIN_BASE_4B",
+        hf_repo="black-forest-labs/FLUX.2-klein-base-4B",
+        pipeline="flux",
+        default_guidance=4.0,
+        download_allow_patterns=_FLUX_ALLOW_PATTERNS,
+        is_default=True,
+    ),
+    GenerateModelInfo(
+        GenerateMode.FLUX2_KLEIN_BASE_9B,
+        desc_key="FLUX2_KLEIN_BASE_9B",
+        hf_repo="black-forest-labs/FLUX.2-klein-base-9B",
+        pipeline="flux",
+        default_guidance=4.0,
+        download_allow_patterns=_FLUX_ALLOW_PATTERNS,
         is_default=False,
     ),
     GenerateModelInfo(
@@ -53,20 +106,18 @@ MODEL_CATALOG: List[GenerateModelInfo] = [
         hf_repo="stabilityai/sdxl-turbo",
         pipeline="sdxl_turbo",
         default_guidance=0.0,
-        step_fast=4,
-        step_normal=8,
-        step_quality=12,
+        download_allow_patterns=_SDXL_TURBO_ALLOW_PATTERNS,
+        weight_variant="fp16",
         is_default=False,
     ),
     GenerateModelInfo(
         GenerateMode.SD15,
         desc_key="SD15",
-        hf_repo="runwayml/stable-diffusion-v1-5",
+        hf_repo="stable-diffusion-v1-5/stable-diffusion-v1-5",
         pipeline="sd15",
         default_guidance=7.5,
-        step_fast=20,
-        step_normal=28,
-        step_quality=40,
+        download_allow_patterns=_SD15_ALLOW_PATTERNS,
+        weight_variant="fp16",
         is_default=False,
     ),
 ]
@@ -160,6 +211,41 @@ def catalog_info(mode: GenerateMode) -> Optional[GenerateModelInfo]:
     return _CATALOG_BY_MODE.get(mode)
 
 
+def _validate_download_snapshot(info: GenerateModelInfo, dest: Path) -> None:
+    required_files = [
+        "model_index.json",
+        "scheduler/scheduler_config.json",
+        "text_encoder/config.json",
+        "tokenizer/tokenizer_config.json",
+        "vae/config.json",
+    ]
+    required_weight_dirs = ["text_encoder", "vae"]
+    if info.pipeline == "flux":
+        required_files.append("transformer/config.json")
+        required_weight_dirs.append("transformer")
+    else:
+        required_files.append("unet/config.json")
+        required_weight_dirs.append("unet")
+    if info.pipeline == "sdxl_turbo":
+        required_files.extend(
+            [
+                "text_encoder_2/config.json",
+                "tokenizer_2/tokenizer_config.json",
+            ]
+        )
+        required_weight_dirs.append("text_encoder_2")
+
+    missing = [rel for rel in required_files if not (dest / rel).is_file()]
+    for rel in required_weight_dirs:
+        if not any((dest / rel).glob("*.safetensors")):
+            missing.append(f"{rel}/*.safetensors")
+    if missing:
+        raise RuntimeError(
+            f"Downloaded {info.mode.value} snapshot is incomplete; missing: "
+            + ", ".join(missing)
+        )
+
+
 def parse_enabled_values(raw: str) -> Set[str]:
     s = "" if raw is None else str(raw).strip()
     if not s:
@@ -216,9 +302,9 @@ def ensure_selected_mode_valid() -> GenerateMode:
     available = selectable_modes()
     if current in available:
         return current
-    if GenerateMode.FLUX2_KLEIN_4B in available:
-        config.set(config.generateMode, GenerateMode.FLUX2_KLEIN_4B)
-        return GenerateMode.FLUX2_KLEIN_4B
+    if GenerateMode.FLUX2_KLEIN_BASE_4B in available:
+        config.set(config.generateMode, GenerateMode.FLUX2_KLEIN_BASE_4B)
+        return GenerateMode.FLUX2_KLEIN_BASE_4B
     if available:
         config.set(config.generateMode, available[0])
         return available[0]
@@ -270,9 +356,11 @@ def install_model(mode: GenerateMode) -> Path:
             repo_id=info.hf_repo,
             local_dir=str(dest),
             local_dir_use_symlinks=False,
+            allow_patterns=list(info.download_allow_patterns),
             **snapshot_download_kwargs(),
         )
         reg.check_cancelled()
+        _validate_download_snapshot(info, dest)
     except DownloadCancelled:
         discard_partial(mode)
         reg.fail(KIND_GENERATE, mode.value, keep_pending=True)

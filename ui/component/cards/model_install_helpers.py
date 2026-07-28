@@ -2,13 +2,56 @@
 
 from __future__ import annotations
 
+import logging
+import threading
 from typing import Callable, Optional
 
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QCoreApplication, QObject, Qt, Signal, Slot
 
-from backend.tools.model_download_queue import ModelDownloadQueue, OnDone, WorkFn
+from backend.tools.model_download_queue import ModelDownloadQueue, WorkFn
 
 OptionalExc = Optional[BaseException]
+logger = logging.getLogger(__name__)
+
+
+class _MainThreadDispatcher(QObject):
+    """Deliver Python callbacks to the Qt application thread."""
+
+    invoke_requested = Signal(object)
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.invoke_requested.connect(
+            self._invoke,
+            Qt.ConnectionType.QueuedConnection,
+        )
+
+    @Slot(object)
+    def _invoke(self, callback: Callable[[], None]) -> None:
+        try:
+            callback()
+        except Exception:
+            logger.exception("Model install UI completion callback failed")
+
+
+_dispatcher: Optional[_MainThreadDispatcher] = None
+_dispatcher_lock = threading.Lock()
+_listener_wrappers: dict[Callable[[], None], Callable[[], None]] = {}
+
+
+def _main_thread_dispatcher() -> _MainThreadDispatcher:
+    """Create the dispatcher while called from the GUI thread."""
+    global _dispatcher
+    with _dispatcher_lock:
+        if _dispatcher is None:
+            app = QCoreApplication.instance()
+            if app is None:
+                raise RuntimeError(
+                    "A Qt application must exist before model jobs are registered."
+                )
+            _dispatcher = _MainThreadDispatcher()
+            _dispatcher.moveToThread(app.thread())
+        return _dispatcher
 
 
 def model_download_queue() -> ModelDownloadQueue:
@@ -22,9 +65,10 @@ def enqueue_model_job(
     on_done: Callable[[OptionalExc], None],
 ) -> int:
     """Run work_fn on the global queue; on_done runs on the Qt main thread."""
+    dispatcher = _main_thread_dispatcher()
 
     def _main_thread_done(err: OptionalExc) -> None:
-        QTimer.singleShot(0, lambda e=err: on_done(e))
+        dispatcher.invoke_requested.emit(lambda e=err: on_done(e))
 
     return model_download_queue().enqueue(kind, key, work_fn, _main_thread_done)
 
@@ -38,14 +82,21 @@ def queue_position(kind: str, key: str) -> int:
 
 
 def register_queue_listener(listener: Callable[[], None]) -> None:
-    def _main_thread() -> None:
-        QTimer.singleShot(0, listener)
+    dispatcher = _main_thread_dispatcher()
+    if listener in _listener_wrappers:
+        return
 
+    def _main_thread() -> None:
+        dispatcher.invoke_requested.emit(listener)
+
+    _listener_wrappers[listener] = _main_thread
     model_download_queue().add_listener(_main_thread)
 
 
 def unregister_queue_listener(listener: Callable[[], None]) -> None:
-    model_download_queue().remove_listener(listener)
+    wrapper = _listener_wrappers.pop(listener, None)
+    if wrapper is not None:
+        model_download_queue().remove_listener(wrapper)
 
 
 def install_button_text(

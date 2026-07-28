@@ -380,7 +380,11 @@ def _job_generate(run_id, payload, cancel_event, on_progress, heartbeat_log, evt
         cuda_ready_for_generate,
         ensure_model_installed,
     )
-    from backend.tools.generate_options import resolve_guidance
+    from backend.tools.generate_options import (
+        default_size_preset_for_mode,
+        default_step_preset_for_mode,
+        resolve_guidance,
+    )
     from backend.tools.image_generate import (
         GenerateCancelled,
         GenerateCudaError,
@@ -407,10 +411,17 @@ def _job_generate(run_id, payload, cancel_event, on_progress, heartbeat_log, evt
         return
     mode = GenerateMode(mode_value)
 
-    width = int(payload.get("width") or 768)
-    height = int(payload.get("height") or 768)
-    steps = int(payload.get("steps") or 4)
-    guidance = float(payload.get("guidance") or resolve_guidance(mode))
+    default_size = default_size_preset_for_mode(mode)
+    default_steps = default_step_preset_for_mode(mode)
+    width = int(payload.get("width") or default_size.width)
+    height = int(payload.get("height") or default_size.height)
+    steps = int(payload.get("steps") or default_steps.steps)
+    guidance_value = payload.get("guidance")
+    guidance = (
+        resolve_guidance(mode)
+        if guidance_value is None
+        else float(guidance_value)
+    )
     seed = payload.get("seed")
     seed_i = int(seed) if seed is not None and str(seed).strip() != "" else None
 
