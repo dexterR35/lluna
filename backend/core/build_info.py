@@ -37,7 +37,7 @@ class BuildInfo:
 BUILD_INFO = BuildInfo(
     version="1.4.0",
     repository_owner="dexterR35",
-    repository_name="midgard-studio",
+    repository_name="midgard",
 )
 
 VERSION = BUILD_INFO.version

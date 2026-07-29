@@ -3,14 +3,14 @@
 ## Repository
 
 ```text
-https://github.com/dexterR35/midgard-studio
+https://github.com/dexterR35/midgard
 ```
 
 Canonical identity:
 
 ```text
 Owner: dexterR35
-Repository: midgard-studio
+Repository: midgard
 ```
 
 ## Product direction
@@ -122,7 +122,7 @@ Use these rules at the beginning of Stages 0–18:
 ```text
 You are working on:
 
-https://github.com/dexterR35/midgard-studio
+https://github.com/dexterR35/midgard
 
 Do not modify code in this stage.
 
@@ -2756,7 +2756,7 @@ Use these rules for Stages 19–27:
 ```text
 You are working on:
 
-https://github.com/dexterR35/midgard-studio
+https://github.com/dexterR35/midgard
 
 Read all relevant reports in docs/audits/ before editing.
 
@@ -2902,7 +2902,7 @@ Scope:
 5. Log a safe warning.
 6. Centralize canonical repository metadata:
    owner = dexterR35
-   repository = midgard-studio
+   repository = midgard
 7. Derive:
    project URL;
    issues URL;

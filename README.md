@@ -22,10 +22,11 @@ not sent to a Midgard cloud service. Internet access is needed only when
 installing dependencies, downloading optional models, and checking for updates.
 
 > [!NOTE]
-> Midgard is currently distributed as a source installation. Windows, Linux,
-> CUDA, DirectML, and Apple MPS paths are implemented, but not every
-> hardware/platform combination has completed production certification. See
-> [Platform notes](#platform-notes) and [Known limitations](#known-limitations).
+> Midgard currently has source installation plus a desktop-release pipeline.
+> A downloadable `.exe`, Linux archive, or `.dmg` exists only after a signed
+> version tag finishes the GitHub release workflow. See
+> [Desktop release packages](#desktop-release-packages) and
+> [Platform notes](#platform-notes).
 
 ## Features
 
@@ -68,21 +69,85 @@ tool.
 ## Requirements
 
 - A 64-bit Windows, Linux, or macOS computer
-- **64-bit Python 3.12** (other Python minor versions are rejected)
-- Git, if cloning or updating the repository with Git
 - An internet connection during dependency and optional-model installation
 - Enough free disk space for the selected models; generation models can require
   many gigabytes
 - Current NVIDIA drivers for CUDA mode; the full NVIDIA CUDA Toolkit is not
   required
 
+Packaged releases include an embedded 64-bit Python 3.12 runtime. Packaged
+users do **not** install Python, Git, `pip`, or `midgardEnv`. Source developers
+must install **64-bit Python 3.12**; Python 3.11, 3.13, 3.14, and 32-bit
+interpreters are rejected.
+
 GPU acceleration is optional for most features. CPU mode is slower but is the
 simplest compatible option. **Generate Image is the exception: it currently
 requires a working NVIDIA CUDA GPU.**
 
-## Installation
+## Desktop release packages
 
-The installer creates an isolated `midgardEnv` environment inside the project,
+Desktop builds are hardware-specific. Download the package matching both the
+computer and its acceleration backend from
+[GitHub Releases](https://github.com/dexterR35/midgard/releases):
+
+| Computer | Release package | Available profiles |
+|---|---|---|
+| Windows x64 | `Midgard-<version>-windows-x64-<profile>.exe` | CPU, CUDA, DirectML |
+| Linux x86-64 | `Midgard-<version>-linux-x64-<profile>.tar.gz` | CPU, CUDA |
+| macOS Intel | `Midgard-<version>-macos-x64-mps.dmg` | MPS |
+
+Do not install a CUDA package on a computer without a supported NVIDIA GPU and
+current driver. Settings and model selections are determined independently on
+each computer; do not copy an installed application runtime between computers.
+
+### Install a packaged Windows release
+
+Run the downloaded `.exe`. The per-user installer displays native progress,
+installs Midgard and its embedded Python runtime, creates shortcuts, and checks
+that a CUDA build has an NVIDIA driver. Its log is stored at:
+
+```text
+%LOCALAPPDATA%\Midgard\logs\installer.log
+```
+
+### Install a packaged Linux release
+
+Extract the archive, then run:
+
+```shell
+cd Midgard
+bash install-midgard.sh
+```
+
+The terminal installer displays a percentage progress bar and installs Midgard
+for the current user at:
+
+```text
+~/.local/share/midgard/app/Midgard
+```
+
+Its log is stored at `~/.local/state/midgard/installer.log`, or under the
+configured `XDG_STATE_HOME`. Use `bash install-midgard.sh --no-launch` to
+install without opening the app.
+
+### Install a packaged macOS release
+
+Open the `.dmg` and drag `Midgard.app` to Applications. Finder displays copy
+progress. The disk image includes a Read Me explaining the embedded runtime and
+first-launch checks.
+
+On every packaged platform, first launch verifies Python 3.12, required
+resources, and writable settings/model/update directories. The result is
+appended to the per-user `config/logs/install.log`.
+
+> [!IMPORTANT]
+> The repository does not currently contain a prebuilt executable. Native
+> packages appear on GitHub Releases only after the release workflow builds,
+> signs, and publishes them.
+
+## Source installation
+
+The source installer creates an isolated Python 3.12 `midgardEnv` inside the project,
 installs the appropriate Torch, Paddle, and ONNX Runtime variants, verifies the
 Python packages, checks bundled model chunks, and writes the launchers.
 
@@ -93,7 +158,7 @@ or CPU when CUDA is unavailable. Do not copy `midgardEnv` between computers.
 Clone the repository first:
 
 ```shell
-git clone https://github.com/dexterR35/midgard-studio.git
+git clone https://github.com/dexterR35/midgard.git
 cd midgard
 ```
 
@@ -263,8 +328,13 @@ midgardEnv/bin/python midgard.py
 
 On first launch, optional models are not downloaded unless
 `--schedule-default-models` was used. Open **Settings**, find the relevant model
-group, and choose **Install**. Downloads are serialized and can be resumed after
-a restart.
+group, and choose **Install**. If a required model is missing from a feature
+input, the page also provides **Install model** and **Go to Settings** actions.
+
+Model downloads appear in a compact panel at the bottom-right of the window.
+Each item shows its model name, state, downloaded files, and percentage. Multiple
+downloads are queued, with active, pending, completed, failed, and cancelled
+states. Closing or clearing completed progress does not uninstall models.
 
 ## Using each feature
 
@@ -273,20 +343,22 @@ a restart.
 1. Open **Generate Image**.
 2. Install and enable a supported model in
    **Settings → Generate Models**.
-3. Select a model, output size, and step preset.
+3. Select a model and output size.
 4. Enter a prompt and choose **Generate Image**.
 
 The dashboard exposes FLUX.2 Klein 4B and SDXL Turbo. FLUX.2 Klein 9B and Stable
 Diffusion 1.5 are also managed in Settings. Available size presets are 512×512,
-768×768, and 1024×1024. Generated PNG files are written to the save directory
-configured in **Settings → Advanced**.
+768×768, and 1024×1024. The app selects the model's maximum supported step
+count automatically; there is no steps selector in the page. Distilled FLUX
+models use their short inference schedule. Generated PNG files are written to
+the save directory configured in **Settings → Advanced**.
 
-| Model | Approximate VRAM | Fast / normal / quality steps | Notes |
+| Model | Approximate VRAM | Step behavior | Notes |
 |---|---:|---:|---|
-| FLUX.2 Klein 4B | 13 GB | 4 / 8 / 12 | Recommended FLUX default |
-| FLUX.2 Klein 9B | 29 GB | 4 / 8 / 12 | Gated, non-commercial model; requires Hugging Face access |
-| SDXL Turbo | 8 GB | 4 / 8 / 12 | Lighter dashboard option |
-| Stable Diffusion 1.5 | 4 GB | 20 / 28 / 40 | Smaller legacy option managed in Settings |
+| FLUX.2 Klein 4B | 13 GB | Automatic short schedule | Recommended FLUX default |
+| FLUX.2 Klein 9B | 29 GB | Automatic short schedule | Gated, non-commercial model; requires Hugging Face access |
+| SDXL Turbo | 8 GB | Automatic | Lighter dashboard option |
+| Stable Diffusion 1.5 | 4 GB | Automatic | Smaller legacy option managed in Settings |
 
 VRAM figures are rough planning estimates, not guarantees. Resolution, driver,
 precision, and other running applications affect actual memory use.
@@ -373,15 +445,16 @@ be refined with the paint and erase tools.
 
 Core OCR and inpainting weights are split across tracked files and reconstructed
 or verified by the installer. Optional models are installed from Settings.
+Settings model groups are collapsed by default to keep the page compact.
 
-| Feature | Main models | Location |
+Source installations keep repository-managed models under `backend/models/`.
+Packaged applications keep downloaded models outside the application directory:
+
+| Platform | Settings | Downloaded models |
 |---|---|---|
-| Remove Text | STTN, LaMa, ProPainter, PP-OCRv5 | `backend/models/` |
-| Remove BG | BiRefNet, U2-Net, IS-Net, BRIA RMBG | User rembg cache, normally `~/.u2net/` |
-| Image Upscale | RealESRGAN x2plus / x4plus | `backend/models/realesrgan/` |
-| Fix Low Light | MIRNet LOL | `backend/models/mirnet/` |
-| Select Object | SAM2 + Grounding DINO | `backend/models/select_object/` |
-| Generate Image | FLUX.2, SDXL Turbo, SD 1.5 | `backend/models/generate/` |
+| Windows | `%LOCALAPPDATA%\Midgard\config` | `%LOCALAPPDATA%\Midgard\models` |
+| Linux | `~/.config/midgard` | `~/.local/share/midgard/models` |
+| macOS | `~/Library/Application Support/Midgard/config` | `~/Library/Application Support/Midgard/models` |
 
 In each Settings model manager:
 
@@ -391,6 +464,10 @@ In each Settings model manager:
 - **Uninstall** removes the runtime model and its Midgard download-cache files,
   including legacy Hugging Face cache copies; the model can be installed again
   later.
+
+Uninstalling or replacing the Midgard application does not remove per-user
+settings or downloaded models. Remove a model explicitly from its Settings
+manager when its disk space should be reclaimed.
 
 Review each upstream model's license before use, especially for commercial
 work. A Midgard source-code license does not replace third-party model licenses.
@@ -471,8 +548,28 @@ install.bat --mode cpu --yes
 
 ### `Midgard requires 64-bit Python 3.12`
 
-Install the 64-bit Python 3.12 release. Python 3.11, 3.13, and 32-bit Python are
-not accepted by this release. On Windows, `install.bat` prefers `py -3.12`.
+For a source checkout, install 64-bit Python 3.12 and rerun the source installer.
+Python 3.11, 3.13, 3.14, and 32-bit Python are not accepted. On Windows,
+`install.bat` prefers `py -3.12`.
+
+For a packaged release, do not install system Python. Reinstall the correct
+Midgard package because its embedded runtime or packaged files failed
+validation. Check `config/logs/install.log` under the platform settings
+directory for the failed check.
+
+### A packaged installation fails
+
+Confirm that the downloaded package matches the computer and hardware profile,
+then inspect the installer log:
+
+- Windows: `%LOCALAPPDATA%\Midgard\logs\installer.log`
+- Linux: `~/.local/state/midgard/installer.log`
+- macOS/first launch:
+  `~/Library/Application Support/Midgard/config/logs/install.log`
+
+CUDA packages require a supported NVIDIA GPU and current driver. Use the CPU
+package when CUDA is not available; do not install the full CUDA Toolkit just
+to satisfy Midgard.
 
 ### The launcher says `midgardEnv` is missing
 
@@ -552,6 +649,8 @@ Avoid manually mixing `onnxruntime`, `onnxruntime-gpu`, and
   MPS profiles.
 - Optional models are large and are not downloaded by a normal installation.
 - DirectML behavior varies by Windows version, GPU, and driver.
+- No desktop package is present in this source checkout until the native GitHub
+  release workflow has completed successfully.
 - Clean-machine production certification is still pending for parts of the
   Windows, Linux CUDA, macOS, and packaged-app matrix.
 - Model integrity and license metadata are not yet complete for every optional
@@ -579,14 +678,48 @@ Diagnostic and implementation evidence is documented in
 [`docs/implementation-evidence.md`](docs/implementation-evidence.md) and
 [`docs/audits/`](docs/audits/).
 
+Release packaging and signing instructions are documented in
+[`docs/releasing-desktop.md`](docs/releasing-desktop.md). A signed version tag
+starts the native build matrix for Windows CPU/CUDA/DirectML, Linux CPU/CUDA,
+and macOS. The workflow builds with Python 3.12, signs supported native
+artifacts, creates a signed update manifest, generates provenance attestations,
+and uploads the outputs to GitHub Releases.
+
+### Publishing a desktop release
+
+Configure the Windows signing certificate, Apple signing/notarization
+credentials, and Midgard update-manifest key in the protected GitHub `release`
+environment. Keep the version in `backend/core/build_info.py`,
+`pyproject.toml`, and the README badge identical. After the full suite passes:
+
+```shell
+git push origin main
+git tag -s v<version> -m "Midgard <version>"
+git push origin v<version>
+```
+
+Do not create an unsigned production package or reuse one hardware profile for
+all computers. Windows and macOS artifacts must pass their native signing
+checks, and every published package must be present in the signed update
+manifest. The complete key-generation, secret names, release gates, and
+rollback checks are in the release guide linked above.
+
 ## Updating Midgard
 
 Source installations can update with:
 
 ```shell
-git pull
+git pull --ff-only
 python install.py --yes
 ```
+
+Packaged releases check GitHub Releases without modifying a source checkout.
+After the release signing key is configured, Midgard verifies the signed update
+manifest, selects the exact OS/architecture/hardware profile, streams the
+package, verifies its size and SHA-256 digest, and only then starts the native
+installer or staged application swap. Linux and macOS staged updates keep the
+previous application directory for rollback. Settings and downloaded models
+remain outside the replaced application.
 
 Model-only updates do not require a full application reinstall. Use the model
 managers in Settings.

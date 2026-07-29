@@ -11,13 +11,13 @@ from backend.core.environment import initialize_process_environment
 
 def test_canonical_repository_metadata() -> None:
     assert BUILD_INFO.repository_owner == "dexterR35"
-    assert BUILD_INFO.repository_name == "midgard-studio"
-    assert BUILD_INFO.project_url == "https://github.com/dexterR35/midgard-studio"
+    assert BUILD_INFO.repository_name == "midgard"
+    assert BUILD_INFO.project_url == "https://github.com/dexterR35/midgard"
     assert BUILD_INFO.issues_url.endswith("/issues")
     assert BUILD_INFO.releases_url.endswith("/releases")
     assert (
         BUILD_INFO.latest_release_api_url
-        == "https://api.github.com/repos/dexterR35/midgard-studio/releases/latest"
+        == "https://api.github.com/repos/dexterR35/midgard/releases/latest"
     )
 
 
