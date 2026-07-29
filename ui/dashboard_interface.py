@@ -294,11 +294,6 @@ class _PromptBox(QWidget):
 class DashboardInterface(QWidget):
     """Landing home - greeting, system SettingCards, prompt → Generate."""
 
-    open_bg_remove = Signal()
-    open_upscale = Signal()
-    open_low_light = Signal()
-    open_video = Signal()
-    open_settings = Signal()
     open_generate_settings = Signal()
     open_files = Signal()
     processing_changed = Signal(bool)
@@ -504,26 +499,7 @@ class DashboardInterface(QWidget):
             self.status_label.setText("")
 
     def _on_prompt(self, text: str):
-        """Route tool shortcuts; otherwise Generate with FLUX.2."""
-        q = text.lower().strip()
-        if any(k in q for k in ("setting", "config", "theme", "model")):
-            self.open_settings.emit()
-            return
-        if any(k in q for k in ("subtitle", "watermark", "video", "inpaint", "sttn", "lama")):
-            self.open_video.emit()
-            return
-        if any(k in q for k in ("upscale", "enhance", "esrgan", "real-esrgan")):
-            self.open_upscale.emit()
-            return
-        if any(k in q for k in ("low light", "lowlight", "mirnet")):
-            self.open_low_light.emit()
-            return
-        if any(k in q for k in ("background", "bg", "cutout", "remove bg", "rembg")):
-            self.open_bg_remove.emit()
-            return
-        if any(k in q for k in ("open file", "upload", "attach")):
-            self.open_files.emit()
-            return
+        """Treat every submitted text as an image-generation prompt."""
         self._start_generate(text)
 
     def _start_generate(self, prompt: str):

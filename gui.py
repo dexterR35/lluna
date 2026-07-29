@@ -251,11 +251,6 @@ class SubtitleExtractorGUI(FluentWindow):
 
     def _wire_dashboard(self):
         dash = self.dashboardInterface
-        dash.open_bg_remove.connect(lambda: self.switchTo(self.bgRemoveInterface))
-        dash.open_upscale.connect(lambda: self.switchTo(self.upscaleInterface))
-        dash.open_low_light.connect(lambda: self.switchTo(self.lowLightInterface))
-        dash.open_video.connect(lambda: self.switchTo(self.homeInterface))
-        dash.open_settings.connect(lambda: self.switchTo(self.advancedSettingInterface))
         dash.open_generate_settings.connect(
             lambda: self._open_model_settings("generate_models_group")
         )
