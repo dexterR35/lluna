@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import csv
 import shutil
-import subprocess
+import subprocess  # nosec B404
 from dataclasses import replace
 
 from backend.hardware.profile import Confidence, GpuInfo
@@ -15,7 +15,8 @@ def detect_nvidia_smi_gpus() -> tuple[GpuInfo, ...]:
     if not executable:
         return ()
     try:
-        output = subprocess.check_output(
+        # The executable is resolved to an absolute path by shutil.which().
+        output = subprocess.check_output(  # noqa: S603  # nosec B603
             [
                 executable,
                 "--query-gpu=name,memory.total,memory.free,driver_version,compute_cap",
@@ -69,9 +70,7 @@ def detect_torch_cuda_gpus() -> tuple[GpuInfo, ...]:
                 pass
             major = getattr(props, "major", None)
             minor = getattr(props, "minor", None)
-            capability = (
-                f"{major}.{minor}" if major is not None and minor is not None else ""
-            )
+            capability = f"{major}.{minor}" if major is not None and minor is not None else ""
             gpus.append(
                 GpuInfo(
                     vendor="NVIDIA",
@@ -104,14 +103,11 @@ def detect_gpus() -> tuple[GpuInfo, ...]:
             replace(
                 torch_gpu,
                 model=torch_gpu.model or reported.model,
-                total_vram_mb=torch_gpu.total_vram_mb
-                or reported.total_vram_mb,
-                available_vram_mb=torch_gpu.available_vram_mb
-                or reported.available_vram_mb,
+                total_vram_mb=torch_gpu.total_vram_mb or reported.total_vram_mb,
+                available_vram_mb=torch_gpu.available_vram_mb or reported.available_vram_mb,
                 driver_version=reported.driver_version,
                 cuda_driver_version=reported.cuda_driver_version,
-                compute_capability=torch_gpu.compute_capability
-                or reported.compute_capability,
+                compute_capability=torch_gpu.compute_capability or reported.compute_capability,
                 confidence=Confidence.VERIFIED,
             )
         )

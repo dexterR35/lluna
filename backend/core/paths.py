@@ -30,14 +30,8 @@ class AppPaths:
     def resolve(cls) -> "AppPaths":
         frozen = bool(getattr(sys, "frozen", False))
         frozen_root = getattr(sys, "_MEIPASS", None)
-        default_root = (
-            Path(frozen_root)
-            if frozen_root
-            else Path(__file__).resolve().parents[2]
-        )
-        root = _resolved_override(
-            "MIDGARD_PROJECT_ROOT", default_root
-        )
+        default_root = Path(frozen_root) if frozen_root else Path(__file__).resolve().parents[2]
+        root = _resolved_override("MIDGARD_PROJECT_ROOT", default_root)
         runtime_root = Path(sys.executable).resolve().parent if frozen else root
         user_config, user_data = _user_roots()
         config_dir = _resolved_override(
@@ -74,18 +68,14 @@ def _user_roots() -> tuple[Path, Path]:
     """Return writable per-user config/data roots without optional dependencies."""
     home = Path.home()
     if sys.platform == "win32":
-        local = Path(
-            os.environ.get("LOCALAPPDATA", home / "AppData" / "Local")
-        )
+        local = Path(os.environ.get("LOCALAPPDATA", home / "AppData" / "Local"))
         base = local / "Midgard"
         return base / "config", base
     if sys.platform == "darwin":
         base = home / "Library" / "Application Support" / "Midgard"
         return base / "config", base
     config = Path(os.environ.get("XDG_CONFIG_HOME", home / ".config")) / "midgard"
-    data = Path(
-        os.environ.get("XDG_DATA_HOME", home / ".local" / "share")
-    ) / "midgard"
+    data = Path(os.environ.get("XDG_DATA_HOME", home / ".local" / "share")) / "midgard"
     return config, data
 
 

@@ -51,9 +51,7 @@ def test_black_and_white_views_composite_transparency() -> None:
 
 def test_red_overlay_marks_removed_pixels_only() -> None:
     original, result = _pair()
-    overlay = np.asarray(
-        render_inspection(original, result, InspectionMode.RED_OVERLAY)
-    )
+    overlay = np.asarray(render_inspection(original, result, InspectionMode.RED_OVERLAY))
 
     assert np.all(overlay[:, :3, :3] == (20, 40, 60))
     assert np.all(overlay[:, 3:, 0] > overlay[:, 3:, 1])
@@ -61,9 +59,7 @@ def test_red_overlay_marks_removed_pixels_only() -> None:
 
 def test_difference_exposes_removed_region() -> None:
     original, result = _pair()
-    difference = np.asarray(
-        render_inspection(original, result, InspectionMode.DIFFERENCE)
-    )
+    difference = np.asarray(render_inspection(original, result, InspectionMode.DIFFERENCE))
 
     assert np.all(difference[:, 3:, 0] == 255)
     assert np.any(difference[:, 3:, :3] != 0)

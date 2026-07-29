@@ -20,9 +20,7 @@ def _make_repo_cache(root, repo_id: str):
     return repo, lock
 
 
-def test_hf_cache_cleanup_removes_private_and_legacy_copies_only(
-    tmp_path, monkeypatch
-) -> None:
+def test_hf_cache_cleanup_removes_private_and_legacy_copies_only(tmp_path, monkeypatch) -> None:
     models = tmp_path / "models"
     shared = tmp_path / "shared-hf"
     monkeypatch.setenv("MIDGARD_MODELS_DIR", str(models))
@@ -31,9 +29,7 @@ def test_hf_cache_cleanup_removes_private_and_legacy_copies_only(
     monkeypatch.delenv("HUGGINGFACE_HUB_CACHE", raising=False)
 
     repo_id = "facebook/sam2-hiera-tiny"
-    private_repo, private_lock = _make_repo_cache(
-        hf_auth.hf_download_cache_dir(), repo_id
-    )
+    private_repo, private_lock = _make_repo_cache(hf_auth.hf_download_cache_dir(), repo_id)
     shared_repo, shared_lock = _make_repo_cache(shared / "hub", repo_id)
     unrelated, _ = _make_repo_cache(shared / "hub", "someone/other-model")
 
@@ -46,24 +42,18 @@ def test_hf_cache_cleanup_removes_private_and_legacy_copies_only(
     assert unrelated.is_dir()
 
 
-def test_snapshot_download_uses_disposable_app_cache(
-    tmp_path, monkeypatch
-) -> None:
+def test_snapshot_download_uses_disposable_app_cache(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("MIDGARD_MODELS_DIR", str(tmp_path / "models"))
     monkeypatch.setattr(hf_auth, "apply_hf_token_to_env", lambda: None)
 
     kwargs = hf_auth.snapshot_download_kwargs()
 
     assert kwargs == {
-        "cache_dir": str(
-            tmp_path / "models" / ".download_cache" / "huggingface" / "hub"
-        )
+        "cache_dir": str(tmp_path / "models" / ".download_cache" / "huggingface" / "hub")
     }
 
 
-def test_select_object_uninstall_removes_model_and_legacy_cache(
-    tmp_path, monkeypatch
-) -> None:
+def test_select_object_uninstall_removes_model_and_legacy_cache(tmp_path, monkeypatch) -> None:
     model_root = tmp_path / "models"
     shared = tmp_path / "shared-hf"
     monkeypatch.setattr(select_object_models, "models_root", lambda: model_root)

@@ -65,9 +65,7 @@ def test_corrupt_user_configuration_is_backed_up(tmp_path) -> None:
 def test_configuration_save_is_atomic_and_round_trips(tmp_path) -> None:
     path = tmp_path / "runtime.json"
     loader = ConfigurationLoader()
-    expected = ApplicationConfiguration(
-        subtitle=SubtitleSettings(inpaint_mode="opencv")
-    )
+    expected = ApplicationConfiguration(subtitle=SubtitleSettings(inpaint_mode="opencv"))
 
     loader.save(expected, path=path)
     loaded = loader.load(
@@ -97,4 +95,8 @@ def test_configuration_boundary_does_not_import_qt() -> None:
         "assert not any(n.startswith(('PySide6', 'qfluentwidgets')) "
         "for n in sys.modules)"
     )
-    subprocess.run([sys.executable, "-c", code], check=True, env=os.environ.copy())
+    subprocess.run(  # noqa: S603
+        [sys.executable, "-c", code],
+        check=True,
+        env=os.environ.copy(),
+    )

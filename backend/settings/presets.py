@@ -105,8 +105,10 @@ def _recommended(settings: ModelSettings, preset: Preset, context: ResolutionCon
             memory_mode=preset.value,
         )
     elif isinstance(settings, UpscaleSettings):
-        tile = 0 if memory == "high" and preset is not Preset.LOW_MEMORY else (
-            256 if memory == "medium" else 128
+        tile = (
+            0
+            if memory == "high" and preset is not Preset.LOW_MEMORY
+            else (256 if memory == "medium" else 128)
         )
         changes.update(tile_size=tile, memory_mode=preset.value)
     elif isinstance(settings, LowLightSettings):

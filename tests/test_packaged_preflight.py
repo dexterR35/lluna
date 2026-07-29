@@ -37,9 +37,7 @@ def _packaged_paths(tmp_path):
     )
 
 
-def test_packaged_preflight_checks_embedded_runtime_and_writes_log(
-    monkeypatch, tmp_path
-) -> None:
+def test_packaged_preflight_checks_embedded_runtime_and_writes_log(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr("sys.frozen", True, raising=False)
     monkeypatch.setattr("sys.version_info", (3, 12, 0, "final", 0))
     paths = _packaged_paths(tmp_path)
@@ -54,9 +52,7 @@ def test_packaged_preflight_checks_embedded_runtime_and_writes_log(
     assert "target=linux-x64-cpu" in text
 
 
-def test_packaged_preflight_fails_when_release_resource_is_missing(
-    monkeypatch, tmp_path
-) -> None:
+def test_packaged_preflight_fails_when_release_resource_is_missing(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr("sys.frozen", True, raising=False)
     paths = _packaged_paths(tmp_path)
     paths.translation_file.unlink()

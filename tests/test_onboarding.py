@@ -1,8 +1,8 @@
 from backend.onboarding.state import OnboardingState, OnboardingStep
 
 
-def test_onboarding_resumes_round_trip() -> None:
-    state = OnboardingState(save_directory="/tmp/results").advance().advance()
+def test_onboarding_resumes_round_trip(tmp_path) -> None:
+    state = OnboardingState(save_directory=str(tmp_path / "results")).advance().advance()
     restored = OnboardingState.from_dict(state.to_dict())
     assert restored == state
     assert restored.current_step is OnboardingStep.HARDWARE

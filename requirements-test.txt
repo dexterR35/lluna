@@ -1,4 +1,4 @@
-pytest==9.0.2
+-r requirements-test-core.txt
 pytest-cov==7.0.0
 pytest-mock==3.15.1
 pytest-timeout==2.4.0

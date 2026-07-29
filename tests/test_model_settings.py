@@ -81,10 +81,6 @@ def test_safe_override_is_preserved() -> None:
 
 
 def test_missing_model_is_reported() -> None:
-    context = ResolutionContext(
-        "upscale", "RealESRGAN_x2plus", CPU_ONLY, model_installed=False
-    )
-    result = resolve(
-        UpscaleSettings(), configured=None, preset=Preset.FAST, context=context
-    )
+    context = ResolutionContext("upscale", "RealESRGAN_x2plus", CPU_ONLY, model_installed=False)
+    result = resolve(UpscaleSettings(), configured=None, preset=Preset.FAST, context=context)
     assert "not installed" in result.warnings[0]

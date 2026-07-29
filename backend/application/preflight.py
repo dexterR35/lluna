@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import platform
 import os
+import platform
 import struct
 import sys
 import tempfile
@@ -34,10 +34,10 @@ def validate_python_runtime() -> None:
         )
 
 
-def _ffmpeg_path(root: Path) -> Path:
-    if sys.platform == "win32":
+def _ffmpeg_path(root: Path, target_platform: str) -> Path:
+    if target_platform == "windows":
         return root / "backend" / "ffmpeg" / "win_x64" / "ffmpeg.exe"
-    if sys.platform == "darwin":
+    if target_platform == "macos":
         return root / "backend" / "ffmpeg" / "macos" / "ffmpeg"
     return root / "backend" / "ffmpeg" / "linux_x64" / "ffmpeg"
 
@@ -65,9 +65,7 @@ def validate_packaged_runtime(
     try:
         validate_python_runtime()
     except DependencyError as exc:
-        errors.append(
-            str(exc).replace("Midgard requires", "embedded Python must be")
-        )
+        errors.append(str(exc).replace("Midgard requires", "embedded Python must be"))
     else:
         checks.append("embedded Python 3.12 64-bit")
     if selected.profile == "source":
@@ -77,7 +75,7 @@ def validate_packaged_runtime(
 
     required = (
         paths.translation_file,
-        _ffmpeg_path(paths.project_root),
+        _ffmpeg_path(paths.project_root, selected.platform),
         paths.project_root / "backend/models/V5/ch_det/inference.pdiparams",
         paths.project_root / "backend/models/V5/ch_det_fast/inference.pdiparams",
         paths.project_root / "backend/models/sttn-auto/infer_model.pth",
@@ -87,10 +85,7 @@ def validate_packaged_runtime(
     )
     missing = [path for path in required if not path.is_file()]
     if missing:
-        errors.append(
-            "missing packaged resources: "
-            + ", ".join(path.name for path in missing)
-        )
+        errors.append("missing packaged resources: " + ", ".join(path.name for path in missing))
     else:
         checks.append(f"{len(required)} packaged resources")
 
@@ -124,7 +119,5 @@ def validate_packaged_runtime(
         if not errors:
             errors.append("installation log directory is not writable")
     if errors:
-        raise DependencyError(
-            "Packaged installation validation failed: " + "; ".join(errors)
-        )
+        raise DependencyError("Packaged installation validation failed: " + "; ".join(errors))
     return PreflightReport(log_file, selected, tuple(checks))

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import json
 
 import pytest
 
@@ -18,9 +17,7 @@ def test_release_download_url_rejects_path_injection() -> None:
         downloader.release_download_url("1.5.0", "../asset.exe")
 
 
-def test_prepare_update_downloads_only_signed_matching_target(
-    monkeypatch, tmp_path
-) -> None:
+def test_prepare_update_downloads_only_signed_matching_target(monkeypatch, tmp_path) -> None:
     crypto = pytest.importorskip("cryptography.hazmat.primitives.asymmetric.ed25519")
     serialization = pytest.importorskip("cryptography.hazmat.primitives.serialization")
     target = ReleaseTarget("linux", "x64", "cpu")

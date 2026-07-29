@@ -33,7 +33,7 @@ def test_prompt_controls_fit_in_compact_width(qtbot) -> None:
     assert len(controls) == 2
     assert prompt.width() == 480
     assert all(control.geometry().right() < prompt.width() for control in controls)
-    for left, right in zip(controls, controls[1:]):
+    for left, right in zip(controls, controls[1:], strict=False):
         assert left.geometry().right() < right.geometry().left()
     assert prompt.size_combo.currentText().startswith("Size: ")
     assert prompt.steps_combo is None

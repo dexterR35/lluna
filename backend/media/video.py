@@ -83,7 +83,7 @@ def create_video_writer(path: str, fps: float, size: tuple[int, int]):
 
     try:
         return FFmpegVideoWriter(get_readable_path(path), fps, size)
-    except (OSError, RuntimeError, ValueError):
+    except (OSError, RuntimeError, ValueError) as exc:
         writer = cv2.VideoWriter(
             get_readable_path(path),
             cv2.VideoWriter_fourcc(*"mp4v"),
@@ -92,5 +92,5 @@ def create_video_writer(path: str, fps: float, size: tuple[int, int]):
         )
         if hasattr(writer, "isOpened") and not writer.isOpened():
             writer.release()
-            raise OutputWriteError(f"Could not create video output: {path}")
+            raise OutputWriteError(f"Could not create video output: {path}") from exc
         return writer

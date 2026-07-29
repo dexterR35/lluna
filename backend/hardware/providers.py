@@ -11,7 +11,6 @@ from pathlib import Path
 
 from backend.hardware.profile import FrameworkCapabilities
 
-
 _SUPPORTED_ONNX_PROVIDERS = frozenset(
     {
         "CPUExecutionProvider",
@@ -58,14 +57,8 @@ def _register_windows_cuda_dll_directories(site_packages: Path) -> None:
         # ORT CUDA 11 delay-loads split cuDNN component DLLs during session
         # creation. Those lookups use PATH rather than Python's DLL handles.
         current = os.environ.get("PATH", "")
-        existing = {
-            entry.casefold()
-            for entry in current.split(os.pathsep)
-            if entry
-        }
-        additions = [
-            entry for entry in newly_registered if entry.casefold() not in existing
-        ]
+        existing = {entry.casefold() for entry in current.split(os.pathsep) if entry}
+        additions = [entry for entry in newly_registered if entry.casefold() not in existing]
         if additions:
             os.environ["PATH"] = os.pathsep.join([*additions, current])
 
@@ -94,7 +87,7 @@ def _cuda_provider_library_ready(ort) -> bool:
 
     try:
         if system == "Windows":
-            ctypes.WinDLL(str(library))
+            ctypes.WinDLL(str(library))  # type: ignore[attr-defined]
         else:
             ctypes.CDLL(str(library))
     except OSError:
@@ -114,8 +107,7 @@ def _usable_onnx_providers(
             continue
         if provider == "CUDAExecutionProvider" and not _cuda_provider_library_ready(ort):
             warnings.append(
-                "ONNX CUDA provider ignored: its CUDA/cuDNN native dependencies "
-                "could not be loaded"
+                "ONNX CUDA provider ignored: its CUDA/cuDNN native dependencies could not be loaded"
             )
             continue
         usable.append(provider)

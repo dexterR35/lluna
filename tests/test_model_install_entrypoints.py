@@ -41,9 +41,7 @@ def test_model_settings_route_reveals_requested_group(qtbot) -> None:
     import gui
 
     collapsed: list[bool] = []
-    target = SimpleNamespace(
-        setCollapsed=lambda value: collapsed.append(value)
-    )
+    target = SimpleNamespace(setCollapsed=lambda value: collapsed.append(value))
     revealed: list[tuple[object, int, int]] = []
     settings = SimpleNamespace(
         generate_models_group=target,
@@ -55,9 +53,7 @@ def test_model_settings_route_reveals_requested_group(qtbot) -> None:
         advancedSettingInterface=lazy_settings,
         switchTo=lambda page: switched.append(page),
     )
-    gui.SubtitleExtractorGUI._open_model_settings(
-        window, "generate_models_group"
-    )
+    gui.SubtitleExtractorGUI._open_model_settings(window, "generate_models_group")
     qtbot.waitUntil(lambda: bool(revealed))
 
     assert switched == [lazy_settings]

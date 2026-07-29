@@ -87,14 +87,11 @@ def test_select_object_downloads_only_transformers_safetensors_layout() -> None:
     for info in SELECT_OBJECT_CATALOG:
         assert "model.safetensors" in info.download_allow_patterns
         assert not any(
-            pattern.endswith((".bin", ".pt", ".onnx"))
-            for pattern in info.download_allow_patterns
+            pattern.endswith((".bin", ".pt", ".onnx")) for pattern in info.download_allow_patterns
         )
 
 
-def test_realesrgan_installer_rejects_tampered_download(
-    tmp_path, monkeypatch
-) -> None:
+def test_realesrgan_installer_rejects_tampered_download(tmp_path, monkeypatch) -> None:
     class FakeRegistry:
         def begin(self, *_args) -> None:
             pass
@@ -130,9 +127,7 @@ def test_realesrgan_installer_rejects_tampered_download(
     assert not (tmp_path / "RealESRGAN_x2plus.pth.part").exists()
 
 
-def test_existing_realesrgan_weight_is_verified_before_load(
-    tmp_path, monkeypatch
-) -> None:
+def test_existing_realesrgan_weight_is_verified_before_load(tmp_path, monkeypatch) -> None:
     content = b"locally installed weight"
     artifact = ExpectedFile(
         "RealESRGAN_x2plus.pth",

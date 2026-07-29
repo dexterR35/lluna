@@ -42,11 +42,7 @@ class MaskLayerStack:
         return [layer.clone() for layer in self.layers]
 
     def restore(self, layers: list[MaskLayer], active_index: int) -> None:
-        valid = [
-            layer.clone()
-            for layer in layers
-            if layer.mask.shape == (self.height, self.width)
-        ]
+        valid = [layer.clone() for layer in layers if layer.mask.shape == (self.height, self.width)]
         if not valid:
             valid = [
                 MaskLayer(
@@ -129,16 +125,12 @@ class MaskLayerStack:
         mask = self.active.mask
         if operation == "feather":
             sigma = max(0.5, radius / 2.0)
-            self.active.mask[:] = cv2.GaussianBlur(
-                mask, (0, 0), sigmaX=sigma, sigmaY=sigma
-            )
+            self.active.mask[:] = cv2.GaussianBlur(mask, (0, 0), sigmaX=sigma, sigmaY=sigma)
         elif operation == "smooth":
             size = radius * 2 + 1
             kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (size, size))
             opened = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
-            self.active.mask[:] = cv2.morphologyEx(
-                opened, cv2.MORPH_CLOSE, kernel
-            )
+            self.active.mask[:] = cv2.morphologyEx(opened, cv2.MORPH_CLOSE, kernel)
         elif operation in {"grow", "shrink"}:
             size = radius * 2 + 1
             kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (size, size))

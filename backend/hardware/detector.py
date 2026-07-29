@@ -61,9 +61,7 @@ class HardwareDetector:
             gpus = ()
             warnings.append(f"GPU probe failed: {type(exc).__name__}")
         try:
-            disk_mb = shutil.disk_usage(Path(self._paths.project_root)).free / (
-                1024 * 1024
-            )
+            disk_mb = shutil.disk_usage(Path(self._paths.project_root)).free / (1024 * 1024)
         except OSError as exc:
             disk_mb = 0.0
             warnings.append(f"Disk probe failed: {type(exc).__name__}")

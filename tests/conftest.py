@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import os
 import socket
 from pathlib import Path
 
 import pytest
-
 
 _NETWORK_MARKERS = {"network", "model_download"}
 

@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 def test_packaging_inputs_validate_without_building() -> None:
-    subprocess.run(
+    subprocess.run(  # noqa: S603
         [sys.executable, "packaging/build.py", "--validate-only"],
         check=True,
     )
@@ -30,9 +30,7 @@ def test_desktop_packaging_metadata_is_present() -> None:
 
 
 def test_release_workflow_has_platform_profiles_and_security_gates() -> None:
-    workflow = Path(".github/workflows/desktop-build.yml").read_text(
-        encoding="utf-8"
-    )
+    workflow = Path(".github/workflows/desktop-build.yml").read_text(encoding="utf-8")
     for target in (
         "windows-x64-cpu",
         "windows-x64-cuda",
@@ -55,7 +53,7 @@ def test_native_package_definitions_are_present() -> None:
 
 
 def test_declared_release_versions_are_consistent() -> None:
-    subprocess.run(
+    subprocess.run(  # noqa: S603
         [sys.executable, "packaging/verify_release.py", "--tag", "v1.4.0"],
         check=True,
     )

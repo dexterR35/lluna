@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from enum import Enum
 from typing import Any
 
@@ -69,9 +69,7 @@ class OnboardingState:
         return cls(
             version=int(data.get("version", 1)),
             current_step=OnboardingStep(data.get("current_step", "welcome")),
-            completed_steps=tuple(
-                OnboardingStep(step) for step in data.get("completed_steps", ())
-            ),
+            completed_steps=tuple(OnboardingStep(step) for step in data.get("completed_steps", ())),
             save_directory=str(data.get("save_directory", "")),
             selected_features=tuple(data.get("selected_features", ())),
             selected_models=tuple(data.get("selected_models", ())),

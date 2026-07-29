@@ -28,4 +28,4 @@ def initialize_logging(*, diagnostic: bool | None = None) -> None:
     )
     root.addHandler(handler)
     root.setLevel(logging.DEBUG if diagnostic else logging.INFO)
-    root._midgard_configured = True
+    root.__dict__["_midgard_configured"] = True

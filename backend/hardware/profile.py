@@ -57,9 +57,7 @@ class HardwareProfile:
     logical_threads: int = 0
     memory: MemoryInfo = field(default_factory=MemoryInfo)
     gpus: tuple[GpuInfo, ...] = ()
-    capabilities: FrameworkCapabilities = field(
-        default_factory=FrameworkCapabilities
-    )
+    capabilities: FrameworkCapabilities = field(default_factory=FrameworkCapabilities)
     ffmpeg_available: bool = False
     available_disk_mb: float = 0.0
     warnings: tuple[str, ...] = ()

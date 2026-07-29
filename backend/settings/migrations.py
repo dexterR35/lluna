@@ -20,9 +20,7 @@ def from_legacy_config(config) -> dict[str, object]:
             height=int(config.generateHeight.value),
             steps=int(config.generateSteps.value),
         ),
-        "propainter": ProPainterSettings(
-            max_frames=int(config.propainterMaxLoadNum.value)
-        ),
+        "propainter": ProPainterSettings(max_frames=int(config.propainterMaxLoadNum.value)),
         "sttn": STTNSettings(
             max_frames=int(config.sttnMaxLoadNum.value),
             reference_frames=int(config.sttnReferenceLength.value),

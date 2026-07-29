@@ -19,9 +19,7 @@ def _source(size: int = 17) -> np.ndarray:
 
 def test_disabled_refinement_without_protect_is_exact_identity() -> None:
     rgb = _source()
-    alpha = np.arange(rgb.shape[0] * rgb.shape[1], dtype=np.uint8).reshape(
-        rgb.shape[:2]
-    )
+    alpha = np.arange(rgb.shape[0] * rgb.shape[1], dtype=np.uint8).reshape(rgb.shape[:2])
     rgb_before = rgb.copy()
     alpha_before = alpha.copy()
 

@@ -31,9 +31,7 @@ def validate_desktop_dependencies() -> None:
         if importlib.util.find_spec(module) is None
     ]
     if missing:
-        raise DependencyError(
-            "Missing desktop dependencies: " + ", ".join(missing)
-        )
+        raise DependencyError("Missing desktop dependencies: " + ", ".join(missing))
 
 
 def prepare_desktop(argv: list[str] | None = None) -> BootstrapReport:

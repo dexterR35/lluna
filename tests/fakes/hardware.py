@@ -18,13 +18,17 @@ def profile(
     ram_mb: float = 16384,
 ) -> HardwareProfile:
     gpu = (
-        GpuInfo(
-            vendor="NVIDIA" if cuda else "Test",
-            model="Fake GPU",
-            total_vram_mb=vram_mb,
-            available_vram_mb=vram_mb * 0.75,
-        ),
-    ) if (cuda or directml or mps) else ()
+        (
+            GpuInfo(
+                vendor="NVIDIA" if cuda else "Test",
+                model="Fake GPU",
+                total_vram_mb=vram_mb,
+                available_vram_mb=vram_mb * 0.75,
+            ),
+        )
+        if (cuda or directml or mps)
+        else ()
+    )
     return HardwareProfile(
         os_name="TestOS",
         os_version="1",

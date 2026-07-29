@@ -7,7 +7,6 @@ import os
 import platform
 import sys
 from dataclasses import dataclass
-from pathlib import Path
 
 from backend.core.paths import PATHS
 

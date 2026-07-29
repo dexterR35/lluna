@@ -60,8 +60,7 @@ def test_model_specific_size_defaults() -> None:
     assert default_size_preset_for_mode(GenerateMode.FLUX2_KLEIN_4B).width == 1024
     assert default_size_preset_for_mode(GenerateMode.SDXL_TURBO).width == 512
     assert [
-        (preset.width, preset.height)
-        for preset in size_presets_for_mode(GenerateMode.SD15)
+        (preset.width, preset.height) for preset in size_presets_for_mode(GenerateMode.SD15)
     ] == [(512, 512)]
 
 

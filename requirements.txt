@@ -1,24 +1,24 @@
 filesplit==3.0.2
 opencv-python==4.11.0.86
-scikit-image>=0.25.2
+scikit-image>=0.26.0
 tqdm==4.67.1
 pyside6-fluent-widgets==1.7.7
-numpy>=2.2.5
+numpy>=2.3.5
 av==17.0.0
 einops==0.8.1
 paddleocr==3.4.0
 matplotlib
-Pillow
-scipy
-requests
-cryptography>=42.0.0
+Pillow>=12.3.0
+scipy>=1.16.3
+requests>=2.34.2
+cryptography>=48.0.1
 darkdetect
 je-showinfilemanager==1.1.6a4
 # rembg: install.py picks CPU vs GPU onnxruntime; keep package unpinned to [cpu]/[gpu]
-rembg>=2.0.60
-transformers>=4.56.1
-huggingface_hub>=0.26.0
-diffusers>=0.37.1
+rembg>=2.0.75
+transformers>=5.5.0
+huggingface_hub>=1.5.0
+diffusers>=0.38.0
 accelerate>=1.0.0
 # Torch, Paddle, and ONNX variants are selected by install.py/backend group files.
 

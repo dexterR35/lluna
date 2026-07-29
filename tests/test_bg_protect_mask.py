@@ -54,9 +54,7 @@ def test_legacy_protect_merge_restores_source_rgb_and_alpha() -> None:
     assert np.all(result[0, 0] == (5, 10, 15, 0))
 
 
-def test_background_remove_job_applies_saved_keep_mask(
-    monkeypatch, tmp_path
-) -> None:
+def test_background_remove_job_applies_saved_keep_mask(monkeypatch, tmp_path) -> None:
     class FakeInner:
         @staticmethod
         def get_providers():

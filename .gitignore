@@ -80,6 +80,7 @@ share/python-wheels/
 MANIFEST
 *.manifest
 *.spec
+!/packaging/midgard.spec
 pip-log.txt
 pip-delete-this-directory.txt
 htmlcov/
@@ -99,6 +100,7 @@ pytestdebug.log
 profile_default/
 ipython_config.py
 .python-version
+!/.python-version
 __pypackages__/
 .venv/
 env/

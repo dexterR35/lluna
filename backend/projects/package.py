@@ -344,7 +344,8 @@ def save_project(
         loaded = load_project(temporary, verify_embedded=True)
         if loaded.project_id != project.project_id:
             raise ValueError("project validation returned a different project ID")
-        with temporary.open("rb") as stream:
+        # Windows requires a writable descriptor for fsync().
+        with temporary.open("rb+") as stream:
             os.fsync(stream.fileno())
         os.replace(temporary, destination)
         try:

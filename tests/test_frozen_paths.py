@@ -29,6 +29,7 @@ def test_frozen_linux_paths_are_user_writable(monkeypatch, tmp_path: Path) -> No
     monkeypatch.setattr("sys.executable", str(bundle / "Midgard"))
     monkeypatch.setenv("XDG_CONFIG_HOME", str(config_home))
     monkeypatch.setenv("XDG_DATA_HOME", str(data_home))
+    monkeypatch.setattr("backend.core.paths.sys.platform", "linux")
     monkeypatch.delenv("MIDGARD_PROJECT_ROOT", raising=False)
     monkeypatch.delenv("MIDGARD_CONFIG_DIR", raising=False)
     monkeypatch.delenv("MIDGARD_DATA_DIR", raising=False)

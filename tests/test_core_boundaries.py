@@ -4,6 +4,7 @@ import importlib
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 from backend.core.build_info import BUILD_INFO
 from backend.core.environment import initialize_process_environment
@@ -37,7 +38,11 @@ def test_core_import_does_not_load_qt() -> None:
         "import sys; import backend.core.build_info, backend.core.paths; "
         "assert not any(n.startswith(('PySide6', 'qfluentwidgets')) for n in sys.modules)"
     )
-    subprocess.run([sys.executable, "-c", code], check=True, env=os.environ.copy())
+    subprocess.run(  # noqa: S603
+        [sys.executable, "-c", code],
+        check=True,
+        env=os.environ.copy(),
+    )
 
 
 def test_paths_are_not_cwd_relative(monkeypatch, tmp_path) -> None:
@@ -46,12 +51,10 @@ def test_paths_are_not_cwd_relative(monkeypatch, tmp_path) -> None:
     monkeypatch.chdir(tmp_path)
     refreshed = importlib.reload(paths)
     assert refreshed.PATHS.config_file.is_absolute()
-    assert refreshed.PATHS.project_root.name == "midgard-studio"
+    assert refreshed.PATHS.project_root == Path(paths.__file__).resolve().parents[2]
 
 
-def test_frozen_paths_separate_resources_from_writable_state(
-    monkeypatch, tmp_path
-) -> None:
+def test_frozen_paths_separate_resources_from_writable_state(monkeypatch, tmp_path) -> None:
     import backend.core.paths as paths
 
     resources = tmp_path / "bundle" / "_internal"
@@ -62,6 +65,7 @@ def test_frozen_paths_separate_resources_from_writable_state(
     monkeypatch.delenv("MIDGARD_MODELS_DIR", raising=False)
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "user-config"))
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "user-data"))
+    monkeypatch.setattr(paths.sys, "platform", "linux")
     monkeypatch.setattr(paths.sys, "_MEIPASS", str(resources), raising=False)
     monkeypatch.setattr(paths.sys, "frozen", True, raising=False)
     monkeypatch.setattr(paths.sys, "executable", str(executable))

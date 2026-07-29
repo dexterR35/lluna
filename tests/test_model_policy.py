@@ -5,17 +5,13 @@ from tests.fakes.hardware import CPU_ONLY, CUDA, DIRECTML, profile
 
 def test_low_memory_clamps_unsafe_video_frames() -> None:
     low = profile(cuda=True, vram_mb=4096, ram_mb=8192)
-    value = video_frame_policy(
-        low, configured=70, width=1920, height=1080, propainter=True
-    )
+    value = video_frame_policy(low, configured=70, width=1920, height=1080, propainter=True)
     assert value.effective < value.configured
     assert value.reason
 
 
 def test_high_memory_preserves_safe_override() -> None:
-    value = video_frame_policy(
-        CUDA, configured=16, width=1280, height=720, propainter=False
-    )
+    value = video_frame_policy(CUDA, configured=16, width=1280, height=720, propainter=False)
     assert value.effective == 16
 
 
