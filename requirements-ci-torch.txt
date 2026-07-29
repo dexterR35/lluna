@@ -1,0 +1,2 @@
+# Installed from the CPU wheel index on Linux and Windows.
+torch==2.7.0

@@ -1,0 +1,15 @@
+# Minimum runtime surface exercised by the model-free CI test suite.
+# Torch is installed separately from the platform-appropriate CPU wheel index.
+# Keep heavyweight model and hardware backends in their profile files.
+-r requirements-test.txt
+-c constraints.txt
+
+cryptography
+je-showinfilemanager
+numpy
+opencv-python
+Pillow
+PySide6==6.11.1
+pyside6-fluent-widgets
+requests
+tqdm
