@@ -155,17 +155,13 @@ def set_model_enabled(mode: EnhanceMode, enabled: bool) -> None:
 
 
 def selectable_modes() -> List[EnhanceMode]:
-    """On + available modes for the Enhance dropdown.
-
-    Default (x2plus) can appear before first download when On; optional
-    models (x4plus) require install + On.
-    """
+    """Installed + On modes for the Enhance dropdown."""
     enabled = get_enabled_values()
     return [
         info.mode
         for info in MODEL_CATALOG
         if info.mode.value in enabled
-        and (info.is_default or is_model_installed(info.mode))
+        and is_model_installed(info.mode)
     ]
 
 

@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from qfluentwidgets import BodyLabel, MessageBox
+from qfluentwidgets import MessageBox
 
 from backend.config import config, tr
 from backend.tools import diag
@@ -36,11 +36,17 @@ from backend.tools.infer_protocol import JobType
 from ui.component.workspace.action_bar import RailActions
 from ui.component.preview.before_after_preview import BeforeAfterPreview
 from ui.component.controls.button_styles import make_button, make_toggle_button, paint_toggle_button
-from ui.component.controls.inputs import LabeledField, make_section_combo, refresh_combo
+from ui.component.controls.inputs import (
+    LabeledField,
+    make_install_model_button,
+    make_section_combo,
+    refresh_combo,
+    show_install_model_when_empty,
+)
 from ui.component.workspace.task_list_component import Task, TaskStatus
 from ui.component.workspace.workspace_page import WorkspacePage
 from ui.shell import ContentPage
-from ui.theme import FORM, TEXT_SECONDARY
+from ui.theme import FORM
 
 _MODE_AUTOMATIC = "automatic"
 _MODE_PROTECT = "protect"
@@ -91,6 +97,7 @@ class BgRemoveInterface(ContentPage):
     progress_signal = Signal(int, int)  # index, progress
     task_error_signal = Signal(str)
     processing_changed = Signal(bool)
+    install_models_requested = Signal()
     save_enabled_signal = Signal(bool)
     alert_signal = Signal(str, str)  # title, content - UI-thread MessageBox
 
@@ -155,6 +162,10 @@ class BgRemoveInterface(ContentPage):
         )
         self.model_combo = self.model_field.control
         settings_layout.addWidget(self.model_field)
+        self.install_model_button = make_install_model_button(
+            settings_host, self.install_models_requested.emit
+        )
+        settings_layout.addWidget(self.install_model_button)
 
         # Run mode: Automatic | Protect areas
         mode_wrap = QWidget(settings_host)
@@ -185,11 +196,6 @@ class BgRemoveInterface(ContentPage):
         self.btn_edit_protect.setToolTip(bg["EditKeepMaskTip"])
         self.btn_edit_protect.clicked.connect(self._edit_protect_mask_current)
         settings_layout.addWidget(self.btn_edit_protect)
-
-        self.protect_status = BodyLabel("", settings_host)
-        self.protect_status.setWordWrap(True)
-        self.protect_status.setStyleSheet(f"color:{TEXT_SECONDARY};")
-        settings_layout.addWidget(self.protect_status)
 
         self.workspace = WorkspacePage(
             preview=self.preview,
@@ -253,21 +259,11 @@ class BgRemoveInterface(ContentPage):
         protect = self._is_protect_mode()
         idle = not self._processing and not self._installing
         self.btn_edit_protect.setVisible(protect)
-        self.protect_status.setVisible(protect)
         task = self.task_list_component.get_task(
             self.task_list_component.get_current_task_index()
         )
         has_image = bool(task and task.path)
         self.btn_edit_protect.setEnabled(protect and idle and has_image)
-        if not protect:
-            self.protect_status.setText("")
-            return
-        if _task_has_protect_mask(task):
-            self.protect_status.setText(
-                tr["BgRemove"]["ProtectMaskReady"].format(Path(task.path).name)
-            )
-        else:
-            self.protect_status.setText(tr["BgRemove"]["ProtectMaskRequired"])
 
     def _edit_protect_mask_current(self):
         if self._processing or self._installing or not self._is_protect_mode():
@@ -427,12 +423,12 @@ class BgRemoveInterface(ContentPage):
         modes = selectable_modes()
         if modes:
             config.set(config.bgRemoveMode, modes[select])
-        self.model_combo.setEnabled(
-            bool(modes)
-            and not self._installing
-            and not self._processing
-            and not self._external_gpu_busy
+        show_install_model_when_empty(
+            self.model_combo,
+            self.install_model_button,
+            has_models=bool(modes),
         )
+        self._apply_app_lock()
 
     def set_external_gpu_busy(self, busy: bool):
         """Another tool owns the shared infer worker — block Run/Open."""
@@ -445,7 +441,7 @@ class BgRemoveInterface(ContentPage):
         external = self._external_gpu_busy
         idle = not installing and not processing and not external
         self.action_bar.set_open_enabled(idle)
-        self.action_bar.set_run_enabled(idle)
+        self.action_bar.set_run_enabled(idle and self.model_combo.count() > 0)
         self.action_bar.set_reset_enabled(idle)
         self.action_bar.set_save_enabled(
             idle and self._current_has_unsaved_preview()
@@ -454,6 +450,7 @@ class BgRemoveInterface(ContentPage):
             idle and self._current_has_unsaved_preview()
         )
         self.model_combo.setEnabled(idle and self.model_combo.count() > 0)
+        self.install_model_button.setEnabled(idle)
         self.btn_mode_auto.setEnabled(idle)
         self.btn_mode_protect.setEnabled(idle)
         self._update_protect_controls()

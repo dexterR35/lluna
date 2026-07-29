@@ -23,7 +23,12 @@ from backend.tools.low_light_models import (
     apply_default_low_light_model,
     selectable_modes,
 )
-from ui.component.controls.inputs import make_section_combo, refresh_combo
+from ui.component.controls.inputs import (
+    make_install_model_button,
+    make_section_combo,
+    refresh_combo,
+    show_install_model_when_empty,
+)
 from ui.component.preview.before_after_preview import BeforeAfterPreview
 from ui.component.workspace.action_bar import RailActions
 from ui.component.workspace.task_list_component import TaskStatus
@@ -62,6 +67,7 @@ class LowLightInterface(ContentPage):
     processing_changed = Signal(bool)
     save_enabled_signal = Signal(bool)
     alert_signal = Signal(str, str)
+    install_models_requested = Signal()
 
     def __init__(self, parent=None):
         super().__init__("LowLightInterface", parent=parent)
@@ -120,6 +126,10 @@ class LowLightInterface(ContentPage):
         )
         self.model_combo = self.model_field.control
         settings_layout.addWidget(self.model_field)
+        self.install_model_button = make_install_model_button(
+            settings_host, self.install_models_requested.emit
+        )
+        settings_layout.addWidget(self.install_model_button)
 
         self.workspace = WorkspacePage(
             preview=self.preview,
@@ -207,12 +217,12 @@ class LowLightInterface(ContentPage):
         modes = selectable_modes()
         if modes:
             config.set(config.lowLightMode, modes[select])
-        self.model_combo.setEnabled(
-            bool(modes)
-            and not self._installing
-            and not self._processing
-            and not self._external_gpu_busy
+        show_install_model_when_empty(
+            self.model_combo,
+            self.install_model_button,
+            has_models=bool(modes),
         )
+        self._apply_app_lock()
 
     def _apply_app_lock(self):
         idle = (
@@ -221,10 +231,11 @@ class LowLightInterface(ContentPage):
             and not self._external_gpu_busy
         )
         self.action_bar.set_open_enabled(idle)
-        self.action_bar.set_run_enabled(idle)
+        self.action_bar.set_run_enabled(idle and self.model_combo.count() > 0)
         self.action_bar.set_reset_enabled(idle)
         self.action_bar.set_save_enabled(idle and self._current_has_unsaved_preview())
         self.model_combo.setEnabled(idle and self.model_combo.count() > 0)
+        self.install_model_button.setEnabled(idle)
         if self._processing:
             self.action_bar.set_running(True)
         elif not self._installing:

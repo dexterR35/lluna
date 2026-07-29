@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import logging
+import shutil
 from pathlib import Path
 from typing import Optional
 
@@ -77,7 +78,117 @@ def has_hf_token() -> bool:
     return bool(resolve_hf_token())
 
 
+def hf_download_cache_dir() -> Path:
+    """Private, disposable Hub cache used only while Midgard downloads models."""
+    from backend.core.paths import AppPaths
+
+    return (
+        AppPaths.resolve().models_dir
+        / ".download_cache"
+        / "huggingface"
+        / "hub"
+    )
+
+
+def _shared_hf_hub_cache_dir() -> Path:
+    """Resolve the Hub cache used by older Midgard releases."""
+    hf_home = os.environ.get("HF_HOME")
+    if hf_home:
+        default = Path(hf_home).expanduser() / "hub"
+    else:
+        xdg_cache = os.environ.get("XDG_CACHE_HOME")
+        cache_home = (
+            Path(xdg_cache).expanduser()
+            if xdg_cache
+            else Path.home() / ".cache"
+        )
+        default = cache_home / "huggingface" / "hub"
+    legacy = os.environ.get("HUGGINGFACE_HUB_CACHE")
+    current = os.environ.get("HF_HUB_CACHE")
+    return Path(current or legacy).expanduser() if current or legacy else default
+
+
+def _repo_cache_folder(repo_id: str) -> str:
+    parts = repo_id.split("/")
+    if (
+        len(parts) != 2
+        or any(not part or part in {".", ".."} for part in parts)
+        or any("\\" in part or "--" in part for part in parts)
+    ):
+        raise ValueError(f"Invalid Hugging Face model repository: {repo_id!r}")
+    return "models--" + "--".join(parts)
+
+
+def remove_hf_repo_cache(repo_id: str, *, include_shared: bool = True) -> None:
+    """Remove cached download blobs for one model repository.
+
+    Current downloads use Midgard's private cache. ``include_shared`` also
+    removes the legacy global-cache copy left by older app versions.
+    """
+    folder = _repo_cache_folder(repo_id)
+    roots = [hf_download_cache_dir()]
+    if include_shared:
+        roots.append(_shared_hf_hub_cache_dir())
+
+    errors: list[str] = []
+    seen: set[Path] = set()
+    for root in roots:
+        root = root.resolve()
+        if root in seen:
+            continue
+        seen.add(root)
+        for target in (root / folder, root / ".locks" / folder):
+            try:
+                if target.is_dir():
+                    shutil.rmtree(target)
+                elif target.exists():
+                    target.unlink()
+            except OSError as exc:
+                errors.append(f"{target}: {exc}")
+
+    if errors:
+        raise RuntimeError(
+            "Could not delete cached model files: " + "; ".join(errors)
+        )
+
+
 def snapshot_download_kwargs() -> dict:
     """Extra kwargs for huggingface_hub.snapshot_download."""
     token = apply_hf_token_to_env()
-    return {"token": token} if token else {}
+    kwargs = {"cache_dir": str(hf_download_cache_dir())}
+    if token:
+        kwargs["token"] = token
+    return kwargs
+
+
+def snapshot_download_with_progress(
+    *,
+    repo_id: str,
+    local_dir: str,
+    allow_patterns: list[str],
+) -> str:
+    """Download an HF snapshot and report aggregate byte progress to the queue."""
+    from huggingface_hub import snapshot_download
+
+    from backend.tools.model_download_registry import (
+        huggingface_download_total,
+        huggingface_progress_tqdm,
+    )
+
+    kwargs = snapshot_download_kwargs()
+    files = snapshot_download(
+        repo_id=repo_id,
+        local_dir=local_dir,
+        allow_patterns=allow_patterns,
+        dry_run=True,
+        **kwargs,
+    )
+    total_bytes = sum(int(item.file_size) for item in files)
+    with huggingface_download_total(total_bytes):
+        return snapshot_download(
+            repo_id=repo_id,
+            local_dir=local_dir,
+            allow_patterns=allow_patterns,
+            tqdm_class=huggingface_progress_tqdm(),
+            **kwargs,
+        )

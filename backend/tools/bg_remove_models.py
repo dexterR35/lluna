@@ -167,20 +167,32 @@ def discard_partial(mode: BgRemoveMode) -> None:
 
 def uninstall_model(mode: BgRemoveMode) -> None:
     """Delete local ONNX weights so the model can be reinstalled later."""
+    from backend.tools import diag
+
     if catalog_info(mode) is None:
         raise ValueError(f"Unknown Remove BG model: {mode}")
     path = model_file_path(mode)
+    size = path.stat().st_size if path.is_file() else 0
+    diag.model(
+        f"UNINSTALL bg_remove:{mode.value}  path={path}  bytes={size}"
+    )
     try:
         if path.is_file():
             path.unlink()
     except OSError as e:
         raise RuntimeError(f"Could not delete {path}: {e}") from e
+    if path.exists():
+        raise RuntimeError(f"Model file still exists after delete: {path}")
+    diag.model(
+        f"DELETED bg_remove:{mode.value}  path={path}  bytes={size}"
+    )
     set_model_enabled(mode, False)
     ensure_selected_mode_valid()
 
 
 def install_model(mode: BgRemoveMode) -> None:
     """Download ONNX weights via rembg (blocking; call from a worker thread)."""
+    from backend.tools import diag
     from backend.tools.model_download_registry import (
         KIND_BG_REMOVE,
         DownloadCancelled,
@@ -211,6 +223,10 @@ def install_model(mode: BgRemoveMode) -> None:
             except Exception:
                 continue
             if name == target:
+                path = model_file_path(mode)
+                diag.model(
+                    f"DOWNLOAD bg_remove:{mode.value}  path={path}"
+                )
                 cls.download_models()
                 reg.check_cancelled()
                 if not is_model_installed(mode):
@@ -221,6 +237,10 @@ def install_model(mode: BgRemoveMode) -> None:
                     )
                 set_model_enabled(mode, True)
                 reg.complete(KIND_BG_REMOVE, mode.value)
+                diag.model(
+                    f"INSTALLED bg_remove:{mode.value}  path={path}  "
+                    f"bytes={path.stat().st_size}"
+                )
                 return
         reg.fail(KIND_BG_REMOVE, mode.value, keep_pending=False)
         raise ValueError(f"Unknown rembg model: {target}")

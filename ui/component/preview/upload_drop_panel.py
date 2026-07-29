@@ -107,18 +107,18 @@ class UploadDropPanel(QWidget):
         self._formats.setObjectName("UploadEmptyFormats")
         self._formats.setAlignment(Qt.AlignCenter)
         self._formats.setWordWrap(True)
-        root.addWidget(self._formats)
+        self._formats.hide()
         root.addStretch(1)
 
         self._badge.installEventFilter(self)
-        self._formats.installEventFilter(self)
         self._apply_chrome()
         qconfig.themeChanged.connect(lambda *_: self._apply_chrome())
 
     def set_formats_hint(self, text: str):
         self._formats_hint = text or ""
         self._formats.setText(self._formats_hint)
-        self._formats.setVisible(bool(self._formats_hint))
+        self.setToolTip(self._formats_hint)
+        self._formats.hide()
 
     def clear(self, *_args, **_kwargs):
         """Reset chrome (API-compatible with prior ZoomableImageView empty clears)."""
@@ -140,7 +140,8 @@ class UploadDropPanel(QWidget):
         self.setStyleSheet(_panel_qss())
         self._title.setText(_drag_drop_title_html())
         self._formats.setText(self._formats_hint)
-        self._formats.setVisible(bool(self._formats_hint))
+        self.setToolTip(self._formats_hint)
+        self._formats.hide()
         self._refresh_icon()
         self.update()
 
@@ -164,7 +165,7 @@ class UploadDropPanel(QWidget):
         super().mousePressEvent(event)
 
     def eventFilter(self, obj, event):
-        if obj in (self._badge, self._formats) and event.type() == QEvent.Type.MouseButtonPress:
+        if obj is self._badge and event.type() == QEvent.Type.MouseButtonPress:
             if event.button() == Qt.LeftButton:
                 self.empty_clicked.emit()
                 return True

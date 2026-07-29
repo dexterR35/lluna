@@ -59,6 +59,15 @@ def test_launchers_resolve_the_repository_and_preserve_arguments() -> None:
     assert "%~dp0" in batch
     assert "%*" in batch
     assert "exit /b %errorlevel%" in batch
+    assert "sys.version_info[:2] == (3, 12)" in shell
+    assert "sys.version_info[:2] == (3, 12)" in batch
+    assert "midgard.py" in batch
+
+
+def test_project_python_version_is_pinned_to_312() -> None:
+    assert Path(".python-version").read_text(encoding="utf-8").strip().startswith(
+        "3.12."
+    )
 
 
 @pytest.mark.installer
@@ -74,7 +83,49 @@ def test_windows_installer_verifies_candidates_and_supports_uv_python() -> None:
 
 @pytest.mark.installer
 def test_shell_launchers_have_valid_syntax() -> None:
-    subprocess.run(["bash", "-n", "install.sh", "run_gui.sh"], check=True)
+    subprocess.run(
+        [
+            "bash",
+            "-n",
+            "install.sh",
+            "run_gui.sh",
+            "packaging/linux/install_bundle.sh",
+            "packaging/macos/create_dmg.sh",
+        ],
+        check=True,
+    )
+
+
+def test_frozen_linux_installer_has_progress_log_and_no_python_bootstrap() -> None:
+    script = Path("packaging/linux/install_bundle.sh").read_text(
+        encoding="utf-8"
+    )
+    assert "progress 100" in script
+    assert "installer.log" in script
+    assert "Python 3.12 is embedded" in script
+    assert "pip install" not in script
+
+
+def test_windows_installer_has_native_progress_log_and_embedded_python() -> None:
+    installer = Path("packaging/windows/Midgard.iss").read_text(
+        encoding="utf-8"
+    )
+    assert "SetupLogging=yes" in installer
+    assert "WizardForm.StatusLabel.Caption" in installer
+    assert "embedded in this package" in installer
+    assert "installer.log" in installer
+    assert "pip install" not in installer
+
+
+def test_macos_dmg_documents_embedded_python_and_first_launch_log() -> None:
+    script = Path("packaging/macos/create_dmg.sh").read_text(encoding="utf-8")
+    instructions = Path("packaging/macos/INSTALL.txt").read_text(
+        encoding="utf-8"
+    )
+    assert 'Read Me.txt' in script
+    assert "Python 3.12 is already embedded" in instructions
+    assert "install.log" in instructions
+    assert "pip install" not in instructions
 
 
 def test_no_obsolete_binary_builder_or_cli_parser() -> None:

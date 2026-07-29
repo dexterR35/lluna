@@ -202,8 +202,13 @@ def uninstall_model(model_id: SelectObjectModelId) -> None:
     """Delete one local HF snapshot (even if marked installed)."""
     import shutil
 
-    if catalog_info(model_id) is None:
+    info = catalog_info(model_id)
+    if info is None:
         raise ValueError(f"Unknown Select Object model: {model_id}")
+    from backend.tools.hf_auth import remove_hf_repo_cache
+
+    # Older releases kept a second copy in the shared Hugging Face cache.
+    remove_hf_repo_cache(info.hf_repo)
     dest = model_dir(model_id)
     try:
         if dest.is_dir():
@@ -281,6 +286,7 @@ def install_pair(pair_id: SelectObjectPairId, *, skip_if_complete: bool = False)
         KIND_SELECT_OBJECT,
         DownloadCancelled,
         ModelDownloadRegistry,
+        download_progress_range,
     )
 
     if skip_if_complete and is_pair_installed(pair_id):
@@ -294,9 +300,14 @@ def install_pair(pair_id: SelectObjectPairId, *, skip_if_complete: bool = False)
     reg = ModelDownloadRegistry.instance()
     reg.begin(KIND_SELECT_OBJECT, pair_id.value)
     try:
-        for mid in members:
+        missing = [mid for mid in members if not is_model_installed(mid)]
+        count = max(len(missing), 1)
+        for index, mid in enumerate(missing):
             reg.check_cancelled()
-            install_model(mid)
+            start = int(index * 95 / count)
+            end = int((index + 1) * 95 / count)
+            with download_progress_range(start, end):
+                install_model(mid)
         reg.check_cancelled()
         if not is_pair_installed(pair_id):
             discard_pair_partial(pair_id)
@@ -353,32 +364,44 @@ def install_model(model_id: SelectObjectModelId) -> Path:
     reg = ModelDownloadRegistry.instance()
 
     try:
-        from huggingface_hub import snapshot_download
+        import huggingface_hub  # noqa: F401
     except ImportError as e:
         raise RuntimeError(
             "huggingface_hub is required for Select Object models. "
             "Re-run install.py or pip install huggingface_hub."
         ) from e
 
-    from backend.tools.hf_auth import apply_hf_token_to_env, snapshot_download_kwargs
+    from backend.tools.hf_auth import (
+        apply_hf_token_to_env,
+        remove_hf_repo_cache,
+        snapshot_download_with_progress,
+    )
 
     apply_hf_token_to_env()
     try:
         reg.check_cancelled()
-        snapshot_download(
+        snapshot_download_with_progress(
             repo_id=info.hf_repo,
             local_dir=str(dest),
-            local_dir_use_symlinks=False,
             allow_patterns=list(info.download_allow_patterns),
-            **snapshot_download_kwargs(),
         )
         reg.check_cancelled()
         _validate_download_snapshot(info, dest)
+        # Keep the runtime snapshot, not a second copy of the same weights.
+        remove_hf_repo_cache(info.hf_repo, include_shared=False)
     except DownloadCancelled:
         discard_partial(model_id)
+        try:
+            remove_hf_repo_cache(info.hf_repo, include_shared=False)
+        except Exception:
+            pass
         raise
     except Exception:
         discard_partial(model_id)
+        try:
+            remove_hf_repo_cache(info.hf_repo, include_shared=False)
+        except Exception:
+            pass
         raise
     (dest / _MARKER).touch()
 

@@ -11,13 +11,13 @@ from backend.core.environment import initialize_process_environment
 
 def test_canonical_repository_metadata() -> None:
     assert BUILD_INFO.repository_owner == "dexterR35"
-    assert BUILD_INFO.repository_name == "midgard"
-    assert BUILD_INFO.project_url == "https://github.com/dexterR35/midgard"
+    assert BUILD_INFO.repository_name == "midgard-studio"
+    assert BUILD_INFO.project_url == "https://github.com/dexterR35/midgard-studio"
     assert BUILD_INFO.issues_url.endswith("/issues")
     assert BUILD_INFO.releases_url.endswith("/releases")
     assert (
         BUILD_INFO.latest_release_api_url
-        == "https://api.github.com/repos/dexterR35/midgard/releases/latest"
+        == "https://api.github.com/repos/dexterR35/midgard-studio/releases/latest"
     )
 
 
@@ -58,12 +58,15 @@ def test_frozen_paths_separate_resources_from_writable_state(
     executable = tmp_path / "bundle" / "Midgard"
     monkeypatch.delenv("MIDGARD_PROJECT_ROOT", raising=False)
     monkeypatch.delenv("MIDGARD_CONFIG_DIR", raising=False)
+    monkeypatch.delenv("MIDGARD_DATA_DIR", raising=False)
     monkeypatch.delenv("MIDGARD_MODELS_DIR", raising=False)
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "user-config"))
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "user-data"))
     monkeypatch.setattr(paths.sys, "_MEIPASS", str(resources), raising=False)
     monkeypatch.setattr(paths.sys, "frozen", True, raising=False)
     monkeypatch.setattr(paths.sys, "executable", str(executable))
 
     resolved = paths.AppPaths.resolve()
     assert resolved.project_root == resources
-    assert resolved.models_dir == resources / "backend" / "models"
-    assert resolved.config_dir == executable.parent / "config"
+    assert resolved.models_dir == tmp_path / "user-data" / "midgard" / "models"
+    assert resolved.config_dir == tmp_path / "user-config" / "midgard"

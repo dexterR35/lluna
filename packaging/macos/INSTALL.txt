@@ -1,0 +1,13 @@
+MIDGARD FOR macOS
+
+Python 3.12 is already embedded in Midgard.app. Do not install a separate
+system Python for this release.
+
+Drag Midgard.app to the Applications shortcut. Finder displays the copy
+progress. On first launch, Midgard validates the embedded runtime and packaged
+resources and writes:
+
+    ~/Library/Application Support/Midgard/config/logs/install.log
+
+Settings and downloaded models are stored outside Midgard.app, so replacing
+the application during an update does not delete personal data.

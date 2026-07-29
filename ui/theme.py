@@ -55,17 +55,17 @@ PAGE = {
 
 # --- Home dashboard ---
 HOME = {
-    "pad_x": 200,
+    "pad_x": 80,
     "pad_top": 20,
     "pad_bottom": 20,
-    "gap": 8,
+    "gap": 6,
     "sub_gap": 6,
     "after_greet": 4,
     "section_gap": 28,
     "section_title_gap": 10,
-    "prompt_gap": 24,
+    "prompt_gap": 18,
     "hint_gap": 8,
-    "prompt_h": 90,
+    "prompt_h": 76,
 }
 
 # --- Tool workspace (preview + log + task rail) ---

@@ -9,6 +9,7 @@ from qfluentwidgets import FluentIcon, SwitchButton
 from qfluentwidgets.components.widgets.switch_button import IndicatorPosition
 
 from backend.config import tr
+from backend.tools import diag
 from backend.tools.bg_remove_models import (
     MODEL_CATALOG,
     BgRemoveModelInfo,
@@ -227,9 +228,21 @@ class BgRemoveModelManager(QObject):
         self._start_install(mode)
 
     def _start_install(self, mode: BgRemoveMode):
-        if self._processing or job_state(KIND_BG_REMOVE, mode.value):
+        diag.model(f"UI install requested  bg_remove:{mode.value}")
+        if self._processing:
+            diag.warn(
+                f"IGNORED install  bg_remove:{mode.value}  reason=processing"
+            )
+            return
+        if job_state(KIND_BG_REMOVE, mode.value):
+            diag.warn(
+                f"IGNORED install  bg_remove:{mode.value}  reason=already-queued"
+            )
             return
         if is_model_installed(mode):
+            diag.warn(
+                f"IGNORED install  bg_remove:{mode.value}  reason=already-installed"
+            )
             return
 
         def work():
@@ -256,7 +269,16 @@ class BgRemoveModelManager(QObject):
             self.status_message.emit(tr["BgRemove"]["InstallDone"].format(name))
 
     def _start_uninstall(self, mode: BgRemoveMode):
-        if self._processing or job_state(KIND_BG_REMOVE, mode.value):
+        diag.model(f"UI uninstall requested  bg_remove:{mode.value}")
+        if self._processing:
+            diag.warn(
+                f"IGNORED uninstall  bg_remove:{mode.value}  reason=processing"
+            )
+            return
+        if job_state(KIND_BG_REMOVE, mode.value):
+            diag.warn(
+                f"IGNORED uninstall  bg_remove:{mode.value}  reason=already-queued"
+            )
             return
         br = tr["BgRemove"]
         name = tr["BgRemoveMode"].get(mode.name, mode.value)
@@ -279,6 +301,7 @@ class BgRemoveModelManager(QObject):
             mode.value,
             work,
             lambda err: self._finish_uninstall(mode, err),
+            operation="uninstall",
         )
         self._on_queue_changed()
 

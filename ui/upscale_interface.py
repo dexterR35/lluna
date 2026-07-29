@@ -28,7 +28,12 @@ from backend.tools.infer_protocol import JobType
 from backend.hardware.detector import get_hardware_profile
 from backend.settings.model_schemas import UpscaleSettings
 from backend.settings.presets import Preset, ResolutionContext, resolve
-from ui.component.controls.inputs import make_section_combo, refresh_combo
+from ui.component.controls.inputs import (
+    make_install_model_button,
+    make_section_combo,
+    refresh_combo,
+    show_install_model_when_empty,
+)
 from ui.component.preview.before_after_preview import BeforeAfterPreview
 from ui.component.workspace.action_bar import RailActions
 from ui.component.workspace.task_list_component import TaskStatus
@@ -67,7 +72,7 @@ class UpscaleInterface(ContentPage):
     processing_changed = Signal(bool)
     save_enabled_signal = Signal(bool)
     alert_signal = Signal(str, str)
-    recommendation_signal = Signal(str)
+    install_models_requested = Signal()
 
     def __init__(self, parent=None):
         super().__init__("UpscaleInterface", parent=parent)
@@ -93,7 +98,6 @@ class UpscaleInterface(ContentPage):
         self.task_error_signal.connect(self._on_task_error)
         self.save_enabled_signal.connect(self.action_bar.set_save_enabled)
         self.alert_signal.connect(self._show_alert)
-        self.recommendation_signal.connect(self.recommendation_label.setText)
         self.append_output(tr["Upscale"]["EmptyStateHint"])
         self._refresh_model_combo()
 
@@ -128,6 +132,10 @@ class UpscaleInterface(ContentPage):
         )
         self.model_combo = self.model_field.control
         settings_layout.addWidget(self.model_field)
+        self.install_model_button = make_install_model_button(
+            settings_host, self.install_models_requested.emit
+        )
+        settings_layout.addWidget(self.install_model_button)
 
         self.preset_field = make_section_combo(
             settings_host,
@@ -142,12 +150,6 @@ class UpscaleInterface(ContentPage):
         self.preset_combo = self.preset_field.control
         self.preset_combo.setAccessibleName("Upscale preset")
         settings_layout.addWidget(self.preset_field)
-        self.recommendation_label = BodyLabel(
-            "Balanced uses automatic tiling for the detected hardware.", settings_host
-        )
-        self.recommendation_label.setWordWrap(True)
-        self.recommendation_label.setAccessibleName("Effective upscale settings")
-        settings_layout.addWidget(self.recommendation_label)
 
         denoise_row = QWidget(settings_host)
         denoise_layout = QHBoxLayout(denoise_row)
@@ -160,14 +162,11 @@ class UpscaleInterface(ContentPage):
         self.denoise_switch.setOnText(on)
         self.denoise_switch.setOffText(off)
         self.denoise_switch.setChecked(bool(config.enhanceDenoiseEnabled.value))
+        self.denoise_switch.setToolTip(up["DenoiseHint"])
         self.denoise_switch.checkedChanged.connect(self._on_denoise_changed)
         denoise_layout.addWidget(self.denoise_switch)
         denoise_layout.addStretch(1)
         settings_layout.addWidget(denoise_row)
-
-        self.denoise_hint = BodyLabel(up["DenoiseHint"], settings_host)
-        self.denoise_hint.setWordWrap(True)
-        settings_layout.addWidget(self.denoise_hint)
 
         self.workspace = WorkspacePage(
             preview=self.preview,
@@ -218,10 +217,6 @@ class UpscaleInterface(ContentPage):
     def _on_preset_selected(self, data):
         try:
             self._preset = Preset(str(data))
-            self.recommendation_label.setText(
-                f"{self._preset.value.replace('-', ' ').title()} will be resolved "
-                "for the image and available memory when processing starts."
-            )
         except ValueError:
             self._preset = Preset.BALANCED
 
@@ -266,29 +261,24 @@ class UpscaleInterface(ContentPage):
 
     def _refresh_model_combo(self):
         apply_default_enhance_model()
-
-        def _fetch():
-            modes = selectable_modes()
-            return modes or [EnhanceMode.X2PLUS]
-
         current = config.enhanceMode.value
         current_data = getattr(current, "value", current)
         select = refresh_combo(
             self.model_combo,
-            _fetch,
+            selectable_modes,
             label_of=lambda m: tr["EnhanceMode"].get(m.name, m.name),
             data_of=lambda m: m.value,
             current=current_data,
         )
-        modes = list(_fetch())
+        modes = selectable_modes()
         if modes:
             config.set(config.enhanceMode, modes[select])
-        self.model_combo.setEnabled(
-            bool(modes)
-            and not self._installing
-            and not self._processing
-            and not self._external_gpu_busy
+        show_install_model_when_empty(
+            self.model_combo,
+            self.install_model_button,
+            has_models=bool(modes),
         )
+        self._apply_app_lock()
 
     def _apply_app_lock(self):
         idle = (
@@ -297,10 +287,11 @@ class UpscaleInterface(ContentPage):
             and not self._external_gpu_busy
         )
         self.action_bar.set_open_enabled(idle)
-        self.action_bar.set_run_enabled(idle)
+        self.action_bar.set_run_enabled(idle and self.model_combo.count() > 0)
         self.action_bar.set_reset_enabled(idle)
         self.action_bar.set_save_enabled(idle and self._current_has_unsaved_preview())
         self.model_combo.setEnabled(idle and self.model_combo.count() > 0)
+        self.install_model_button.setEnabled(idle)
         self.preset_combo.setEnabled(idle)
         self.denoise_switch.setEnabled(idle)
         if self._processing:
@@ -646,13 +637,6 @@ class UpscaleInterface(ContentPage):
                 input_height=height,
             ),
         )
-        tile = result.values["tile_size"]
-        message = (
-            f"Configured tile: {tile.configured or 'Auto'} · "
-            f"Recommended: {tile.recommended or 'Auto'} · "
-            f"Effective: {tile.effective or 'Auto'}"
-        )
-        self.recommendation_signal.emit(message)
         for warning in result.warnings:
             self.append_log_signal.emit([warning])
         return result.settings.to_snapshot()

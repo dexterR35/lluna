@@ -5,7 +5,7 @@ You are a principal Python engineer and AI desktop-application architect working
 ## Official repository
 
 ```text
-https://github.com/dexterR35/midgard
+https://github.com/dexterR35/midgard-studio
 ```
 
 The canonical repository identity is:
@@ -272,7 +272,7 @@ Backend services that need only paths, version information, or repository metada
 The official repository is:
 
 ```text
-https://github.com/dexterR35/midgard
+https://github.com/dexterR35/midgard-studio
 ```
 
 Canonical metadata must be derived from:
@@ -285,12 +285,12 @@ GITHUB_REPOSITORY = "midgard"
 Expected derived URLs:
 
 ```python
-PROJECT_HOME_URL = "https://github.com/dexterR35/midgard"
-PROJECT_ISSUES_URL = "https://github.com/dexterR35/midgard/issues"
-PROJECT_RELEASES_URL = "https://github.com/dexterR35/midgard/releases"
+PROJECT_HOME_URL = "https://github.com/dexterR35/midgard-studio"
+PROJECT_ISSUES_URL = "https://github.com/dexterR35/midgard-studio/issues"
+PROJECT_RELEASES_URL = "https://github.com/dexterR35/midgard-studio/releases"
 LATEST_RELEASE_API_URL = (
     "https://api.github.com/repos/"
-    "dexterR35/midgard/releases/latest"
+    "dexterR35/midgard-studio/releases/latest"
 )
 ```
 
@@ -299,7 +299,7 @@ LATEST_RELEASE_API_URL = (
 Search the repository for:
 
 * `midgard-app/midgard`;
-* `dexterR35/midgard`;
+* `dexterR35/midgard-studio`;
 * hardcoded GitHub API URLs;
 * hardcoded releases URLs;
 * hardcoded issues URLs;

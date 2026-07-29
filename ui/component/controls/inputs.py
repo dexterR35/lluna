@@ -20,11 +20,12 @@ from typing import Any, Callable, Iterable, Optional, Sequence, Tuple
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QVBoxLayout, QWidget
-from qfluentwidgets import BodyLabel, ComboBox, qconfig
+from qfluentwidgets import BodyLabel, ComboBox, FluentIcon, qconfig
 from qfluentwidgets.components.widgets.combo_box import ComboBoxMenu
 from qfluentwidgets.components.widgets.menu import MenuAnimationType
 
 from backend.config import tr
+from ui.component.controls.button_styles import make_button
 from ui.theme import FORM
 
 # (label, userData)
@@ -55,6 +56,35 @@ class AppCombo(ComboBox):
 
 # Back-compat name used across the app
 PlainComboBox = AppCombo
+
+
+def make_install_model_button(
+    parent: QWidget,
+    on_click: Optional[Callable[[], None]] = None,
+):
+    """Primary empty-model action shared by feature input panels."""
+    button = make_button(
+        tr["Common"].get("InstallModel", "Install model"),
+        "primary",
+        parent,
+        FluentIcon.DOWNLOAD,
+    )
+    button.setAccessibleName(tr["Common"].get("InstallModel", "Install model"))
+    if on_click is not None:
+        button.clicked.connect(lambda _checked=False: on_click())
+    button.hide()
+    return button
+
+
+def show_install_model_when_empty(
+    combo: ComboBox,
+    install_button: QWidget,
+    *,
+    has_models: bool,
+) -> None:
+    """Swap an empty model dropdown for its Settings install action."""
+    combo.setVisible(has_models)
+    install_button.setVisible(not has_models)
 
 
 class LabeledField(QWidget):

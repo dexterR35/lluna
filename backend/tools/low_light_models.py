@@ -112,7 +112,7 @@ def selectable_modes() -> List[LowLightMode]:
         info.mode
         for info in MODEL_CATALOG
         if info.mode.value in enabled
-        and (info.is_default or is_model_installed(info.mode))
+        and is_model_installed(info.mode)
     ]
 
 

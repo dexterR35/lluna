@@ -38,12 +38,19 @@ def validate_desktop_dependencies() -> None:
 
 def prepare_desktop(argv: list[str] | None = None) -> BootstrapReport:
     started = monotonic()
+    from backend.application.preflight import (
+        validate_packaged_runtime,
+        validate_python_runtime,
+    )
     from backend.tools.diag import parse_cli_flags
 
+    validate_python_runtime()
     parse_cli_flags()
     initialize_logging()
     changes = initialize_process_environment()
     paths = AppPaths.resolve()
+
+    validate_packaged_runtime(paths)
     validate_desktop_dependencies()
     os.environ["MIDGARD_BOOTSTRAPPED"] = "1"
     elapsed_ms = int((monotonic() - started) * 1000)

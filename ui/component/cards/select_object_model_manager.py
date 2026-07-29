@@ -289,6 +289,7 @@ class SelectObjectModelManager(QObject):
             pair_id.value,
             work,
             lambda err: self._finish_uninstall(pair_id, err),
+            operation="uninstall",
         )
         self._on_queue_changed()
 

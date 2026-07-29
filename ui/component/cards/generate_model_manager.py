@@ -387,6 +387,7 @@ class GenerateModelManager(QObject):
             mode.value,
             work,
             lambda err: self._finish_uninstall(mode, err),
+            operation="uninstall",
         )
         self._on_queue_changed()
 

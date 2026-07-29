@@ -20,6 +20,7 @@ from backend.tools.process_manager import ProcessManager
 from ui.diag_hooks import install_app_hooks, install_window_hooks
 from ui.shell import (
     APP_ICON,
+    HEADER_H,
     NavRoute,
     apply_shell,
     configure_header,
@@ -60,6 +61,13 @@ class SubtitleExtractorGUI(FluentWindow):
         self._wire_settings()
         self._wire_gpu_busy_gate()
         apply_shell(self)
+        from ui.component.model_download_panel import ModelDownloadPanel
+
+        self.modelDownloadPanel = ModelDownloadPanel(self)
+        self.modelDownloadPanel.layout_changed.connect(
+            self._position_model_download_panel
+        )
+        self._position_model_download_panel()
         config.appRestartSig.connect(self._show_restart_tooltip)
         self.service_start_failed.connect(self._show_service_failure)
         self.update_available.connect(self._show_update_available)
@@ -205,17 +213,29 @@ class SubtitleExtractorGUI(FluentWindow):
     def _create_bg_remove_page(self):
         from ui.bg_remove_interface import BgRemoveInterface
 
-        return BgRemoveInterface(self)
+        page = BgRemoveInterface(self)
+        page.install_models_requested.connect(
+            lambda: self._open_model_settings("bg_remove_models_group")
+        )
+        return page
 
     def _create_upscale_page(self):
         from ui.upscale_interface import UpscaleInterface
 
-        return UpscaleInterface(self)
+        page = UpscaleInterface(self)
+        page.install_models_requested.connect(
+            lambda: self._open_model_settings("enhance_models_group")
+        )
+        return page
 
     def _create_low_light_page(self):
         from ui.low_light_interface import LowLightInterface
 
-        return LowLightInterface(self)
+        page = LowLightInterface(self)
+        page.install_models_requested.connect(
+            lambda: self._open_model_settings("low_light_models_group")
+        )
+        return page
 
     def _create_subtitle_page(self):
         from ui.home_interface import HomeInterface
@@ -236,7 +256,28 @@ class SubtitleExtractorGUI(FluentWindow):
         dash.open_low_light.connect(lambda: self.switchTo(self.lowLightInterface))
         dash.open_video.connect(lambda: self.switchTo(self.homeInterface))
         dash.open_settings.connect(lambda: self.switchTo(self.advancedSettingInterface))
+        dash.open_generate_settings.connect(
+            lambda: self._open_model_settings("generate_models_group")
+        )
         dash.open_files.connect(self._dashboard_open_files)
+
+    def _open_model_settings(self, group_name: str):
+        """Open Settings and reveal the requested model manager group."""
+        settings = self.advancedSettingInterface.ensure_loaded()
+        if settings is None:
+            return
+        self.switchTo(self.advancedSettingInterface)
+        group = getattr(settings, group_name, None)
+        if group is not None:
+            expand = getattr(group, "setCollapsed", None)
+            if callable(expand):
+                expand(False)
+            QtCore.QTimer.singleShot(
+                0,
+                lambda page=settings, target=group: page.ensureWidgetVisible(
+                    target, 0, 24
+                ),
+            )
 
     def _wire_settings(self):
         pages = (
@@ -461,6 +502,19 @@ class SubtitleExtractorGUI(FluentWindow):
     def resizeEvent(self, event):
         QtWidgets.QWidget.resizeEvent(self, event)
         sync_header_geometry(self)
+        self._position_model_download_panel()
+
+    def _position_model_download_panel(self):
+        panel = getattr(self, "modelDownloadPanel", None)
+        if panel is None:
+            return
+        margin = 16
+        panel.move(
+            max(margin, self.width() - panel.width() - margin),
+            max(HEADER_H + margin, self.height() - panel.height() - margin),
+        )
+        if panel.isVisible():
+            panel.raise_()
 
     def apply_default_window_geometry(self):
         self.center_window(config.windowW, config.windowH)

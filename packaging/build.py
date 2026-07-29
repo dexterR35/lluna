@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import json
+import platform
 import subprocess
 import sys
 from pathlib import Path
@@ -12,6 +14,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = ROOT / "packaging" / "midgard.spec"
+RELEASE_METADATA = ROOT / "build" / "release-metadata" / "midgard_release.json"
 REQUIRED_RESOURCES = (
     ROOT / "midgard.py",
     ROOT / "backend" / "interface" / "en.ini",
@@ -49,6 +52,17 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Ask PyInstaller to clear its build cache.",
     )
+    parser.add_argument(
+        "--profile",
+        choices=["cpu", "cuda", "directml", "mps"],
+        default=("mps" if sys.platform == "darwin" else "cpu"),
+        help="Runtime dependency profile embedded in this release.",
+    )
+    parser.add_argument(
+        "--architecture",
+        default=platform.machine(),
+        help="Architecture label embedded in this release.",
+    )
     args = parser.parse_args(argv)
     errors = validate_repository(strict_python=not args.validate_only)
     if errors:
@@ -64,6 +78,27 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 1
+    platform_name = (
+        "windows"
+        if sys.platform == "win32"
+        else "macos"
+        if sys.platform == "darwin"
+        else "linux"
+    )
+    RELEASE_METADATA.parent.mkdir(parents=True, exist_ok=True)
+    RELEASE_METADATA.write_text(
+        json.dumps(
+            {
+                "platform": platform_name,
+                "architecture": args.architecture,
+                "profile": args.profile,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     command = [
         sys.executable,
         "-m",

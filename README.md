@@ -93,7 +93,7 @@ or CPU when CUDA is unavailable. Do not copy `midgardEnv` between computers.
 Clone the repository first:
 
 ```shell
-git clone https://github.com/dexterR35/midgard.git
+git clone https://github.com/dexterR35/midgard-studio.git
 cd midgard
 ```
 
@@ -388,8 +388,9 @@ In each Settings model manager:
 - **Install** downloads the model.
 - **On** makes an installed model available to the feature.
 - **Off** keeps it on disk but hides it from normal selection.
-- **Uninstall** removes only the local model files; the model can be installed
-  again later.
+- **Uninstall** removes the runtime model and its Midgard download-cache files,
+  including legacy Hugging Face cache copies; the model can be installed again
+  later.
 
 Review each upstream model's license before use, especially for commercial
 work. A Midgard source-code license does not replace third-party model licenses.

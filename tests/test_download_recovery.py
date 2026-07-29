@@ -15,3 +15,19 @@ def test_corrupt_pending_state_is_backed_up(monkeypatch, tmp_path: Path) -> None
     assert registry.list_pending() == []
     assert not pending.exists()
     assert list(config_dir.glob("pending_model_downloads.json.corrupt-*"))
+
+
+def test_idle_shutdown_does_not_leave_download_cancel_flag(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    config_dir = tmp_path / "config"
+    config_dir.mkdir(exist_ok=True)
+    monkeypatch.setenv("MIDGARD_CONFIG_DIR", str(config_dir))
+    cancel = config_dir / "model_download_cancel.flag"
+    cancel.write_text("1", encoding="utf-8")
+
+    registry = ModelDownloadRegistry()
+    assert registry.abort_all_and_revert() == []
+
+    assert not cancel.exists()

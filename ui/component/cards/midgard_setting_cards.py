@@ -6,7 +6,14 @@ from typing import Union
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QHBoxLayout,
+    QLabel,
+    QSizePolicy,
+    QToolButton,
+    QVBoxLayout,
+    QWidget,
+)
 from qfluentwidgets import FluentIcon, FluentIconBase, HyperlinkButton, SwitchButton, qconfig
 from qfluentwidgets.components.widgets.switch_button import IndicatorPosition
 
@@ -15,13 +22,14 @@ from backend.tools.setting_risk import RiskLevel, assess_setting_risk
 from ui.component.cards.midgard_card import MidgardSettingCard
 from ui.component.controls.button_styles import make_button
 from ui.component.controls.slider_styles import PrimarySlider
-from ui.theme import CARD, SETTINGS, STATUS, TEXT_SECONDARY
+from ui.theme import CARD, SETTINGS, STATUS, TEXT, TEXT_SECONDARY
 
 
 class MidgardCardGroup(QWidget):
-    """Section title + stacked Midgard cards (replaces Fluent SettingCardGroup)."""
+    """Collapsible section title + stacked Midgard cards."""
 
     resetClicked = Signal()
+    collapsedChanged = Signal(bool)
 
     def __init__(
         self,
@@ -30,8 +38,11 @@ class MidgardCardGroup(QWidget):
         *,
         resettable: bool = False,
         subtitle: str = "",
+        collapsed: bool = True,
     ):
         super().__init__(parent)
+        self._title = title
+        self._collapsed = False
         self.setObjectName("MidgardCardGroup")
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
         root = QVBoxLayout(self)
@@ -42,39 +53,106 @@ class MidgardCardGroup(QWidget):
         header.setContentsMargins(0, 0, 0, 0)
         header.setSpacing(8)
 
-        self.titleLabel = QLabel(title, self)
-        self.titleLabel.setObjectName("MidgardCardGroupTitle")
-        self.titleLabel.setStyleSheet(
-            f"color: {TEXT_SECONDARY}; font-size: {SETTINGS['group_title_size']}px; "
-            f"font-weight: {SETTINGS['group_title_weight']}; background: transparent;"
+        self.titleButton = QToolButton(self)
+        self.titleButton.setObjectName("MidgardCardGroupTitle")
+        self.titleButton.setText(title)
+        self.titleButton.setCheckable(True)
+        self.titleButton.setAutoRaise(True)
+        self.titleButton.setToolButtonStyle(
+            Qt.ToolButtonStyle.ToolButtonTextBesideIcon
         )
-        header.addWidget(self.titleLabel, 1)
-
-        self.resetButton = None
-        if resettable:
-            self.resetButton = make_button(
-                tr["Setting"]["ResetSection"],
-                "secondary",
-                self,
-                FluentIcon.SYNC,
-                size="small",
-            )
-            self.resetButton.clicked.connect(self.resetClicked.emit)
-            header.addWidget(self.resetButton, 0, Qt.AlignmentFlag.AlignRight)
+        self.titleButton.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.titleButton.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Fixed,
+        )
+        self.titleButton.setAccessibleName(f"{title} section")
+        self.titleButton.setStyleSheet(
+            f"""
+            QToolButton#MidgardCardGroupTitle {{
+                color: {TEXT_SECONDARY};
+                font-size: {SETTINGS['group_title_size']}px;
+                font-weight: {SETTINGS['group_title_weight']};
+                background: transparent;
+                border: none;
+                padding: 3px 0;
+                text-align: left;
+            }}
+            QToolButton#MidgardCardGroupTitle:hover {{
+                color: {TEXT};
+            }}
+            """
+        )
+        self.titleButton.clicked.connect(
+            lambda expanded: self.setCollapsed(not expanded)
+        )
+        # Backward-compatible attribute for callers that customize the title.
+        self.titleLabel = self.titleButton
+        header.addWidget(self.titleButton, 1)
 
         root.addLayout(header)
 
         if subtitle:
-            self.titleLabel.setToolTip(subtitle)
+            self.titleButton.setToolTip(subtitle)
 
         self.cardHost = QWidget(self)
-        self.cardLayout = QVBoxLayout(self.cardHost)
+        self.cardHostLayout = QVBoxLayout(self.cardHost)
+        self.cardHostLayout.setContentsMargins(0, 0, 0, 0)
+        self.cardHostLayout.setSpacing(SETTINGS["card_stack_spacing"])
+
+        self.cardsContainer = QWidget(self.cardHost)
+        self.cardLayout = QVBoxLayout(self.cardsContainer)
         self.cardLayout.setContentsMargins(0, 0, 0, 0)
         self.cardLayout.setSpacing(SETTINGS["card_stack_spacing"])
+        self.cardHostLayout.addWidget(self.cardsContainer)
+
+        self.resetButton = None
+        if resettable:
+            resetRow = QWidget(self.cardHost)
+            resetLayout = QHBoxLayout(resetRow)
+            resetLayout.setContentsMargins(0, 4, 0, 0)
+            resetLayout.setSpacing(0)
+            resetLayout.addStretch(1)
+            self.resetButton = make_button(
+                tr["Setting"]["ResetSection"],
+                "secondary",
+                resetRow,
+                FluentIcon.SYNC,
+                size="small",
+            )
+            self.resetButton.clicked.connect(self.resetClicked.emit)
+            resetLayout.addWidget(self.resetButton)
+            self.cardHostLayout.addWidget(resetRow)
+
         root.addWidget(self.cardHost)
+        self.setCollapsed(collapsed, emit=False)
 
     def addSettingCard(self, card: QWidget):
         self.cardLayout.addWidget(card)
+
+    def isCollapsed(self) -> bool:
+        return self._collapsed
+
+    def setCollapsed(self, collapsed: bool, *, emit: bool = True) -> None:
+        collapsed = bool(collapsed)
+        changed = collapsed != self._collapsed
+        self._collapsed = collapsed
+        self.cardHost.setVisible(not collapsed)
+        self.titleButton.blockSignals(True)
+        self.titleButton.setChecked(not collapsed)
+        self.titleButton.blockSignals(False)
+        self.titleButton.setArrowType(
+            Qt.ArrowType.RightArrow if collapsed else Qt.ArrowType.DownArrow
+        )
+        state = "collapsed" if collapsed else "expanded"
+        self.titleButton.setAccessibleDescription(
+            f"{self._title} section, {state}"
+        )
+        if changed and emit:
+            self.collapsedChanged.emit(collapsed)
+
+    def toggleCollapsed(self) -> None:
+        self.setCollapsed(not self._collapsed)
 
 
 def _risk_badge_style(level: RiskLevel) -> str:

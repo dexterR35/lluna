@@ -193,8 +193,13 @@ def uninstall_model(mode: GenerateMode) -> None:
     """Delete local HF snapshot so the model can be reinstalled later."""
     import shutil
 
-    if catalog_info(mode) is None:
+    info = catalog_info(mode)
+    if info is None:
         raise ValueError(f"Unknown generate model: {mode}")
+    from backend.tools.hf_auth import remove_hf_repo_cache
+
+    # Older releases kept a second copy in the shared Hugging Face cache.
+    remove_hf_repo_cache(info.hf_repo)
     dest = model_dir(mode)
     try:
         if dest.is_dir():
@@ -339,7 +344,7 @@ def install_model(mode: GenerateMode) -> Path:
     dest.mkdir(parents=True, exist_ok=True)
 
     try:
-        from huggingface_hub import snapshot_download
+        import huggingface_hub  # noqa: F401
     except ImportError as e:
         reg.fail(KIND_GENERATE, mode.value, keep_pending=False)
         raise RuntimeError(
@@ -347,27 +352,39 @@ def install_model(mode: GenerateMode) -> Path:
             "Re-run install.py or pip install huggingface_hub."
         ) from e
 
-    from backend.tools.hf_auth import apply_hf_token_to_env, snapshot_download_kwargs
+    from backend.tools.hf_auth import (
+        apply_hf_token_to_env,
+        remove_hf_repo_cache,
+        snapshot_download_with_progress,
+    )
 
     apply_hf_token_to_env()
     try:
         reg.check_cancelled()
-        snapshot_download(
+        snapshot_download_with_progress(
             repo_id=info.hf_repo,
             local_dir=str(dest),
-            local_dir_use_symlinks=False,
             allow_patterns=list(info.download_allow_patterns),
-            **snapshot_download_kwargs(),
         )
         reg.check_cancelled()
         _validate_download_snapshot(info, dest)
+        # The runtime snapshot is complete; its download cache is redundant.
+        remove_hf_repo_cache(info.hf_repo, include_shared=False)
     except DownloadCancelled:
         discard_partial(mode)
         reg.fail(KIND_GENERATE, mode.value, keep_pending=True)
+        try:
+            remove_hf_repo_cache(info.hf_repo, include_shared=False)
+        except Exception:
+            pass
         raise
     except Exception as e:
         discard_partial(mode)
         reg.fail(KIND_GENERATE, mode.value, keep_pending=False)
+        try:
+            remove_hf_repo_cache(info.hf_repo, include_shared=False)
+        except Exception:
+            pass
         msg = str(e)
         lower = msg.lower()
         if "401" in msg or "403" in msg or "gated" in lower or "unauthorized" in lower:

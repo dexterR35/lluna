@@ -29,7 +29,6 @@ from qfluentwidgets import (
 from backend.config import config, tr
 from backend.tools.constant import GenerateMode
 from backend.tools.generate_models import (
-    catalog_info,
     cuda_ready_for_generate,
     ensure_selected_mode_valid,
     selectable_modes,
@@ -39,7 +38,6 @@ from backend.tools.generate_options import (
     default_step_preset_for_mode,
     resolve_guidance,
     size_presets_for_mode,
-    step_presets_for_mode,
 )
 from backend.tools.infer_client import InferClient
 from backend.tools.infer_protocol import JobType
@@ -47,7 +45,12 @@ from backend.tools.system_info import collect_system_info, greeting_for_now
 from ui.component.cards.info_setting_card import InfoSettingCard
 from ui.component.cards.setting_card_style import apply_content_column_width
 from ui.component.controls.button_styles import make_button
-from ui.component.controls.inputs import AppCombo, fill_combo
+from ui.component.controls.inputs import (
+    AppCombo,
+    fill_combo,
+    make_install_model_button,
+    show_install_model_when_empty,
+)
 from ui.theme import HOME, PRIMARY, apply_page_bg
 
 # Content column stretch from SETTINGS content_ratio (~80% → 1:8:1)
@@ -65,13 +68,14 @@ class _PromptBox(QWidget):
     submitted = Signal(str)
     attach_clicked = Signal()
     stop_clicked = Signal()
+    install_model_clicked = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.input = None
         self.model_combo: AppCombo | None = None
         self.size_combo: AppCombo | None = None
-        self.steps_combo: AppCombo | None = None
+        self.steps_combo = None
         self.setObjectName("PromptBox")
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
@@ -91,34 +95,53 @@ class _PromptBox(QWidget):
         options_row.setContentsMargins(0, 0, 0, 0)
         options_row.setSpacing(HOME["gap"])
         self.model_combo = AppCombo(self)
-        self.model_combo.setMinimumWidth(220)
+        self.install_model_btn = make_install_model_button(
+            self, self.install_model_clicked.emit
+        )
         self.size_combo = AppCombo(self)
-        self.size_combo.setMinimumWidth(220)
-        self.steps_combo = AppCombo(self)
-        self.steps_combo.setMinimumWidth(220)
-        options_row.addWidget(self.model_combo)
-        options_row.addWidget(self.size_combo)
-        options_row.addWidget(self.steps_combo)
+        for control in (
+            self.model_combo,
+            self.install_model_btn,
+            self.size_combo,
+        ):
+            control.setMinimumWidth(0)
+            control.setSizePolicy(
+                QSizePolicy.Policy.Ignored,
+                QSizePolicy.Policy.Fixed,
+            )
+        options_row.addWidget(self.model_combo, 2)
+        options_row.addWidget(self.install_model_btn, 2)
+        options_row.addWidget(self.size_combo, 1)
         root.addLayout(options_row)
 
         row = QHBoxLayout()
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(HOME["gap"])
 
-        self.attach_btn = make_button(hd["Attach"], "secondary", self, FluentIcon.FOLDER)
+        self.attach_btn = make_button(
+            hd["Attach"], "secondary", self, FluentIcon.FOLDER, size="small"
+        )
         self.attach_btn.clicked.connect(self.attach_clicked.emit)
         row.addWidget(self.attach_btn)
         row.addStretch(1)
 
         self.stop_btn = make_button(
-            hd.get("StopGenerate", "Stop"), "secondary", self, FluentIcon.CANCEL
+            hd.get("StopGenerate", "Stop"),
+            "secondary",
+            self,
+            FluentIcon.CANCEL,
+            size="small",
         )
         self.stop_btn.clicked.connect(self.stop_clicked.emit)
         self.stop_btn.hide()
         row.addWidget(self.stop_btn)
 
         self.generate_btn = make_button(
-            hd.get("Generate", "Generate"), "primary", self, FluentIcon.EDIT
+            hd.get("Generate", "Generate"),
+            "primary",
+            self,
+            FluentIcon.EDIT,
+            size="small",
         )
         self.generate_btn.clicked.connect(self._submit)
         row.addWidget(self.generate_btn)
@@ -138,10 +161,9 @@ class _PromptBox(QWidget):
         self.attach_btn.setEnabled(not busy)
         if self.model_combo is not None:
             self.model_combo.setEnabled(not busy)
+        self.install_model_btn.setEnabled(not busy)
         if self.size_combo is not None:
             self.size_combo.setEnabled(not busy)
-        if self.steps_combo is not None:
-            self.steps_combo.setEnabled(not busy)
 
     def set_generate_enabled(self, enabled: bool, tooltip: str = ""):
         self.generate_btn.setEnabled(enabled)
@@ -162,7 +184,7 @@ class _PromptBox(QWidget):
     def refresh_generate_option_combos(self):
         self._refresh_model_combo()
         self._refresh_size_combo()
-        self._refresh_steps_combo()
+        self._apply_max_steps()
 
     def selected_mode(self) -> GenerateMode | None:
         if self.model_combo is None:
@@ -180,18 +202,15 @@ class _PromptBox(QWidget):
     def _bind_generate_options(self):
         self._refresh_model_combo()
         self._refresh_size_combo()
-        self._refresh_steps_combo()
+        self._apply_max_steps()
         if self.model_combo is not None:
             self.model_combo.currentIndexChanged.connect(self._on_model_changed)
         if self.size_combo is not None:
             self.size_combo.currentIndexChanged.connect(self._on_size_changed)
-        if self.steps_combo is not None:
-            self.steps_combo.currentIndexChanged.connect(self._on_steps_changed)
 
     def _refresh_model_combo(self):
         if self.model_combo is None:
             return
-        hd = tr["HomeDashboard"]
         current = config.generateMode.value
         modes = _home_model_choices()
         if current not in modes and modes:
@@ -203,18 +222,14 @@ class _PromptBox(QWidget):
             config.set(config.generateMode, current)
         items = []
         for mode in modes:
-            info = catalog_info(mode)
-            hint = ""
-            if info is not None:
-                if mode == GenerateMode.FLUX2_KLEIN_BASE_4B:
-                    hint = hd.get("GenerateModelHintFlux4B", "Default")
-                elif mode == GenerateMode.SDXL_TURBO:
-                    hint = hd.get("GenerateModelHintLight", "Light")
             label = tr["GenerateMode"].get(mode.name, mode.name)
-            if hint:
-                label = f"{label} - {hint}"
             items.append((label, mode))
         fill_combo(self.model_combo, items, current=current)
+        show_install_model_when_empty(
+            self.model_combo,
+            self.install_model_btn,
+            has_models=bool(modes),
+        )
 
     def _refresh_size_combo(self):
         if self.size_combo is None:
@@ -227,7 +242,10 @@ class _PromptBox(QWidget):
         items = []
         presets = size_presets_for_mode(mode)
         for preset in presets:
-            label = hd.get(preset.label_key, f"{preset.width}x{preset.height}")
+            label = (
+                f"{hd.get('GenerateSizeLabel', 'Size')}: "
+                f"{preset.width}×{preset.height}"
+            )
             items.append((label, preset.key))
             if preset.width == width and preset.height == height:
                 current_key = preset.key
@@ -238,39 +256,11 @@ class _PromptBox(QWidget):
             config.set(config.generateHeight, default.height)
         fill_combo(self.size_combo, items, current=current_key)
 
-    def _refresh_steps_combo(self):
-        if self.steps_combo is None:
-            return
-        hd = tr["HomeDashboard"]
-        mode = self.selected_mode() or config.generateMode.value
-        presets = step_presets_for_mode(mode)
-        if mode in {
-            GenerateMode.FLUX2_KLEIN_4B,
-            GenerateMode.FLUX2_KLEIN_9B,
-        }:
-            self.steps_combo.setToolTip(
-                hd.get(
-                    "GenerateDistilledStepsTip",
-                    "This is the 4-step Distilled checkpoint. Select the matching "
-                    "Base model for full-step generation.",
-                )
-            )
-        else:
-            self.steps_combo.setToolTip("")
-        current_steps = int(config.generateSteps.value or 4)
-        current_key = None
-        items = []
-        for preset in presets:
-            label = hd.get(preset.label_key, preset.key.title())
-            label = f"{label} ({preset.steps})"
-            items.append((label, preset.key))
-            if int(preset.steps) == current_steps:
-                current_key = preset.key
-        if current_key is None and presets:
-            default = default_step_preset_for_mode(mode)
-            current_key = default.key
-            config.set(config.generateSteps, int(default.steps))
-        fill_combo(self.steps_combo, items, current=current_key)
+    def _apply_max_steps(self, mode: GenerateMode | None = None):
+        """Keep steps automatic and fixed to the selected model's maximum."""
+        mode = mode or self.selected_mode() or config.generateMode.value
+        steps = default_step_preset_for_mode(mode).steps
+        config.set(config.generateSteps, int(steps))
 
     def _on_model_changed(self, index: int):
         if self.model_combo is None or index < 0:
@@ -282,12 +272,10 @@ class _PromptBox(QWidget):
             mode = GenerateMode(str(mode))
         config.set(config.generateMode, mode)
         default_size = default_size_preset_for_mode(mode)
-        default_steps = default_step_preset_for_mode(mode)
         config.set(config.generateWidth, int(default_size.width))
         config.set(config.generateHeight, int(default_size.height))
-        config.set(config.generateSteps, int(default_steps.steps))
+        self._apply_max_steps(mode)
         self._refresh_size_combo()
-        self._refresh_steps_combo()
 
     def _on_size_changed(self, index: int):
         if self.size_combo is None or index < 0:
@@ -302,18 +290,6 @@ class _PromptBox(QWidget):
                 config.set(config.generateHeight, int(preset.height))
                 return
 
-    def _on_steps_changed(self, index: int):
-        if self.steps_combo is None or index < 0:
-            return
-        key = self.steps_combo.itemData(index)
-        if key is None:
-            return
-        mode = self.selected_mode() or config.generateMode.value
-        for preset in step_presets_for_mode(mode):
-            if preset.key == key:
-                config.set(config.generateSteps, int(preset.steps))
-                return
-
 
 class DashboardInterface(QWidget):
     """Landing home - greeting, system SettingCards, prompt → Generate."""
@@ -323,6 +299,7 @@ class DashboardInterface(QWidget):
     open_low_light = Signal()
     open_video = Signal()
     open_settings = Signal()
+    open_generate_settings = Signal()
     open_files = Signal()
     processing_changed = Signal(bool)
 
@@ -424,6 +401,7 @@ class DashboardInterface(QWidget):
         self.prompt.submitted.connect(self._on_prompt)
         self.prompt.attach_clicked.connect(self.open_files.emit)
         self.prompt.stop_clicked.connect(self._stop_generate)
+        self.prompt.install_model_clicked.connect(self.open_generate_settings.emit)
         col.addWidget(self.prompt)
 
         self.status_label = BodyLabel("", column)
@@ -440,7 +418,11 @@ class DashboardInterface(QWidget):
         col.addWidget(self.preview_label)
 
         self.open_result_btn = make_button(
-            hd.get("OpenResult", "Open"), "secondary", column, FluentIcon.FOLDER
+            hd.get("OpenResult", "Open"),
+            "secondary",
+            column,
+            FluentIcon.FOLDER,
+            size="small",
         )
         self.open_result_btn.clicked.connect(self._open_last_result)
         self.open_result_btn.hide()
@@ -449,12 +431,6 @@ class DashboardInterface(QWidget):
         open_row.addWidget(self.open_result_btn)
         open_row.addStretch(1)
         col.addLayout(open_row)
-
-        hint = BodyLabel(hd["PromptHint"], column)
-        hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        hint.setWordWrap(True)
-        col.addSpacing(HOME["hint_gap"])
-        col.addWidget(hint)
 
         outer.addStretch(1)
         row = QHBoxLayout()
@@ -622,12 +598,11 @@ class DashboardInterface(QWidget):
         try:
             width = int(config.generateWidth.value)
             height = int(config.generateHeight.value)
-            steps = int(config.generateSteps.value)
         except (TypeError, ValueError):
             default_size = default_size_preset_for_mode(mode)
-            default_steps = default_step_preset_for_mode(mode)
             width, height = default_size.width, default_size.height
-            steps = default_steps.steps
+        steps = int(default_step_preset_for_mode(mode).steps)
+        config.set(config.generateSteps, steps)
 
         payload = {
             "prompt": prompt,

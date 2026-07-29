@@ -35,54 +35,26 @@ _NATIVE_512_SIZE_PRESETS: tuple[SizePreset, ...] = (
 )
 
 
-def _base_flux_step_presets(default_steps: int) -> tuple[StepPreset, ...]:
-    """Full-step Base checkpoints expose BFL's 1..100 control range."""
-    return tuple(
-        StepPreset(
-            f"steps-{steps}",
-            steps,
-            (
-                "GenerateStepRecommended"
-                if steps == default_steps
-                else "GenerateStepCustom"
-            ),
-        )
-        for steps in range(1, 101)
-    )
-
-
 _STEP_PRESETS: dict[GenerateMode, tuple[StepPreset, ...]] = {
-    # Keep checkpoint semantics exact: distilled weights are the 4-step
-    # checkpoint; full-step generation must use the corresponding Base repo.
     GenerateMode.FLUX2_KLEIN_4B: (
-        StepPreset("steps-4", 4, "GenerateStepRecommended"),
+        StepPreset("max", 4, "GenerateStepQuality"),
     ),
     GenerateMode.FLUX2_KLEIN_9B: (
-        StepPreset("steps-4", 4, "GenerateStepRecommended"),
+        StepPreset("max", 4, "GenerateStepQuality"),
     ),
-    GenerateMode.FLUX2_KLEIN_BASE_4B: _base_flux_step_presets(50),
-    GenerateMode.FLUX2_KLEIN_BASE_9B: _base_flux_step_presets(50),
+    GenerateMode.FLUX2_KLEIN_BASE_4B: (
+        StepPreset("max", 100, "GenerateStepQuality"),
+    ),
+    GenerateMode.FLUX2_KLEIN_BASE_9B: (
+        StepPreset("max", 100, "GenerateStepQuality"),
+    ),
     GenerateMode.SDXL_TURBO: (
-        StepPreset("fast", 1, "GenerateStepFast"),
-        StepPreset("normal", 2, "GenerateStepNormal"),
-        StepPreset("quality", 4, "GenerateStepQuality"),
+        StepPreset("max", 4, "GenerateStepQuality"),
     ),
     GenerateMode.SD15: (
-        StepPreset("fast", 20, "GenerateStepFast"),
-        StepPreset("normal", 50, "GenerateStepNormal"),
-        StepPreset("quality", 75, "GenerateStepQuality"),
+        StepPreset("max", 75, "GenerateStepQuality"),
     ),
 }
-
-_DEFAULT_STEP_KEYS: dict[GenerateMode, str] = {
-    GenerateMode.FLUX2_KLEIN_4B: "steps-4",
-    GenerateMode.FLUX2_KLEIN_9B: "steps-4",
-    GenerateMode.FLUX2_KLEIN_BASE_4B: "steps-50",
-    GenerateMode.FLUX2_KLEIN_BASE_9B: "steps-50",
-    GenerateMode.SDXL_TURBO: "fast",
-    GenerateMode.SD15: "normal",
-}
-
 
 def size_presets_for_mode(mode: GenerateMode) -> List[SizePreset]:
     if mode == GenerateMode.SD15:
@@ -109,12 +81,9 @@ def step_presets_for_mode(mode: GenerateMode) -> List[StepPreset]:
 
 
 def default_step_preset_for_mode(mode: GenerateMode) -> StepPreset:
+    """Return the model's only supported UI policy: its maximum step count."""
     presets = step_presets_for_mode(mode)
-    preferred_key = _DEFAULT_STEP_KEYS.get(mode)
-    for preset in presets:
-        if preset.key == preferred_key:
-            return preset
-    return presets[0]
+    return max(presets, key=lambda preset: preset.steps)
 
 
 def validate_steps_for_mode(mode: GenerateMode, steps: int) -> int:
@@ -139,4 +108,3 @@ def resolve_guidance(mode: GenerateMode) -> float:
     if info is None:
         return 1.0
     return float(info.default_guidance)
-

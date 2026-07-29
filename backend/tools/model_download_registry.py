@@ -5,9 +5,10 @@ from __future__ import annotations
 import json
 import threading
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, List, Optional, Tuple
+from typing import Iterable, Iterator, List, Optional, Tuple
 
 from backend.core.atomic import atomic_write_json
 from backend.core.paths import AppPaths
@@ -20,6 +21,7 @@ KIND_LOW_LIGHT = "low_light"
 KIND_GENERATE = "generate"
 KIND_BG_REMOVE = "bg_remove"
 KIND_SELECT_OBJECT = "select_object"
+_progress_context = threading.local()
 
 
 class DownloadCancelled(Exception):
@@ -111,6 +113,12 @@ class ModelDownloadRegistry:
                 self._save_pending_unlocked(pending)
 
     def complete(self, kind: str, key: str) -> None:
+        from backend.tools.model_download_queue import ModelDownloadQueue
+
+        ModelDownloadQueue.instance().report_current_progress(
+            100,
+            detail="Installed",
+        )
         item = (kind, str(key))
         with self._lock:
             self._active.pop(item, None)
@@ -141,9 +149,15 @@ class ModelDownloadRegistry:
 
     def abort_all_and_revert(self) -> List[PendingDownload]:
         """Cancel in-flight work, delete partial artifacts, keep pending for restart."""
-        self.request_cancel()
         with self._lock:
             items = list({*self._active.keys(), *self._load_pending_unlocked()})
+        if not items:
+            # Normal shutdown while idle must not poison a later install click.
+            self.clear_cancel()
+            return []
+
+        self.request_cancel()
+        with self._lock:
             # Ensure every active is in pending for next open
             pending = self._load_pending_unlocked()
             for item in items:
@@ -244,3 +258,110 @@ def discard_partial(kind: str, key: str) -> None:
 def urllib_cancel_reporthook(block_num: int, block_size: int, total_size: int) -> None:
     """Pass to urlretrieve(..., reporthook=...) so close/CLI can abort."""
     ModelDownloadRegistry.instance().check_cancelled()
+    if total_size > 0:
+        downloaded = min(max(0, block_num * block_size), total_size)
+        report_install_progress(
+            int(downloaded * 100 / total_size),
+            f"{downloaded} / {total_size} bytes",
+        )
+
+
+def report_install_progress(percent: int, detail: str = "") -> None:
+    """Scale raw download progress into the current model job's range."""
+    start, end = getattr(_progress_context, "progress_range", (0, 95))
+    raw = max(0, min(100, int(percent)))
+    scaled = int(start + ((end - start) * raw / 100))
+    from backend.tools.model_download_queue import ModelDownloadQueue
+
+    ModelDownloadQueue.instance().report_current_progress(
+        scaled,
+        detail=detail,
+    )
+
+
+@contextmanager
+def download_progress_range(start: int, end: int) -> Iterator[None]:
+    """Map a nested model/file download into part of the overall job."""
+    previous = getattr(_progress_context, "progress_range", None)
+    _progress_context.progress_range = (
+        max(0, min(100, int(start))),
+        max(0, min(100, int(end))),
+    )
+    try:
+        yield
+    finally:
+        if previous is None:
+            try:
+                del _progress_context.progress_range
+            except AttributeError:
+                pass
+        else:
+            _progress_context.progress_range = previous
+
+
+@contextmanager
+def huggingface_download_total(total_bytes: int) -> Iterator[None]:
+    """Provide the known snapshot total to Hugging Face progress bars."""
+    previous = getattr(_progress_context, "hf_total_bytes", None)
+    _progress_context.hf_total_bytes = max(0, int(total_bytes))
+    try:
+        yield
+    finally:
+        if previous is None:
+            try:
+                del _progress_context.hf_total_bytes
+            except AttributeError:
+                pass
+        else:
+            _progress_context.hf_total_bytes = previous
+
+
+def huggingface_progress_tqdm():
+    """Return a quiet tqdm class that forwards aggregate snapshot bytes."""
+    from tqdm.auto import tqdm
+
+    class _ModelDownloadTqdm(tqdm):
+        def __init__(self, *args, **kwargs):
+            self._midgard_track_bytes = False
+            description = str(kwargs.get("desc", ""))
+            unit = kwargs.get("unit")
+            # tqdm short-circuits its byte counter when disabled. Keep counting
+            # active, but suppress terminal rendering through display()/clear().
+            kwargs["disable"] = False
+            super().__init__(*args, **kwargs)
+            self._midgard_track_bytes = (
+                unit == "B" and description.startswith("Reconstructing")
+            )
+            self._report_midgard_progress()
+
+        def update(self, n=1):
+            result = super().update(n)
+            self._report_midgard_progress()
+            return result
+
+        def refresh(self, *args, **kwargs):
+            result = super().refresh(*args, **kwargs)
+            self._report_midgard_progress()
+            return result
+
+        def display(self, *args, **kwargs) -> None:
+            return None
+
+        def clear(self, *args, **kwargs) -> None:
+            return None
+
+        def _report_midgard_progress(self) -> None:
+            if not getattr(self, "_midgard_track_bytes", False):
+                return
+            total = getattr(_progress_context, "hf_total_bytes", 0)
+            if total <= 0:
+                total = int(self.total or 0)
+            if total <= 0:
+                return
+            current = max(0, min(int(self.n or 0), total))
+            report_install_progress(
+                int(current * 100 / total),
+                f"{current} / {total} bytes",
+            )
+
+    return _ModelDownloadTqdm

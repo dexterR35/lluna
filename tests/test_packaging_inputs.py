@@ -27,3 +27,35 @@ def test_desktop_packaging_metadata_is_present() -> None:
     assert "Type=Application" in desktop
     assert "Exec=Midgard" in desktop
     assert 'name="Midgard.app"' in spec
+
+
+def test_release_workflow_has_platform_profiles_and_security_gates() -> None:
+    workflow = Path(".github/workflows/desktop-build.yml").read_text(
+        encoding="utf-8"
+    )
+    for target in (
+        "windows-x64-cpu",
+        "windows-x64-cuda",
+        "windows-x64-directml",
+        "linux-x64-cpu",
+        "linux-x64-cuda",
+        "macos-x64-mps",
+    ):
+        assert target in workflow
+    assert "signtool" in workflow.lower()
+    assert "notarytool" in workflow
+    assert "MIDGARD_UPDATE_PRIVATE_KEY_B64" in workflow
+    assert "attest-build-provenance" in workflow
+
+
+def test_native_package_definitions_are_present() -> None:
+    assert Path("packaging/windows/Midgard.iss").is_file()
+    assert Path("packaging/linux/package.py").is_file()
+    assert Path("packaging/macos/create_dmg.sh").is_file()
+
+
+def test_declared_release_versions_are_consistent() -> None:
+    subprocess.run(
+        [sys.executable, "packaging/verify_release.py", "--tag", "v1.4.0"],
+        check=True,
+    )

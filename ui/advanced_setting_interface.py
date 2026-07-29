@@ -1,5 +1,6 @@
 """Settings page - Midgard cards (same structure/bg as Home dashboard)."""
 
+import sys
 from PySide6 import QtWidgets, QtCore, QtGui
 from PySide6.QtWidgets import QFileDialog, QVBoxLayout
 from qfluentwidgets import (
@@ -169,7 +170,6 @@ class AdvancedSettingInterface(ScrollArea):
         self.bg_remove_models_group = MidgardCardGroup(
             tr["Setting"]["BgRemoveModelsSetting"],
             self.contentColumn,
-            resettable=True,
             subtitle=tr["Setting"]["BgRemoveModelsSettingDesc"],
         )
         self.bg_remove_model_manager = BgRemoveModelManager(self.bg_remove_models_group)
@@ -178,7 +178,6 @@ class AdvancedSettingInterface(ScrollArea):
         self.enhance_models_group = MidgardCardGroup(
             tr["Setting"]["EnhanceModelsSetting"],
             self.contentColumn,
-            resettable=True,
             subtitle=tr["Setting"]["EnhanceModelsSettingDesc"],
         )
         self.enhance_model_manager = EnhanceModelManager(self.enhance_models_group)
@@ -187,7 +186,6 @@ class AdvancedSettingInterface(ScrollArea):
         self.low_light_models_group = MidgardCardGroup(
             tr["Setting"]["LowLightModelsSetting"],
             self.contentColumn,
-            resettable=True,
             subtitle=tr["Setting"]["LowLightModelsSettingDesc"],
         )
         self.low_light_model_manager = LowLightModelManager(self.low_light_models_group)
@@ -196,7 +194,6 @@ class AdvancedSettingInterface(ScrollArea):
         self.generate_models_group = MidgardCardGroup(
             tr["Setting"]["GenerateModelsSetting"],
             self.contentColumn,
-            resettable=True,
             subtitle=tr["Setting"]["GenerateModelsSettingDesc"],
         )
         self.generate_model_manager = GenerateModelManager(self.generate_models_group)
@@ -205,7 +202,6 @@ class AdvancedSettingInterface(ScrollArea):
         self.select_object_models_group = MidgardCardGroup(
             tr["Setting"]["SelectObjectModelsSetting"],
             self.contentColumn,
-            resettable=True,
             subtitle=tr["Setting"]["SelectObjectModelsSettingDesc"],
         )
         self.select_object_model_manager = SelectObjectModelManager(
@@ -234,7 +230,6 @@ class AdvancedSettingInterface(ScrollArea):
         self.advanced_group = MidgardCardGroup(
             tr["Setting"]["AdvancedSetting"],
             self.contentColumn,
-            resettable=True,
             subtitle=tr["Setting"]["AdvancedSettingDesc"],
         )
         self.about_group = MidgardCardGroup(tr["Setting"]["AboutSetting"], self.contentColumn)
@@ -244,25 +239,6 @@ class AdvancedSettingInterface(ScrollArea):
         )
         self._wire_section_reset(self.sttn_group, "sttn", "SttnSetting")
         self._wire_section_reset(self.propainter_group, "propainter", "ProPainterSetting")
-        self._wire_section_reset(
-            self.bg_remove_models_group, "bg_remove_models", "BgRemoveModelsSetting"
-        )
-        self._wire_section_reset(
-            self.enhance_models_group, "enhance_models", "EnhanceModelsSetting"
-        )
-        self._wire_section_reset(
-            self.low_light_models_group, "low_light_models", "LowLightModelsSetting"
-        )
-        self._wire_section_reset(
-            self.generate_models_group, "generate_models", "GenerateModelsSetting"
-        )
-        self._wire_section_reset(
-            self.select_object_models_group,
-            "select_object_models",
-            "SelectObjectModelsSetting",
-        )
-        self._wire_section_reset(self.advanced_group, "advanced", "AdvancedSetting")
-
         self.subtitle_yx_axis_difference_pixel = MidgardRangeCard(
             configItem=config.subtitleYXAxisDifferencePixel,
             icon=FluentIcon.ZOOM,
@@ -413,19 +389,6 @@ class AdvancedSettingInterface(ScrollArea):
         ):
             return
         reset_section(section_id)
-        if section_id == "advanced":
-            self.save_directory.setContent(self._save_directory_content())
-        if section_id == "bg_remove_models":
-            self.bg_remove_model_manager.refresh()
-        elif section_id == "enhance_models":
-            self.enhance_model_manager.refresh()
-        elif section_id == "low_light_models":
-            self.low_light_model_manager.refresh()
-        elif section_id == "generate_models":
-            self.generate_model_manager.refresh()
-        elif section_id == "select_object_models":
-            config.set(config.selectObjectMoreComplex, False)
-            self.select_object_model_manager.refresh()
         InfoBar.success(
             title=section_name,
             content=tr["Setting"]["ResetSectionDone"],
@@ -449,19 +412,72 @@ class AdvancedSettingInterface(ScrollArea):
 
     def on_version_info_fetched(self, success, ignore=False):
         if success:
+            from backend.core.update_trust import UPDATE_PUBLIC_KEY_B64
+
+            packaged_update = bool(
+                getattr(sys, "frozen", False) and UPDATE_PUBLIC_KEY_B64
+            )
+            if packaged_update:
+                yes_action = lambda: self._install_packaged_update(
+                    self.version_manager.lastest_version
+                )
+            else:
+                yes_action = lambda: QtGui.QDesktopServices.openUrl(
+                    QtCore.QUrl(PROJECT_RELEASES_URL)
+                )
             self.show_message_box(
                 tr["Setting"]["UpdatesAvailableTitle"],
-                tr["Setting"]["UpdatesAvailableDesc"].format(
-                    self.version_manager.lastest_version, VERSION
-                ),
+                tr["Setting"][
+                    "PackagedUpdateAvailableDesc"
+                    if packaged_update
+                    else "UpdatesAvailableDesc"
+                ].format(self.version_manager.lastest_version, VERSION),
                 True,
-                lambda: QtGui.QDesktopServices.openUrl(QtCore.QUrl(PROJECT_RELEASES_URL)),
+                yes_action,
             )
         elif not ignore:
             self.show_message_box(
                 tr["Setting"]["NoUpdatesAvailableTitle"],
                 tr["Setting"]["NoUpdatesAvailableDesc"],
             )
+
+    def _install_packaged_update(self, version: str):
+        from backend.updates.downloader import prepare_update
+
+        self.copyright.button.setEnabled(False)
+        InfoBar.info(
+            tr["Setting"]["UpdateDownloadingTitle"],
+            tr["Setting"]["UpdateDownloadingDesc"].format(version),
+            duration=-1,
+            parent=self,
+        )
+        TaskExecutor.runTask(prepare_update, version).then(
+            self._on_packaged_update_ready,
+            self._on_packaged_update_failed,
+            lambda _future: self.copyright.button.setEnabled(True),
+        )
+
+    def _on_packaged_update_ready(self, prepared):
+        from backend.updates.launcher import launch_prepared_update
+
+        try:
+            launch_prepared_update(prepared)
+        except Exception as exc:
+            self._show_packaged_update_error(str(exc))
+            return
+        QtWidgets.QApplication.quit()
+
+    def _on_packaged_update_failed(self, failure):
+        detail = getattr(failure, "exception", failure)
+        self._show_packaged_update_error(str(detail))
+
+    def _show_packaged_update_error(self, detail: str):
+        InfoBar.error(
+            tr["Setting"]["UpdateFailedTitle"],
+            tr["Setting"]["UpdateFailedDesc"].format(detail),
+            duration=max(config.infoBarDurationMs, 8000),
+            parent=self,
+        )
 
     def choose_save_directory(self):
         last_save_directory = "./" if not config.saveDirectory.value else config.saveDirectory.value

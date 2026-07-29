@@ -23,10 +23,10 @@ from backend.tools.generate_options import (
     [
         (GenerateMode.FLUX2_KLEIN_4B, [4], 4, 1.0),
         (GenerateMode.FLUX2_KLEIN_9B, [4], 4, 1.0),
-        (GenerateMode.FLUX2_KLEIN_BASE_4B, list(range(1, 101)), 50, 4.0),
-        (GenerateMode.FLUX2_KLEIN_BASE_9B, list(range(1, 101)), 50, 4.0),
-        (GenerateMode.SDXL_TURBO, [1, 2, 4], 1, 0.0),
-        (GenerateMode.SD15, [20, 50, 75], 50, 7.5),
+        (GenerateMode.FLUX2_KLEIN_BASE_4B, [100], 100, 4.0),
+        (GenerateMode.FLUX2_KLEIN_BASE_9B, [100], 100, 4.0),
+        (GenerateMode.SDXL_TURBO, [4], 4, 0.0),
+        (GenerateMode.SD15, [75], 75, 7.5),
     ],
 )
 def test_each_generate_model_has_its_own_step_profile(
@@ -51,7 +51,8 @@ def test_incompatible_step_count_is_rejected() -> None:
     with pytest.raises(ValueError, match="configured step preset"):
         validate_steps_for_mode(GenerateMode.FLUX2_KLEIN_4B, 50)
     assert validate_steps_for_mode(GenerateMode.FLUX2_KLEIN_4B, 4) == 4
-    assert validate_steps_for_mode(GenerateMode.FLUX2_KLEIN_BASE_4B, 50) == 50
+    with pytest.raises(ValueError, match="configured step preset"):
+        validate_steps_for_mode(GenerateMode.FLUX2_KLEIN_BASE_4B, 50)
     assert validate_steps_for_mode(GenerateMode.FLUX2_KLEIN_BASE_4B, 100) == 100
 
 

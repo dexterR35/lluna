@@ -63,14 +63,29 @@ def enqueue_model_job(
     key: str,
     work_fn: WorkFn,
     on_done: Callable[[OptionalExc], None],
+    *,
+    operation: str = "install",
 ) -> int:
     """Run work_fn on the global queue; on_done runs on the Qt main thread."""
     dispatcher = _main_thread_dispatcher()
+    queue = model_download_queue()
+    if operation == "install" and not queue.is_busy():
+        # A previous shutdown can leave an intentional cancel marker for an
+        # interrupted job. A new explicit click while idle is a fresh attempt.
+        from backend.tools.model_download_registry import ModelDownloadRegistry
+
+        ModelDownloadRegistry.instance().clear_cancel()
 
     def _main_thread_done(err: OptionalExc) -> None:
         dispatcher.invoke_requested.emit(lambda e=err: on_done(e))
 
-    return model_download_queue().enqueue(kind, key, work_fn, _main_thread_done)
+    return queue.enqueue(
+        kind,
+        key,
+        work_fn,
+        _main_thread_done,
+        operation=operation,
+    )
 
 
 def job_state(kind: str, key: str) -> Optional[str]:
