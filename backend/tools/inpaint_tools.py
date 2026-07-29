@@ -1,4 +1,6 @@
 import multiprocessing
+import math
+
 import cv2
 import numpy as np
 
@@ -69,19 +71,17 @@ def batch_generator(data, max_batch_size):
 def create_mask(size, coords_list, *, expansion_px: int = 10):
     mask = np.zeros(size, dtype="uint8")
     if coords_list:
+        height, width = mask.shape[:2]
         for coords in coords_list:
             xmin, xmax, ymin, ymax = coords
-            # Expand by a few pixels so boxes are not too small
-            x1 = xmin - expansion_px
-            if x1 < 0:
-                x1 = 0
-            y1 = ymin - expansion_px
-            if y1 < 0:
-                y1 = 0
-            x2 = xmax + expansion_px
-            y2 = ymax + expansion_px
-            cv2.rectangle(mask, (x1, y1),
-                          (x2, y2), (255, 255, 255), thickness=-1)
+            # UI/request regions are represented as floats. OpenCV requires
+            # integer points, so round outward to retain the whole selection.
+            x1 = max(0, math.floor(xmin - expansion_px))
+            y1 = max(0, math.floor(ymin - expansion_px))
+            x2 = min(width - 1, math.ceil(xmax + expansion_px))
+            y2 = min(height - 1, math.ceil(ymax + expansion_px))
+            if x1 <= x2 and y1 <= y2:
+                cv2.rectangle(mask, (x1, y1), (x2, y2), 255, thickness=-1)
     return mask
 
 def get_inpaint_area_by_mask(W, H, h, mask, multiple=1):

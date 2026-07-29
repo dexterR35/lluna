@@ -20,7 +20,7 @@ from backend.configuration.models import SubtitleSettings
 from backend.i18n.translations import get_translations
 from backend.tools.constant import InpaintMode, SubtitleDetectMode
 from backend.tools.hardware_accelerator import HardwareAccelerator
-from backend.tools.common_tools import get_readable_path, read_image
+from backend.tools.common_tools import get_readable_path, is_image_file, read_image
 from backend.inpaint.sttn_auto_inpaint import STTNAutoInpaint
 from backend.inpaint.sttn_det_inpaint import STTNDetInpaint
 from backend.inpaint.lama_inpaint import LamaInpaint
