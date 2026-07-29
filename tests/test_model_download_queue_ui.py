@@ -82,6 +82,9 @@ def test_download_panel_shows_active_percent_and_queued_model(
         if panel.rows_layout.itemAt(index).widget() is not None
     ]
     assert len(rows) == 2
+    assert rows[0].progress_bar.maximum() == 100
+    assert not rows[0].stop_button.isHidden()
+    assert rows[1].metrics_label.text() == "Queue position 1"
     assert rows[0].status_label.text() == "Installing · 37%"
     assert rows[1].status_label.text() == "Queued · 1 ahead"
 

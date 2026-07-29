@@ -37,10 +37,14 @@ class BackgroundRemover:
     @property
     def device_label(self) -> str:
         if not self._active_providers:
-            return "CPU"
+            return "Not initialized"
         top = self._active_providers[0]
         if top == "CUDAExecutionProvider":
-            return "CUDA"
+            return "GPU (CUDA)"
+        if top == "DmlExecutionProvider":
+            return "GPU (DirectML)"
+        if top in {"ROCMExecutionProvider", "MIGraphXExecutionProvider"}:
+            return "GPU (ROCm)"
         if top == "CPUExecutionProvider":
             return "CPU"
         return top.replace("ExecutionProvider", "")
@@ -137,6 +141,8 @@ class BackgroundRemover:
 
         _p(10)
         self._ensure_session()
+        if log is not None:
+            log(f"Device: {self.device_label} | Model: {self.mode.value}")
         _p(25)
         from rembg import remove
 
@@ -335,7 +341,6 @@ def run_bg_remove_job(
     """
     remover = get_bg_remover(mode)
     if log:
-        log(f"Device: {remover.device_label} | Model: {remover.mode.value}")
         if protect_mask_path:
             log(
                 "Protect mask: force-keep painted areas in cutout "

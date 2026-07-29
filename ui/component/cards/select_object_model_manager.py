@@ -195,7 +195,7 @@ class SelectObjectModelManager(QObject):
         self._apply_lock()
 
     def _apply_lock(self):
-        locked = self._has_queue_activity()
+        locked = False
         for card in self.cards:
             card.set_controls_enabled(not locked)
             card.refresh()

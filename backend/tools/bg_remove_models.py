@@ -197,6 +197,7 @@ def install_model(mode: BgRemoveMode) -> None:
         KIND_BG_REMOVE,
         DownloadCancelled,
         ModelDownloadRegistry,
+        pooch_download_progress,
     )
 
     try:
@@ -227,7 +228,8 @@ def install_model(mode: BgRemoveMode) -> None:
                 diag.model(
                     f"DOWNLOAD bg_remove:{mode.value}  path={path}"
                 )
-                cls.download_models()
+                with pooch_download_progress():
+                    cls.download_models()
                 reg.check_cancelled()
                 if not is_model_installed(mode):
                     discard_partial(mode)

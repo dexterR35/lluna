@@ -82,6 +82,138 @@ def test_queue_tracks_uninstall_operation_and_failure() -> None:
     assert job.error == "network failed"
 
 
+def test_queue_exposes_bytes_speed_elapsed_and_eta() -> None:
+    queue = ModelDownloadQueue()
+    reported = threading.Event()
+    release = threading.Event()
+
+    def work() -> None:
+        queue.report_current_progress(
+            10,
+            downloaded_bytes=100,
+            total_bytes=1000,
+        )
+        time.sleep(0.02)
+        queue.report_current_progress(
+            40,
+            downloaded_bytes=400,
+            total_bytes=1000,
+        )
+        reported.set()
+        assert release.wait(timeout=2)
+
+    queue.enqueue("generate", "flux", work, lambda _err: None)
+    assert reported.wait(timeout=2)
+
+    job = queue.jobs(include_finished=False)[0]
+    assert job.downloaded_bytes == 400
+    assert job.total_bytes == 1000
+    assert job.bytes_per_second is not None
+    assert job.bytes_per_second > 0
+    assert job.elapsed_seconds > 0
+    assert job.eta_seconds is not None
+    assert job.eta_seconds > 0
+
+    release.set()
+    _wait_until(lambda: not queue.is_busy())
+
+
+def test_stopping_current_job_continues_with_next_queued_job(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    from backend.tools.model_download_registry import (
+        DownloadCancelled,
+        ModelDownloadRegistry,
+    )
+
+    monkeypatch.setenv("MIDGARD_CONFIG_DIR", str(tmp_path))
+    registry = ModelDownloadRegistry()
+    monkeypatch.setattr(ModelDownloadRegistry, "_instance", registry)
+
+    queue = ModelDownloadQueue()
+    first_started = threading.Event()
+    second_started = threading.Event()
+    completed: list[tuple[str, BaseException | None]] = []
+
+    def first_work() -> None:
+        first_started.set()
+        while True:
+            registry.check_cancelled()
+            time.sleep(0.01)
+
+    first_position = queue.enqueue(
+        "generate",
+        "flux",
+        first_work,
+        lambda err: completed.append(("flux", err)),
+    )
+    assert first_position == 0
+    queue.enqueue(
+        "enhance",
+        "x2",
+        second_started.set,
+        lambda err: completed.append(("x2", err)),
+    )
+    assert first_started.wait(timeout=2)
+
+    active_id = queue.jobs(include_finished=False)[0].job_id
+    assert queue.stop_job(active_id)
+    assert second_started.wait(timeout=2)
+    _wait_until(lambda: not queue.is_busy())
+    _wait_until(lambda: any(key == "flux" for key, _err in completed))
+
+    stopped = next(job for job in queue.jobs() if job.key == "flux")
+    finished = next(job for job in queue.jobs() if job.key == "x2")
+    assert stopped.state == "cancelled"
+    assert finished.state == "completed"
+    assert isinstance(dict(completed)["flux"], DownloadCancelled)
+
+
+def test_stopping_queued_job_removes_only_that_item(monkeypatch, tmp_path) -> None:
+    from backend.tools.model_download_registry import (
+        DownloadCancelled,
+        ModelDownloadRegistry,
+    )
+
+    monkeypatch.setenv("MIDGARD_CONFIG_DIR", str(tmp_path))
+    monkeypatch.setattr(
+        ModelDownloadRegistry,
+        "_instance",
+        ModelDownloadRegistry(),
+    )
+
+    queue = ModelDownloadQueue()
+    first_started = threading.Event()
+    release_first = threading.Event()
+    third_started = threading.Event()
+    completed: list[tuple[str, BaseException | None]] = []
+
+    def first_work() -> None:
+        first_started.set()
+        assert release_first.wait(timeout=2)
+
+    queue.enqueue("test", "one", first_work, lambda _err: None)
+    queue.enqueue(
+        "test",
+        "two",
+        lambda: None,
+        lambda err: completed.append(("two", err)),
+    )
+    queue.enqueue("test", "three", third_started.set, lambda _err: None)
+    assert first_started.wait(timeout=2)
+
+    queued = next(job for job in queue.jobs() if job.key == "two")
+    assert queue.stop_job(queued.job_id)
+    release_first.set()
+    assert third_started.wait(timeout=2)
+    _wait_until(lambda: not queue.is_busy())
+
+    stopped = next(job for job in queue.jobs() if job.key == "two")
+    assert stopped.state == "cancelled"
+    assert isinstance(dict(completed)["two"], DownloadCancelled)
+
+
 def test_direct_download_reporthook_updates_active_percentage(monkeypatch) -> None:
     from backend.tools.model_download_registry import urllib_cancel_reporthook
 
@@ -118,9 +250,10 @@ def test_huggingface_byte_adapter_updates_active_percentage(monkeypatch) -> None
         bar_class = huggingface_progress_tqdm()
         with huggingface_download_total(100):
             bar = bar_class(
-                total=100,
-                desc="Reconstructing (incomplete total...)",
+                total=0,
+                desc="Downloading (incomplete total...)",
                 unit="B",
+                name="huggingface_hub.snapshot_download",
             )
             bar.update(40)
             reported.set()
@@ -130,5 +263,31 @@ def test_huggingface_byte_adapter_updates_active_percentage(monkeypatch) -> None
     queue.enqueue("generate", "flux", work, lambda _err: None)
     assert reported.wait(timeout=2)
     assert queue.jobs(include_finished=False)[0].progress == 38
+    release.set()
+    _wait_until(lambda: not queue.is_busy())
+
+
+def test_pooch_byte_adapter_updates_active_metrics(monkeypatch) -> None:
+    pytest.importorskip("tqdm")
+    from backend.tools.model_download_registry import pooch_progress_tqdm
+
+    queue = ModelDownloadQueue()
+    monkeypatch.setattr(ModelDownloadQueue, "_instance", queue)
+    reported = threading.Event()
+    release = threading.Event()
+
+    def work() -> None:
+        bar = pooch_progress_tqdm()(total=100, unit="B")
+        bar.update(40)
+        reported.set()
+        assert release.wait(timeout=2)
+        bar.close()
+
+    queue.enqueue("bg_remove", "birefnet-general", work, lambda _err: None)
+    assert reported.wait(timeout=2)
+    job = queue.jobs(include_finished=False)[0]
+    assert job.progress == 38
+    assert job.downloaded_bytes == 40
+    assert job.total_bytes == 100
     release.set()
     _wait_until(lambda: not queue.is_busy())

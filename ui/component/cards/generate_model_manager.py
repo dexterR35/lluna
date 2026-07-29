@@ -267,7 +267,7 @@ class GenerateModelManager(QObject):
         gen = tr["Generate"]
         br = tr["BgRemove"]
         set_tr = tr["Setting"]
-        locked = self._has_queue_activity() or self._processing
+        locked = self._processing
         queued_fmt = set_tr.get("ActionQueued", "Queued ({})")
         for card in self.cards:
             card.set_controls_enabled(not locked)

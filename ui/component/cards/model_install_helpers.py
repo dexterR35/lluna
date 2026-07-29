@@ -127,7 +127,5 @@ def install_button_text(
         return installing_text
     if state == "queued":
         pos = queue_position(kind, key)
-        if pos > 1:
-            return queued_text.format(pos - 1)
-        return queued_text.format(0)
+        return queued_text.format(max(1, pos))
     return install_text

@@ -55,6 +55,7 @@ class ModelDownloadRegistry:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._cancel = threading.Event()
+        self._job_cancel: Optional[threading.Event] = None
         self._active: dict[PendingItem, bool] = {}
 
     @classmethod
@@ -65,6 +66,9 @@ class ModelDownloadRegistry:
             return cls._instance
 
     def is_cancelled(self) -> bool:
+        job_cancel = self._job_cancel
+        if job_cancel is not None and job_cancel.is_set():
+            return True
         if self._cancel.is_set():
             return True
         try:
@@ -136,8 +140,10 @@ class ModelDownloadRegistry:
                     pending.append(item)
                     self._save_pending_unlocked(pending)
             else:
-                pending = [p for p in self._load_pending_unlocked() if p != item]
-                self._save_pending_unlocked(pending)
+                pending = self._load_pending_unlocked()
+                remaining = [p for p in pending if p != item]
+                if remaining != pending:
+                    self._save_pending_unlocked(remaining)
 
     def list_pending(self) -> List[PendingDownload]:
         with self._lock:
@@ -263,10 +269,18 @@ def urllib_cancel_reporthook(block_num: int, block_size: int, total_size: int) -
         report_install_progress(
             int(downloaded * 100 / total_size),
             f"{downloaded} / {total_size} bytes",
+            downloaded_bytes=downloaded,
+            total_bytes=total_size,
         )
 
 
-def report_install_progress(percent: int, detail: str = "") -> None:
+def report_install_progress(
+    percent: int,
+    detail: str = "",
+    *,
+    downloaded_bytes: Optional[int] = None,
+    total_bytes: Optional[int] = None,
+) -> None:
     """Scale raw download progress into the current model job's range."""
     start, end = getattr(_progress_context, "progress_range", (0, 95))
     raw = max(0, min(100, int(percent)))
@@ -276,6 +290,8 @@ def report_install_progress(percent: int, detail: str = "") -> None:
     ModelDownloadQueue.instance().report_current_progress(
         scaled,
         detail=detail,
+        downloaded_bytes=downloaded_bytes,
+        total_bytes=total_bytes,
     )
 
 
@@ -297,6 +313,21 @@ def download_progress_range(start: int, end: int) -> Iterator[None]:
                 pass
         else:
             _progress_context.progress_range = previous
+
+
+@contextmanager
+def download_cancellation_scope(cancel_event: threading.Event) -> Iterator[None]:
+    """Make one queue job's stop event visible to download helper threads."""
+    registry = ModelDownloadRegistry.instance()
+    with registry._lock:
+        previous = registry._job_cancel
+        registry._job_cancel = cancel_event
+    try:
+        yield
+    finally:
+        with registry._lock:
+            if registry._job_cancel is cancel_event:
+                registry._job_cancel = previous
 
 
 @contextmanager
@@ -323,6 +354,7 @@ def huggingface_progress_tqdm():
     class _ModelDownloadTqdm(tqdm):
         def __init__(self, *args, **kwargs):
             self._midgard_track_bytes = False
+            progress_name = str(kwargs.pop("name", ""))
             description = str(kwargs.get("desc", ""))
             unit = kwargs.get("unit")
             # tqdm short-circuits its byte counter when disabled. Keep counting
@@ -330,7 +362,12 @@ def huggingface_progress_tqdm():
             kwargs["disable"] = False
             super().__init__(*args, **kwargs)
             self._midgard_track_bytes = (
-                unit == "B" and description.startswith("Reconstructing")
+                unit == "B"
+                and (
+                    progress_name == "huggingface_hub.snapshot_download"
+                    or description.startswith("Downloading (incomplete total")
+                    or description.startswith("Reconstructing")
+                )
             )
             self._report_midgard_progress()
 
@@ -351,6 +388,7 @@ def huggingface_progress_tqdm():
             return None
 
         def _report_midgard_progress(self) -> None:
+            ModelDownloadRegistry.instance().check_cancelled()
             if not getattr(self, "_midgard_track_bytes", False):
                 return
             total = getattr(_progress_context, "hf_total_bytes", 0)
@@ -362,6 +400,68 @@ def huggingface_progress_tqdm():
             report_install_progress(
                 int(current * 100 / total),
                 f"{current} / {total} bytes",
+                downloaded_bytes=current,
+                total_bytes=total,
             )
 
     return _ModelDownloadTqdm
+
+
+def pooch_progress_tqdm():
+    """Return a quiet tqdm class for rembg/pooch byte progress."""
+    from tqdm.auto import tqdm
+
+    class _PoochDownloadTqdm(tqdm):
+        def __init__(self, *args, **kwargs):
+            kwargs["disable"] = False
+            super().__init__(*args, **kwargs)
+            self._report_midgard_progress()
+
+        def update(self, n=1):
+            result = super().update(n)
+            self._report_midgard_progress()
+            return result
+
+        def refresh(self, *args, **kwargs):
+            result = super().refresh(*args, **kwargs)
+            self._report_midgard_progress()
+            return result
+
+        def display(self, *args, **kwargs) -> None:
+            return None
+
+        def clear(self, *args, **kwargs) -> None:
+            return None
+
+        def _report_midgard_progress(self) -> None:
+            ModelDownloadRegistry.instance().check_cancelled()
+            total = int(getattr(self, "total", 0) or 0)
+            if total <= 0:
+                return
+            current = max(
+                0,
+                min(int(getattr(self, "n", 0) or 0), total),
+            )
+            report_install_progress(
+                int(current * 100 / total),
+                f"{current} / {total} bytes",
+                downloaded_bytes=current,
+                total_bytes=total,
+            )
+
+    return _PoochDownloadTqdm
+
+
+@contextmanager
+def pooch_download_progress() -> Iterator[None]:
+    """Forward pooch's built-in progressbar to the active model queue."""
+    import pooch.downloaders
+
+    progress_class = pooch_progress_tqdm()
+    previous = pooch.downloaders.tqdm
+    pooch.downloaders.tqdm = progress_class
+    try:
+        yield
+    finally:
+        if pooch.downloaders.tqdm is progress_class:
+            pooch.downloaders.tqdm = previous

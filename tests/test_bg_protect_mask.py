@@ -123,3 +123,38 @@ def test_background_remover_retries_cpu_when_accelerated_session_fails(
         ["CPUExecutionProvider"],
     ]
     assert remover.device_label == "CPU"
+
+
+def test_background_remover_logs_provider_after_session_initializes(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    class FakeInner:
+        @staticmethod
+        def get_providers():
+            return ["CUDAExecutionProvider", "CPUExecutionProvider"]
+
+    fake_rembg = types.ModuleType("rembg")
+    fake_rembg.new_session = lambda *args, **kwargs: types.SimpleNamespace(
+        inner_session=FakeInner()
+    )
+    fake_rembg.remove = lambda image, **kwargs: Image.new("L", image.size, 255)
+    monkeypatch.setitem(sys.modules, "rembg", fake_rembg)
+
+    source_path = tmp_path / "source.png"
+    output_path = tmp_path / "result.png"
+    Image.new("RGB", (4, 3), (20, 40, 60)).save(source_path)
+    logs: list[str] = []
+
+    remover = BackgroundRemover(
+        BgRemoveMode.BIREFNET,
+        providers=["CUDAExecutionProvider", "CPUExecutionProvider"],
+    )
+    remover.process_to_file(
+        str(source_path),
+        str(output_path),
+        log=logs.append,
+    )
+
+    assert logs[0] == "Device: GPU (CUDA) | Model: birefnet-general"
+    assert remover.device_label == "GPU (CUDA)"

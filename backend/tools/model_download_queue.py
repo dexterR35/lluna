@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable, List, Optional
 
 JobState = Optional[str]  # None | "active" | "queued"
@@ -12,6 +13,7 @@ JobOperation = str  # "install" | "uninstall"
 OnDone = Callable[[Optional[BaseException]], None]
 WorkFn = Callable[[], None]
 Listener = Callable[[], None]
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -26,6 +28,16 @@ class _Job:
     detail: str = ""
     last_progress_notification: float = 0.0
     last_notified_progress: Optional[int] = None
+    cancel_event: threading.Event = field(default_factory=threading.Event)
+    stop_requested: bool = False
+    started_at: Optional[float] = None
+    finished_at: Optional[float] = None
+    downloaded_bytes: Optional[int] = None
+    total_bytes: Optional[int] = None
+    bytes_per_second: Optional[float] = None
+    transfer_started_at: Optional[float] = None
+    last_sample_at: Optional[float] = None
+    last_sample_bytes: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -41,6 +53,11 @@ class DownloadJobSnapshot:
     progress: Optional[int] = None
     detail: str = ""
     error: str = ""
+    downloaded_bytes: Optional[int] = None
+    total_bytes: Optional[int] = None
+    bytes_per_second: Optional[float] = None
+    elapsed_seconds: float = 0.0
+    eta_seconds: Optional[float] = None
 
 
 class ModelDownloadQueue:
@@ -84,7 +101,7 @@ class ModelDownloadQueue:
             try:
                 cb()
             except Exception:
-                pass
+                logger.exception("Model download queue listener failed")
 
     def enqueue(
         self,
@@ -156,7 +173,11 @@ class ModelDownloadQueue:
                 snapshots.append(
                     self._snapshot_unlocked(
                         self._current,
-                        state="active",
+                        state=(
+                            "stopping"
+                            if self._current.stop_requested
+                            else "active"
+                        ),
                         position=0,
                     )
                 )
@@ -179,6 +200,8 @@ class ModelDownloadQueue:
         percent: Optional[int],
         *,
         detail: str = "",
+        downloaded_bytes: Optional[int] = None,
+        total_bytes: Optional[int] = None,
     ) -> None:
         """Update the active job from a download worker and notify the UI."""
         should_notify = False
@@ -190,7 +213,12 @@ class ModelDownloadQueue:
                 None if percent is None else max(0, min(100, int(percent)))
             )
             progress_changed = normalized != job.progress
-            changed = progress_changed or detail != job.detail
+            bytes_changed = self._update_transfer_metrics_unlocked(
+                job,
+                downloaded_bytes=downloaded_bytes,
+                total_bytes=total_bytes,
+            )
+            changed = progress_changed or detail != job.detail or bytes_changed
             if not changed:
                 return
             job.progress = normalized
@@ -217,6 +245,59 @@ class ModelDownloadQueue:
                     f"{job.operation} {job.key}",
                 )
             self._notify()
+
+    def stop_job(self, job_id: int) -> bool:
+        """Stop an active job or remove a waiting job from the FIFO queue."""
+        callback: Optional[OnDone] = None
+        err: Optional[BaseException] = None
+        stopped_job: Optional[_Job] = None
+        with self._lock:
+            if self._current is not None and self._current.job_id == int(job_id):
+                if self._current.stop_requested:
+                    return True
+                self._current.stop_requested = True
+                self._current.cancel_event.set()
+                stopped_job = self._current
+            else:
+                for index, job in enumerate(self._queue):
+                    if job.job_id != int(job_id):
+                        continue
+                    stopped_job = self._queue.pop(index)
+                    stopped_job.stop_requested = True
+                    stopped_job.finished_at = time.monotonic()
+                    from backend.tools.model_download_registry import DownloadCancelled
+
+                    err = DownloadCancelled("Download stopped by user")
+                    self._history.insert(
+                        0,
+                        self._snapshot_unlocked(
+                            stopped_job,
+                            state="cancelled",
+                            position=-1,
+                            error=str(err),
+                        ),
+                    )
+                    del self._history[20:]
+                    callback = stopped_job.on_done
+                    break
+                else:
+                    return False
+
+        if stopped_job is not None:
+            from backend.tools import diag
+
+            diag.warn(
+                f"STOP {stopped_job.operation}  "
+                f"{stopped_job.kind}:{stopped_job.key}"
+            )
+        if callback is not None and err is not None:
+            self._drop_stopped_pending(stopped_job)
+            try:
+                callback(err)
+            except Exception:
+                logger.exception("Stopped model job callback failed")
+        self._notify()
+        return True
 
     def clear_finished(self) -> None:
         with self._lock:
@@ -251,6 +332,32 @@ class ModelDownloadQueue:
         position: int,
         error: str = "",
     ) -> DownloadJobSnapshot:
+        now = job.finished_at or time.monotonic()
+        elapsed = (
+            max(0.0, now - job.started_at)
+            if job.started_at is not None
+            else 0.0
+        )
+        eta: Optional[float] = None
+        if (
+            state in {"active", "stopping"}
+            and job.progress is not None
+            and 0 < job.progress < 100
+            and elapsed > 0
+        ):
+            eta = elapsed * (100 - job.progress) / job.progress
+        elif (
+            state in {"active", "stopping"}
+            and job.downloaded_bytes is not None
+            and job.total_bytes is not None
+            and job.bytes_per_second
+            and job.bytes_per_second > 0
+        ):
+            eta = max(
+                0.0,
+                (job.total_bytes - job.downloaded_bytes)
+                / job.bytes_per_second,
+            )
         return DownloadJobSnapshot(
             job_id=job.job_id,
             kind=job.kind,
@@ -261,7 +368,101 @@ class ModelDownloadQueue:
             progress=job.progress,
             detail=job.detail,
             error=error,
+            downloaded_bytes=job.downloaded_bytes,
+            total_bytes=job.total_bytes,
+            bytes_per_second=job.bytes_per_second,
+            elapsed_seconds=elapsed,
+            eta_seconds=eta,
         )
+
+    @staticmethod
+    def _update_transfer_metrics_unlocked(
+        job: _Job,
+        *,
+        downloaded_bytes: Optional[int],
+        total_bytes: Optional[int],
+    ) -> bool:
+        if downloaded_bytes is None and total_bytes is None:
+            return False
+
+        downloaded = (
+            job.downloaded_bytes
+            if downloaded_bytes is None
+            else max(0, int(downloaded_bytes))
+        )
+        total = (
+            job.total_bytes
+            if total_bytes is None
+            else max(0, int(total_bytes))
+        )
+        if total is not None and total > 0 and downloaded is not None:
+            downloaded = min(downloaded, total)
+
+        now = time.monotonic()
+        segment_changed = (
+            job.total_bytes is not None
+            and total is not None
+            and total != job.total_bytes
+        ) or (
+            job.last_sample_bytes is not None
+            and downloaded is not None
+            and downloaded < job.last_sample_bytes
+        )
+        if job.transfer_started_at is None or segment_changed:
+            job.transfer_started_at = job.started_at or now
+            job.last_sample_at = None
+            job.last_sample_bytes = None
+            job.bytes_per_second = None
+
+        if downloaded is not None:
+            if (
+                job.last_sample_at is not None
+                and job.last_sample_bytes is not None
+                and downloaded >= job.last_sample_bytes
+            ):
+                seconds = now - job.last_sample_at
+                if seconds > 0:
+                    current_rate = (downloaded - job.last_sample_bytes) / seconds
+                    if current_rate > 0:
+                        if job.bytes_per_second is None:
+                            job.bytes_per_second = current_rate
+                        else:
+                            job.bytes_per_second = (
+                                job.bytes_per_second * 0.7 + current_rate * 0.3
+                            )
+            elif (
+                job.transfer_started_at is not None
+                and now > job.transfer_started_at
+                and downloaded > 0
+            ):
+                job.bytes_per_second = downloaded / (
+                    now - job.transfer_started_at
+                )
+            job.last_sample_at = now
+            job.last_sample_bytes = downloaded
+
+        changed = (
+            downloaded != job.downloaded_bytes
+            or total != job.total_bytes
+        )
+        job.downloaded_bytes = downloaded
+        job.total_bytes = total
+        return changed
+
+    @staticmethod
+    def _drop_stopped_pending(job: Optional[_Job]) -> None:
+        if job is None:
+            return
+        try:
+            from backend.tools.model_download_registry import ModelDownloadRegistry
+
+            ModelDownloadRegistry.instance().fail(
+                job.kind,
+                job.key,
+                keep_pending=False,
+            )
+        except Exception:
+            logger.exception("Could not remove stopped model from pending state")
 
     def _worker_loop(self) -> None:
         while True:
@@ -273,6 +474,7 @@ class ModelDownloadQueue:
                 else:
                     should_exit = False
                     job = self._queue.pop(0)
+                    job.started_at = time.monotonic()
                     self._current = job
             self._notify()
             if should_exit:
@@ -283,11 +485,17 @@ class ModelDownloadQueue:
 
             diag.model(f"START {job.operation}  {job.kind}:{job.key}")
             try:
-                job.work_fn()
+                from backend.tools.model_download_registry import (
+                    download_cancellation_scope,
+                )
+
+                with download_cancellation_scope(job.cancel_event):
+                    job.work_fn()
             except BaseException as e:
                 err = e
 
             with self._lock:
+                job.finished_at = time.monotonic()
                 self._current = None
                 if err is None:
                     job.progress = 100
@@ -310,6 +518,9 @@ class ModelDownloadQueue:
                 )
                 del self._history[20:]
 
+            if job.stop_requested and err is not None:
+                self._drop_stopped_pending(job)
+
             if err is None:
                 diag.model(f"DONE {job.operation}  {job.kind}:{job.key}")
             elif type(err).__name__ == "DownloadCancelled":
@@ -325,5 +536,5 @@ class ModelDownloadQueue:
             try:
                 job.on_done(err)
             except Exception:
-                pass
+                logger.exception("Model download completion callback failed")
             self._notify()

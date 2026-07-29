@@ -553,7 +553,7 @@ class AdvancedSettingInterface(ScrollArea):
         if current:
             kind, key = current
             name = pending_label(PendingDownload(kind, key))
-            n = max(len(pending), 1)
+            n = max(queue.pending_count(), len(pending), 1)
             self.model_download_banner.setText(
                 st.get(
                     "ModelDownloadBannerActive",
@@ -561,11 +561,12 @@ class AdvancedSettingInterface(ScrollArea):
                 ).format(name, n)
             )
         else:
+            queued_count = max(queue.pending_count(), len(pending))
             self.model_download_banner.setText(
                 st.get(
                     "ModelDownloadBannerPending",
                     "{} model(s) queued — downloads start one at a time.",
-                ).format(len(pending))
+                ).format(queued_count)
             )
         self.model_download_banner.show()
 
