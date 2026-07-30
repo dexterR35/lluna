@@ -1,4 +1,4 @@
-"""Generate (FLUX.2) models as SettingCards - same pattern as Enhance / Low Light."""
+"""Generate Image models as SettingCards - same pattern as Enhance / Low Light."""
 
 from __future__ import annotations
 
@@ -63,9 +63,7 @@ class GenerateModelCard(MidgardSettingCard):
             self,
             FluentIcon.DELETE,
         )
-        self.uninstallButton.clicked.connect(
-            lambda: self.uninstall_requested.emit(self.info.mode)
-        )
+        self.uninstallButton.clicked.connect(lambda: self.uninstall_requested.emit(self.info.mode))
         self.hBoxLayout.addWidget(self.uninstallButton, 0, Qt.AlignRight)
         self.hBoxLayout.addSpacing(gap)
 
@@ -75,9 +73,7 @@ class GenerateModelCard(MidgardSettingCard):
             self,
             FluentIcon.DOWNLOAD,
         )
-        self.installButton.clicked.connect(
-            lambda: self.install_requested.emit(self.info.mode)
-        )
+        self.installButton.clicked.connect(lambda: self.install_requested.emit(self.info.mode))
         self.hBoxLayout.addWidget(self.installButton, 0, Qt.AlignRight)
         self.hBoxLayout.addSpacing(gap)
 
@@ -149,9 +145,7 @@ class HfTokenCard(MidgardSettingCard):
         )
         gap = CARD["trailing_gap"]
         self.tokenEdit = PasswordLineEdit(self)
-        self.tokenEdit.setPlaceholderText(
-            gen.get("HfTokenPlaceholder", "hf_… read token")
-        )
+        self.tokenEdit.setPlaceholderText(gen.get("HfTokenPlaceholder", "hf_… read token"))
         self.tokenEdit.setClearButtonEnabled(True)
         self.tokenEdit.setMinimumWidth(220)
         self.hBoxLayout.addWidget(self.tokenEdit, 0, Qt.AlignRight)
@@ -164,9 +158,7 @@ class HfTokenCard(MidgardSettingCard):
         self.hBoxLayout.addWidget(self.saveButton, 0, Qt.AlignRight)
         self.hBoxLayout.addSpacing(gap)
 
-        self.clearButton = make_button(
-            gen.get("HfTokenClear", "Clear"), "secondary", self
-        )
+        self.clearButton = make_button(gen.get("HfTokenClear", "Clear"), "secondary", self)
         self.clearButton.clicked.connect(self._clear)
         self.hBoxLayout.addWidget(self.clearButton, 0, Qt.AlignRight)
         self.hBoxLayout.addSpacing(gap)
@@ -348,13 +340,9 @@ class GenerateModelManager(QObject):
         br = tr["BgRemove"]
         name = tr["GenerateMode"].get(mode.name, mode.value)
         if err:
-            self.status_message.emit(
-                gen.get("InstallFailed", br["InstallFailed"]).format(str(err))
-            )
+            self.status_message.emit(gen.get("InstallFailed", br["InstallFailed"]).format(str(err)))
         else:
-            self.status_message.emit(
-                gen.get("InstallDone", br["InstallDone"]).format(name)
-            )
+            self.status_message.emit(gen.get("InstallDone", br["InstallDone"]).format(name))
 
     def _start_uninstall(self, mode: GenerateMode):
         if self._processing or job_state(KIND_GENERATE, mode.value):

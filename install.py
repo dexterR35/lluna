@@ -116,7 +116,11 @@ def find_python() -> str:
             continue
         try:
             out = subprocess.check_output(
-                [path, "-c", "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"],
+                [
+                    path,
+                    "-c",
+                    "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')",
+                ],
                 text=True,
                 stderr=subprocess.DEVNULL,
             ).strip()
@@ -131,8 +135,7 @@ def find_python() -> str:
         return sys.executable
 
     raise SystemExit(
-        "Midgard requires 64-bit Python 3.12. Install Python 3.12 and rerun "
-        "this installer."
+        "Midgard requires 64-bit Python 3.12. Install Python 3.12 and rerun this installer."
     )
 
 
@@ -391,10 +394,7 @@ def map_cuda_tag(
 
     # 5xxx / Blackwell: cu128 is mandatory
     if cap >= 12.0:
-        reason = (
-            f"{series} (cc {cap:g} via {cap_source or 'detect'}) "
-            f"→ torch cu128 (required)"
-        )
+        reason = f"{series} (cc {cap:g} via {cap_source or 'detect'}) → torch cu128 (required)"
         if _parse_driver_cuda(driver_cuda) < 12.8:
             warning = (
                 "RTX 50-series needs an NVIDIA driver that reports CUDA 12.8+. "
@@ -412,10 +412,7 @@ def map_cuda_tag(
         return tag, reason, warning
 
     # Unknown GPU: newest the driver supports
-    reason = (
-        f"GPU series unknown → torch {driver_tag} "
-        f"(driver CUDA {driver_cuda or 'unknown'})"
-    )
+    reason = f"GPU series unknown → torch {driver_tag} (driver CUDA {driver_cuda or 'unknown'})"
     return driver_tag, reason, warning
 
 
@@ -526,7 +523,10 @@ def choose_mode(
         log(detect_msg)
         if cuda.warning and mode == "cuda":
             log(f"WARNING: {cuda.warning}")
-        log(f"Non-interactive: installing {mode.upper()}" + (f" ({resolve_tag(mode)})" if mode == "cuda" else ""))
+        log(
+            f"Non-interactive: installing {mode.upper()}"
+            + (f" ({resolve_tag(mode)})" if mode == "cuda" else "")
+        )
         return mode, resolve_tag(mode)
 
     mode = None
@@ -571,9 +571,9 @@ def ensure_venv(python_bin: str) -> Path:
         py = venv_python(venv_dir)
         get_pip = ROOT / ".cache_get_pip.py"
         get_pip.write_bytes(
-            __import__("urllib.request").request.urlopen(
-                "https://bootstrap.pypa.io/get-pip.py", timeout=120
-            ).read()
+            __import__("urllib.request")
+            .request.urlopen("https://bootstrap.pypa.io/get-pip.py", timeout=120)
+            .read()
         )
         run([str(py), str(get_pip)])
         get_pip.unlink(missing_ok=True)
@@ -767,12 +767,14 @@ checks = [
     ("transformers", "import transformers", False),
     ("huggingface_hub", "import huggingface_hub", False),
     ("diffusers", "import diffusers", False),
+    ("Flux2Pipeline", "from diffusers import Flux2Pipeline", False),
+    ("Flux2KleinPipeline", "from diffusers import Flux2KleinPipeline", False),
     (
-        "AutoPipelineForText2Image",
-        "from diffusers import AutoPipelineForText2Image",
+        "Flux2Transformer2DModel",
+        "from diffusers import Flux2Transformer2DModel",
         False,
     ),
-    ("Flux2KleinPipeline", "from diffusers import Flux2KleinPipeline", False),
+    ("QwenImagePipeline", "from diffusers import QwenImagePipeline", False),
     ("accelerate", "import accelerate", False),
     ("Sam2Model", "from transformers import Sam2Model, Sam2Processor", False),
     (
@@ -857,9 +859,9 @@ def verify_models() -> None:
 # Optional models (BiRefNet Massive, BRIA, Lite, …) download from Settings → Remove BG Models.
 REMBG_PREFETCH_MODELS = [
     "birefnet-general",  # General - app default
-    "u2net_human_seg",   # People
-    "isnet-anime",       # Anime
-    "u2net_cloth_seg",   # Clothes
+    "u2net_human_seg",  # People
+    "isnet-anime",  # Anime
+    "u2net_cloth_seg",  # Clothes
 ]
 
 
@@ -1003,7 +1005,9 @@ print(f"  Scheduled {n} default model(s) for the Settings download queue.")
     run([str(py), "-c", script, str(ROOT), "1" if skip_rembg else "0"])
 
 
-def write_runtime(mode: str, torch_tag: str, gpu_name: str, compute_cap: str = "", total_vram_mb: float = 0.0) -> None:
+def write_runtime(
+    mode: str, torch_tag: str, gpu_name: str, compute_cap: str = "", total_vram_mb: float = 0.0
+) -> None:
     data = {
         "product": "Midgard",
         "accel": mode,
@@ -1021,15 +1025,15 @@ def write_launchers(venv_dir: Path) -> None:
     if platform.system() == "Windows":
         bat = ROOT / "run_gui.bat"
         bat.write_text(
-            f'@echo off\r\n'
-            f'setlocal\r\n'
+            f"@echo off\r\n"
+            f"setlocal\r\n"
             f'cd /d "%~dp0"\r\n'
             f'if not exist "midgardEnv\\Scripts\\python.exe" (\r\n'
-            f'  echo Midgard environment is missing. Run install.bat first.\r\n'
-            f'  exit /b 2\r\n'
-            f')\r\n'
+            f"  echo Midgard environment is missing. Run install.bat first.\r\n"
+            f"  exit /b 2\r\n"
+            f")\r\n"
             f'"midgardEnv\\Scripts\\python.exe" gui.py %*\r\n'
-            f'exit /b %errorlevel%\r\n',
+            f"exit /b %errorlevel%\r\n",
             encoding="utf-8",
         )
         log(f"Wrote {bat.name}")
@@ -1042,8 +1046,8 @@ def write_launchers(venv_dir: Path) -> None:
             'cd "$script_dir"\n'
             'if [[ ! -x "$script_dir/midgardEnv/bin/python" ]]; then\n'
             '  echo "Midgard environment is missing. Run ./install.sh first." >&2\n'
-            '  exit 2\n'
-            'fi\n'
+            "  exit 2\n"
+            "fi\n"
             'exec "$script_dir/midgardEnv/bin/python" gui.py "$@"\n',
             encoding="utf-8",
         )
@@ -1101,9 +1105,7 @@ def main() -> int:
     forced = None if args.mode == "auto" else args.mode
     if forced is None and platform.system() == "Darwin":
         forced = "mps"
-    mode, torch_tag = choose_mode(
-        cuda, forced, args.yes, cuda_tag_override=args.cuda_tag
-    )
+    mode, torch_tag = choose_mode(cuda, forced, args.yes, cuda_tag_override=args.cuda_tag)
 
     python_bin = find_python()
     validate_python(python_bin)
@@ -1124,8 +1126,7 @@ def main() -> int:
         log("\nExisting environment validation passed.")
         return 0
     merge_script = (
-        "import sys; sys.path.insert(0, %r); "
-        "from install import verify_models; verify_models()"
+        "import sys; sys.path.insert(0, %r); from install import verify_models; verify_models()"
     ) % str(ROOT)
     run([str(py), "-c", merge_script])
 

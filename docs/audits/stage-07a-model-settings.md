@@ -44,7 +44,7 @@ hardcoded; **Missing** unsupported end to end.
 
 | Setting | Current state | Validation/effective behavior | Finding |
 |---|---|---|---|
-| Model | UI: FLUX 4B and SDXL Turbo only; Settings can install four catalog models | Enum validation in config; UI silently substitutes an available model | SD 1.5 and FLUX 9B can be enabled but are excluded from the Home selector |
+| Model | UI and Settings expose FLUX.2 Klein, FLUX.2 Dev, Klein FP8, and Qwen-Image | Enum validation in config; UI substitutes an installed and enabled model | All supported choices are available on Home once installed and enabled |
 | Width/height | UI: linked square 512, 768, 1024 presets | Plain `ConfigItem`; runner floors to multiples of 16 and minimum 64 | No aspect ratio/custom dimensions; silent normalization |
 | Aspect ratio | Missing | — | Add task-level ratio presets and custom mode |
 | Inference steps | UI: Fast/Normal/Quality from model catalog | Plain integer config; runner enforces only `>=1` | No upper safety limit; changing model chooses nearest preset rather than preserving semantic quality |

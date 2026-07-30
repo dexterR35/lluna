@@ -30,41 +30,24 @@ _GENERAL_SIZE_PRESETS: tuple[SizePreset, ...] = (
     SizePreset("large", 1024, 1024, "GenerateSizeLarge"),
 )
 
-_NATIVE_512_SIZE_PRESETS: tuple[SizePreset, ...] = (
-    SizePreset("native", 512, 512, "GenerateSizeNative512"),
-)
-
-
 _STEP_PRESETS: dict[GenerateMode, tuple[StepPreset, ...]] = {
-    GenerateMode.FLUX2_KLEIN_4B: (
-        StepPreset("max", 4, "GenerateStepQuality"),
-    ),
-    GenerateMode.FLUX2_KLEIN_9B: (
-        StepPreset("max", 4, "GenerateStepQuality"),
-    ),
-    GenerateMode.FLUX2_KLEIN_BASE_4B: (
-        StepPreset("max", 100, "GenerateStepQuality"),
-    ),
-    GenerateMode.FLUX2_KLEIN_BASE_9B: (
-        StepPreset("max", 100, "GenerateStepQuality"),
-    ),
-    GenerateMode.SDXL_TURBO: (
-        StepPreset("max", 4, "GenerateStepQuality"),
-    ),
-    GenerateMode.SD15: (
-        StepPreset("max", 75, "GenerateStepQuality"),
-    ),
+    GenerateMode.FLUX2_KLEIN_4B: (StepPreset("max", 4, "GenerateStepQuality"),),
+    GenerateMode.FLUX2_KLEIN_9B: (StepPreset("max", 4, "GenerateStepQuality"),),
+    GenerateMode.FLUX2_KLEIN_BASE_4B: (StepPreset("max", 50, "GenerateStepQuality"),),
+    GenerateMode.FLUX2_KLEIN_BASE_9B: (StepPreset("max", 50, "GenerateStepQuality"),),
+    GenerateMode.FLUX2_DEV: (StepPreset("max", 50, "GenerateStepQuality"),),
+    GenerateMode.FLUX2_KLEIN_9B_FP8: (StepPreset("max", 4, "GenerateStepQuality"),),
+    GenerateMode.QWEN_IMAGE: (StepPreset("max", 50, "GenerateStepQuality"),),
 }
 
+
 def size_presets_for_mode(mode: GenerateMode) -> List[SizePreset]:
-    if mode == GenerateMode.SD15:
-        return list(_NATIVE_512_SIZE_PRESETS)
     return list(_GENERAL_SIZE_PRESETS)
 
 
 def default_size_preset_for_mode(mode: GenerateMode) -> SizePreset:
     presets = size_presets_for_mode(mode)
-    preferred_key = "small" if mode == GenerateMode.SDXL_TURBO else "large"
+    preferred_key = "large"
     for preset in presets:
         if preset.key == preferred_key:
             return preset
@@ -92,9 +75,7 @@ def validate_steps_for_mode(mode: GenerateMode, steps: int) -> int:
     if value not in allowed:
         contiguous = allowed == tuple(range(min(allowed), max(allowed) + 1))
         allowed_text = (
-            f"{min(allowed)}-{max(allowed)}"
-            if contiguous
-            else ", ".join(str(v) for v in allowed)
+            f"{min(allowed)}-{max(allowed)}" if contiguous else ", ".join(str(v) for v in allowed)
         )
         raise ValueError(
             f"{mode.value} supports the configured step preset(s): {allowed_text}; "

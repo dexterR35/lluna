@@ -1,4 +1,4 @@
-"""ChatGPT-style home dashboard: greeting, PC info, prompt → Generate (FLUX.2)."""
+"""ChatGPT-style home dashboard: greeting, PC info, prompt → Generate."""
 
 from __future__ import annotations
 
@@ -95,9 +95,7 @@ class _PromptBox(QWidget):
         options_row.setContentsMargins(0, 0, 0, 0)
         options_row.setSpacing(HOME["gap"])
         self.model_combo = AppCombo(self)
-        self.install_model_btn = make_install_model_button(
-            self, self.install_model_clicked.emit
-        )
+        self.install_model_btn = make_install_model_button(self, self.install_model_clicked.emit)
         self.size_combo = AppCombo(self)
         for control in (
             self.model_combo,
@@ -242,10 +240,7 @@ class _PromptBox(QWidget):
         items = []
         presets = size_presets_for_mode(mode)
         for preset in presets:
-            label = (
-                f"{hd.get('GenerateSizeLabel', 'Size')}: "
-                f"{preset.width}×{preset.height}"
-            )
+            label = f"{hd.get('GenerateSizeLabel', 'Size')}: {preset.width}×{preset.height}"
             items.append((label, preset.key))
             if preset.width == width and preset.height == height:
                 current_key = preset.key
@@ -564,11 +559,11 @@ class DashboardInterface(QWidget):
             out_dir = Path(out_dir_raw).expanduser()
             out_dir.mkdir(parents=True, exist_ok=True)
             fd, output_path = tempfile.mkstemp(
-                prefix="midgard_flux_", suffix=".png", dir=str(out_dir)
+                prefix="midgard_generate_", suffix=".png", dir=str(out_dir)
             )
             os.close(fd)
         else:
-            fd, output_path = tempfile.mkstemp(prefix="midgard_flux_", suffix=".png")
+            fd, output_path = tempfile.mkstemp(prefix="midgard_generate_", suffix=".png")
             os.close(fd)
 
         try:

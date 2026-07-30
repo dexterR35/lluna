@@ -32,7 +32,7 @@ installing dependencies, downloading optional models, and checking for updates.
 
 | Tool | Input | What it does |
 |---|---|---|
-| **Generate Image** | Text prompt | Creates images with FLUX.2, SDXL Turbo, or Stable Diffusion 1.5. NVIDIA CUDA is required. |
+| **Generate Image** | Text prompt | Creates images locally with FLUX.2 or Qwen-Image through Diffusers. NVIDIA CUDA is required. |
 | **Remove Text** | Video or image | Detects hard subtitles, captions, and text regions, then fills the masked area with an inpainting model. |
 | **Remove BG** | Image | Produces a transparent PNG, with optional keep-mask painting, object selection, and local retouching. |
 | **Image Upscale** | Image | Enlarges images by 2× or 4× with Real-ESRGAN and optional denoising. |
@@ -346,19 +346,22 @@ states. Closing or clearing completed progress does not uninstall models.
 3. Select a model and output size.
 4. Enter a prompt and choose **Generate Image**.
 
-The dashboard exposes FLUX.2 Klein 4B and SDXL Turbo. FLUX.2 Klein 9B and Stable
-Diffusion 1.5 are also managed in Settings. Available size presets are 512×512,
-768×768, and 1024×1024. The app selects the model's maximum supported step
-count automatically; there is no steps selector in the page. Distilled FLUX
-models use their short inference schedule. Generated PNG files are written to
-the save directory configured in **Settings → Advanced**.
+The dashboard and Settings expose FLUX.2 Klein distilled/base models,
+FLUX.2 Dev, the official Klein 9B FP8 checkpoint, and Qwen-Image. Available
+size presets are 512×512, 768×768, and 1024×1024. The app selects each
+model's documented step count automatically; there is no steps selector on
+the page. Generated PNG files are written to the save directory configured
+in **Settings → Advanced**.
 
 | Model | Approximate VRAM | Step behavior | Notes |
 |---|---:|---:|---|
-| FLUX.2 Klein 4B | 13 GB | Automatic short schedule | Recommended FLUX default |
-| FLUX.2 Klein 9B | 29 GB | Automatic short schedule | Gated, non-commercial model; requires Hugging Face access |
-| SDXL Turbo | 8 GB | Automatic | Lighter dashboard option |
-| Stable Diffusion 1.5 | 4 GB | Automatic | Smaller legacy option managed in Settings |
+| FLUX.2 Klein 4B Distilled | 13 GB | 4 steps | Fast Apache-2.0 model |
+| FLUX.2 Klein 9B Distilled | 29 GB | 4 steps | Gated, non-commercial model |
+| FLUX.2 Klein 4B Base | 13 GB | 50 steps | Default flexible Apache-2.0 model |
+| FLUX.2 Klein 9B Base | 29 GB | 50 steps | Gated, non-commercial base model |
+| FLUX.2 Dev 32B | Very high | 50 steps | Gated, non-commercial; about 105.1 GiB downloaded |
+| FLUX.2 Klein 9B FP8 | 29 GB upstream estimate | 4 steps | Gated; about 24.2 GiB including required Diffusers components |
+| Qwen-Image 20B | Very high | 50 steps | Apache-2.0; about 53.7 GiB downloaded |
 
 VRAM figures are rough planning estimates, not guarantees. Resolution, driver,
 precision, and other running applications affect actual memory use.
@@ -366,6 +369,9 @@ precision, and other running applications affect actual memory use.
 For a gated Hugging Face repository, accept its terms on Hugging Face and add a
 token in **Settings → Generate Models**. Midgard stores model snapshots under
 `backend/models/generate/`.
+
+See [Generate model integration](docs/generate-models.md) for the authoritative
+repository layout, license, Diffusers pipeline, download, and inference details.
 
 ### Remove Text
 
@@ -503,7 +509,7 @@ The exact support depends on the model framework:
 | Real-ESRGAN and MIRNet | Selected PyTorch GPU backend | CPU |
 | SAM2 and Grounding DINO | Selected PyTorch GPU backend | CPU |
 | STTN, LaMa, and ProPainter | CUDA where supported; selected PyTorch backend for compatible paths | CPU |
-| FLUX.2, SDXL Turbo, and SD 1.5 generation | CUDA | No CPU mode in this release |
+| FLUX.2 and Qwen-Image generation | CUDA | CPU offload is used, but CUDA is still required |
 | OpenCV inpainting | CPU | Not applicable |
 
 An installed model is not permanently assigned to the computer on which it was

@@ -244,7 +244,7 @@ accepted as current truth.
 | Real-ESRGAN | General Torch device | Yes | Yes | Yes | Yes | No | Compatibility is assumed |
 | MIRNet | General Torch device | Yes | Yes | Yes | Yes | No | Compatibility is assumed |
 | SAM2 + Grounding DINO | General Torch device | Yes | Yes | Yes | Yes | No | Pair VRAM estimate is coarse |
-| FLUX/SDXL/SD 1.5 | Hard CUDA gate | No | Yes | No | No | No | Despite upstream alternatives, Midgard explicitly requires CUDA |
+| FLUX.2 / Qwen-Image | Hard CUDA gate | No | Yes | No | No | No | Midgard explicitly requires CUDA and may offload model layers to CPU |
 
 This matrix is the effective policy, but it is spread throughout implementation
 code and can drift. A normalized policy table must be the sole place where

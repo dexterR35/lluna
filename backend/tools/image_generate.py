@@ -1,4 +1,4 @@
-"""Text-to-image runners (FLUX.2 / SDXL Turbo / SD 1.5)."""
+"""Local Diffusers text-to-image runners."""
 
 from __future__ import annotations
 
@@ -89,40 +89,17 @@ def _check_cancel(cancel_event: CancelEvent, generation: int) -> None:
             raise GenerateCancelled()
 
 
-def _import_flux_pipeline_cls():
+def _import_diffusers_class(name: str):
     try:
-        from diffusers import Flux2KleinPipeline
+        import diffusers
 
-        return Flux2KleinPipeline
-    except ImportError:
-        pass
-    try:
-        from diffusers import DiffusionPipeline
-
-        return DiffusionPipeline
-    except ImportError as e:
+        return getattr(diffusers, name)
+    except (ImportError, AttributeError) as e:
         raise RuntimeError(
-            "diffusers with Flux2KleinPipeline is required for Generate. "
-            "Re-run install.py or: pip install -U 'diffusers>=0.37.1' accelerate"
+            f"diffusers with {name} is required for Generate. "
+            "Re-run install.py or: pip install -U 'diffusers>=0.38.0' "
+            "'transformers>=5.5.0' accelerate"
         ) from e
-
-
-def _import_autot2i_pipeline_cls():
-    try:
-        from diffusers import AutoPipelineForText2Image
-
-        return AutoPipelineForText2Image
-    except ImportError:
-        return None
-
-
-def _import_sd15_pipeline_cls():
-    try:
-        from diffusers import StableDiffusionPipeline
-
-        return StableDiffusionPipeline
-    except ImportError:
-        return None
 
 
 class _BaseRunner(Protocol):
@@ -162,8 +139,13 @@ class _DiffusersRunner:
         if pipe is None:
             return
         try:
-            # Keeps VRAM lower on consumer GPUs.
-            pipe.enable_model_cpu_offload()
+            info = catalog_info(self.mode)
+            if info is not None and info.sequential_cpu_offload:
+                # Very large and FP8-composite models may not fit a whole
+                # transformer on the GPU at once.
+                pipe.enable_sequential_cpu_offload()
+            else:
+                pipe.enable_model_cpu_offload()
         except Exception:
             pass
 
@@ -182,7 +164,14 @@ class _DiffusersRunner:
             del pipe
             empty_cuda_cache()
 
-    def _callback(self, step: int, steps: int, progress: ProgressCb, cancel_event: CancelEvent, generation: int):
+    def _callback(
+        self,
+        step: int,
+        steps: int,
+        progress: ProgressCb,
+        cancel_event: CancelEvent,
+        generation: int,
+    ):
         _check_cancel(cancel_event, generation)
         if progress is not None and steps > 0:
             pct = int(max(0, min(100, round((step + 1) / steps * 100))))
@@ -211,21 +200,18 @@ class _DiffusersRunner:
         if seed is not None:
             gen = torch.Generator(device="cuda").manual_seed(int(seed))
 
-        kwargs = {
-            "prompt": prompt,
-            "height": int(height),
-            "width": int(width),
-            "guidance_scale": float(guidance),
-            "num_inference_steps": int(steps),
-            "generator": gen,
-        }
-        try:
-            out = self.pipe(
-                **kwargs,
-                callback_on_step_end=_cb,
-            )
-        except TypeError:
-            out = self.pipe(**kwargs)
+        kwargs = self._build_call_kwargs(
+            prompt=prompt,
+            width=width,
+            height=height,
+            steps=steps,
+            guidance=guidance,
+            generator=gen,
+        )
+        out = self.pipe(
+            **kwargs,
+            callback_on_step_end=_cb,
+        )
 
         _check_cancel(cancel_event, generation)
         images = getattr(out, "images", None) or out
@@ -234,14 +220,30 @@ class _DiffusersRunner:
             raise RuntimeError("Generate pipeline did not return a PIL image.")
         return img.convert("RGB")
 
+    def _build_call_kwargs(
+        self,
+        *,
+        prompt: str,
+        width: int,
+        height: int,
+        steps: int,
+        guidance: float,
+        generator,
+    ) -> dict:
+        return {
+            "prompt": prompt,
+            "height": int(height),
+            "width": int(width),
+            "guidance_scale": float(guidance),
+            "num_inference_steps": int(steps),
+            "generator": generator,
+        }
 
-class _FluxRunner(_DiffusersRunner):
-    def __init__(self, mode: GenerateMode, dtype: torch.dtype):
-        super().__init__(mode, dtype)
 
+class _FluxKleinRunner(_DiffusersRunner):
     def _load_pipeline(self):
         path = local_repo_path(self.mode)
-        Pipeline = _import_flux_pipeline_cls()
+        Pipeline = _import_diffusers_class("Flux2KleinPipeline")
         return Pipeline.from_pretrained(
             str(path),
             torch_dtype=self.dtype,
@@ -249,74 +251,89 @@ class _FluxRunner(_DiffusersRunner):
             use_safetensors=True,
         )
 
-class _SdxlTurboRunner(_DiffusersRunner):
-    def __init__(self, mode: GenerateMode, dtype: torch.dtype):
-        super().__init__(mode, dtype)
 
+class _Flux2DevRunner(_DiffusersRunner):
     def _load_pipeline(self):
         path = local_repo_path(self.mode)
-        info = catalog_info(self.mode)
-        variant = info.weight_variant if info is not None else "fp16"
-        AutoT2I = _import_autot2i_pipeline_cls()
-        if AutoT2I is not None:
-            return AutoT2I.from_pretrained(
-                str(path),
-                torch_dtype=self.dtype,
-                local_files_only=True,
-                use_safetensors=True,
-                variant=variant,
-            )
-        from diffusers import DiffusionPipeline
-
-        return DiffusionPipeline.from_pretrained(
+        Pipeline = _import_diffusers_class("Flux2Pipeline")
+        return Pipeline.from_pretrained(
             str(path),
             torch_dtype=self.dtype,
             local_files_only=True,
             use_safetensors=True,
-            variant=variant,
         )
 
 
-class _Sd15Runner(_DiffusersRunner):
-    def __init__(self, mode: GenerateMode, dtype: torch.dtype):
-        super().__init__(mode, dtype)
-
+class _FluxKleinFp8Runner(_DiffusersRunner):
     def _load_pipeline(self):
         path = local_repo_path(self.mode)
         info = catalog_info(self.mode)
-        variant = info.weight_variant if info is not None else "fp16"
-        SD15 = _import_sd15_pipeline_cls()
-        if SD15 is not None:
-            return SD15.from_pretrained(
-                str(path),
-                torch_dtype=self.dtype,
-                local_files_only=True,
-                safety_checker=None,
-                use_safetensors=True,
-                variant=variant,
-            )
-        from diffusers import DiffusionPipeline
+        if info is None or not info.single_file_name:
+            raise RuntimeError(f"Missing FP8 model metadata for {self.mode.value}")
 
-        return DiffusionPipeline.from_pretrained(
+        Transformer = _import_diffusers_class("Flux2Transformer2DModel")
+        Pipeline = _import_diffusers_class("Flux2KleinPipeline")
+        transformer = Transformer.from_single_file(
+            str(path / info.single_file_name),
+            config=str(path),
+            subfolder="transformer",
+            local_files_only=True,
+            low_cpu_mem_usage=True,
+        )
+        return Pipeline.from_pretrained(
+            str(path),
+            transformer=transformer,
+            torch_dtype=self.dtype,
+            local_files_only=True,
+            use_safetensors=True,
+        )
+
+
+class _QwenImageRunner(_DiffusersRunner):
+    def _load_pipeline(self):
+        path = local_repo_path(self.mode)
+        Pipeline = _import_diffusers_class("QwenImagePipeline")
+        return Pipeline.from_pretrained(
             str(path),
             torch_dtype=self.dtype,
             local_files_only=True,
-            safety_checker=None,
             use_safetensors=True,
-            variant=variant,
         )
+
+    def _build_call_kwargs(
+        self,
+        *,
+        prompt: str,
+        width: int,
+        height: int,
+        steps: int,
+        guidance: float,
+        generator,
+    ) -> dict:
+        return {
+            "prompt": prompt,
+            "negative_prompt": " ",
+            "height": int(height),
+            "width": int(width),
+            "true_cfg_scale": float(guidance),
+            "num_inference_steps": int(steps),
+            "generator": generator,
+        }
 
 
 def _make_runner(mode: GenerateMode, dtype: torch.dtype) -> _BaseRunner:
     info = catalog_info(mode)
-    pipeline = info.pipeline if info is not None else "flux"
-    if pipeline == "flux":
-        return _FluxRunner(mode, dtype)
-    if pipeline == "sdxl_turbo":
-        return _SdxlTurboRunner(mode, dtype)
-    if pipeline == "sd15":
-        return _Sd15Runner(mode, dtype)
-    raise RuntimeError(f"Unknown generate pipeline '{pipeline}' for {mode.value}")
+    if info is None:
+        raise RuntimeError(f"Unknown Generate model '{mode.value}'")
+    if info.pipeline == "flux2_klein":
+        return _FluxKleinRunner(mode, dtype)
+    if info.pipeline == "flux2":
+        return _Flux2DevRunner(mode, dtype)
+    if info.pipeline == "flux2_klein_fp8":
+        return _FluxKleinFp8Runner(mode, dtype)
+    if info.pipeline == "qwen_image":
+        return _QwenImageRunner(mode, dtype)
+    raise RuntimeError(f"Unknown Diffusers pipeline '{info.pipeline}'")
 
 
 def _get_runner(mode: GenerateMode) -> _BaseRunner:
@@ -360,7 +377,7 @@ def generate_image(
     if not ok:
         raise GenerateCudaError(reason)
 
-    # Align to multiples of 16 (FLUX.2 klein requirement).
+    # All supported latent image pipelines require dimensions divisible by 16.
     width = max(64, (int(width) // 16) * 16)
     height = max(64, (int(height) // 16) * 16)
     if steps is None:

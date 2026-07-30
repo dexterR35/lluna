@@ -6,8 +6,19 @@ from pathlib import Path
 # qfluentwidgets prints a Pro promo tip on import - silence it
 _qfw_stdout = StringIO()
 with redirect_stdout(_qfw_stdout):
-    from qfluentwidgets import (qconfig, ConfigItem, QConfig, OptionsValidator, BoolValidator, OptionsConfigItem,
-                                EnumSerializer, RangeValidator, RangeConfigItem, ConfigValidator, Theme)
+    from qfluentwidgets import (
+        qconfig,
+        ConfigItem,
+        QConfig,
+        OptionsValidator,
+        BoolValidator,
+        OptionsConfigItem,
+        EnumSerializer,
+        RangeValidator,
+        RangeConfigItem,
+        ConfigValidator,
+        Theme,
+    )
 from backend.tools.constant import (
     InpaintMode,
     SubtitleDetectMode,
@@ -65,8 +76,8 @@ class Config(QConfig):
     retouchProgressHideMs = 900
 
     # Zoom / preview rendering (Photoshop-like viewport over full-res pixels)
-    minZoom = 0.05   # 5% - zoom out
-    maxZoom = 8.0    # 800% - zoom in
+    minZoom = 0.05  # 5% - zoom out
+    maxZoom = 8.0  # 800% - zoom in
     zoomStep = 1.25
     # 0 = original image size (no downsample). Applies to all previews/dialogs.
     previewMaxSide = 0
@@ -96,9 +107,21 @@ class Config(QConfig):
     - InpaintMode.PROPAINTER: High VRAM usage; slower; better for videos with very intense motion
     """
     # Inpaint algorithm - STTN Smart Inpainting is the first-install / factory default
-    inpaintMode = OptionsConfigItem("Main", "InpaintMode", InpaintMode.STTN_AUTO, OptionsValidator(InpaintMode), EnumSerializer(InpaintMode))
-    
-    subtitleDetectMode =  OptionsConfigItem("Main", "SubtitleDetectMode", SubtitleDetectMode.PP_OCRv5_SERVER, OptionsValidator(SubtitleDetectMode), EnumSerializer(SubtitleDetectMode))
+    inpaintMode = OptionsConfigItem(
+        "Main",
+        "InpaintMode",
+        InpaintMode.STTN_AUTO,
+        OptionsValidator(InpaintMode),
+        EnumSerializer(InpaintMode),
+    )
+
+    subtitleDetectMode = OptionsConfigItem(
+        "Main",
+        "SubtitleDetectMode",
+        SubtitleDetectMode.PP_OCRv5_SERVER,
+        OptionsValidator(SubtitleDetectMode),
+        EnumSerializer(SubtitleDetectMode),
+    )
 
     # Background removal model (images only; separate from inpaint)
     # BiRefNet General is the default high-quality cutout model
@@ -157,7 +180,7 @@ class Config(QConfig):
     )
     lowLightMaxLongEdge = ConfigItem("LowLight", "MaxLongEdge", 2048)
 
-    # FLUX.2 text-to-image (Home dashboard Generate) — Settings install / On / Off
+    # Local Diffusers text-to-image (Home dashboard Generate) — install / On / Off
     generateMode = OptionsConfigItem(
         "Generate",
         "Mode",
@@ -193,16 +216,30 @@ class Config(QConfig):
     # Pixel tolerance settings
     # Used to detect false non-subtitle regions (subtitle boxes are usually wider than tall;
     # if height exceeds width by more than this many pixels, treat as a false detection)
-    subtitleYXAxisDifferencePixel = RangeConfigItem("Main", "SubtitleYXAxisDifferencePixel", 10, RangeValidator(0, 300))
+    subtitleYXAxisDifferencePixel = RangeConfigItem(
+        "Main", "SubtitleYXAxisDifferencePixel", 10, RangeValidator(0, 300)
+    )
     # Expand mask size so auto-detected boxes are not too small and leave text edges/residue during inpaint
-    subtitleAreaDeviationPixel = RangeConfigItem("Main", "SubtitleAreaDeviationPixel", 10, RangeValidator(1, 300))
+    subtitleAreaDeviationPixel = RangeConfigItem(
+        "Main", "SubtitleAreaDeviationPixel", 10, RangeValidator(1, 300)
+    )
     # Used to decide whether two text boxes are on the same subtitle line (within this height difference)
-    subtitleAreaYAxisDifferencePixel = RangeConfigItem("Main", "SubtitleAreaYAxisDifferencePixel", 20, RangeValidator(0, 300))
+    subtitleAreaYAxisDifferencePixel = RangeConfigItem(
+        "Main", "SubtitleAreaYAxisDifferencePixel", 20, RangeValidator(0, 300)
+    )
     # Used to decide whether two subtitle boxes are similar; if X and Y deviations are within thresholds, treat as the same box
-    subtitleAreaPixelToleranceYPixel = RangeConfigItem("Main", "SubtitleAreaPixelToleranceYPixel", 20, RangeValidator(0, 300))
-    subtitleAreaPixelToleranceXPixel = RangeConfigItem("Main", "SubtitleAreaPixelToleranceXPixel", 20, RangeValidator(0, 300))
-    subtitleTimelineBackwardFrameCount = RangeConfigItem("Main", "SubtitleTimelineBackwardFrameCount", 3, RangeValidator(0, 300))
-    subtitleTimelineForwardFrameCount = RangeConfigItem("Main", "SubtitleTimelineForwardFrameCount", 3, RangeValidator(0, 300))
+    subtitleAreaPixelToleranceYPixel = RangeConfigItem(
+        "Main", "SubtitleAreaPixelToleranceYPixel", 20, RangeValidator(0, 300)
+    )
+    subtitleAreaPixelToleranceXPixel = RangeConfigItem(
+        "Main", "SubtitleAreaPixelToleranceXPixel", 20, RangeValidator(0, 300)
+    )
+    subtitleTimelineBackwardFrameCount = RangeConfigItem(
+        "Main", "SubtitleTimelineBackwardFrameCount", 3, RangeValidator(0, 300)
+    )
+    subtitleTimelineForwardFrameCount = RangeConfigItem(
+        "Main", "SubtitleTimelineForwardFrameCount", 3, RangeValidator(0, 300)
+    )
     # The following parameters only apply when using the STTN algorithm
     """
     1. STTN_SKIP_DETECTION
@@ -236,7 +273,7 @@ class Config(QConfig):
         self.sttnNeighborStride.value,
         self.sttnReferenceLength.value,
     )
-    
+
     # The following parameters only apply when using the PROPAINTER algorithm
     # Set based on your GPU VRAM: larger max concurrent images improve quality but need more VRAM
     # For 1280x720p: 80 needs ~25GB VRAM, 50 needs ~19GB
@@ -244,8 +281,10 @@ class Config(QConfig):
     propainterMaxLoadNum = RangeConfigItem("ProPainter", "MaxLoadNum", 70, RangeValidator(1, 300))
 
     # Whether to use hardware acceleration
-    hardwareAcceleration = ConfigItem("Main", "HardwareAcceleration", HARDWARE_ACCELERATION_OPTION, BoolValidator())
-    
+    hardwareAcceleration = ConfigItem(
+        "Main", "HardwareAcceleration", HARDWARE_ACCELERATION_OPTION, BoolValidator()
+    )
+
     # Check for app updates on startup
     checkUpdateOnStartup = ConfigItem("Main", "CheckUpdateOnStartup", True, BoolValidator())
 

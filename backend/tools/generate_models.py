@@ -1,4 +1,4 @@
-"""FLUX.2 text-to-image model catalog: install, paths, enable/disable."""
+"""Diffusers text-to-image model catalog: install, paths, enable/disable."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from backend.tools.constant import GenerateMode
 
 _MARKER = ".midgard_installed"
 
-_FLUX_ALLOW_PATTERNS = (
+_DIFFUSERS_ALLOW_PATTERNS = (
     "model_index.json",
     "scheduler/*.json",
     "text_encoder/*.json",
@@ -22,33 +22,23 @@ _FLUX_ALLOW_PATTERNS = (
     "vae/*.safetensors",
 )
 
-_SDXL_TURBO_ALLOW_PATTERNS = (
+
+_FLUX2_KLEIN_FP8_COMPONENT_PATTERNS = (
     "model_index.json",
     "scheduler/*.json",
-    "text_encoder/config.json",
-    "text_encoder/*.fp16.safetensors",
-    "text_encoder_2/config.json",
-    "text_encoder_2/*.fp16.safetensors",
+    "text_encoder/*.json",
+    "text_encoder/*.safetensors",
     "tokenizer/*",
-    "tokenizer_2/*",
-    "unet/config.json",
-    "unet/*.fp16.safetensors",
-    "vae/config.json",
-    "vae/*.fp16.safetensors",
+    "transformer/config.json",
+    "vae/*.json",
+    "vae/*.safetensors",
 )
 
-_SD15_ALLOW_PATTERNS = (
-    "model_index.json",
-    "feature_extractor/*.json",
-    "scheduler/*.json",
-    "text_encoder/config.json",
-    "text_encoder/*.fp16.safetensors",
-    "tokenizer/*",
-    "unet/config.json",
-    "unet/*.fp16.safetensors",
-    "vae/config.json",
-    "vae/*.fp16.safetensors",
-)
+
+@dataclass(frozen=True)
+class GenerateDownload:
+    hf_repo: str
+    allow_patterns: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -59,7 +49,9 @@ class GenerateModelInfo:
     pipeline: str
     default_guidance: float
     download_allow_patterns: tuple[str, ...]
-    weight_variant: Optional[str] = None
+    supporting_downloads: tuple[GenerateDownload, ...] = ()
+    single_file_name: Optional[str] = None
+    sequential_cpu_offload: bool = False
     is_default: bool = False
 
 
@@ -68,63 +60,78 @@ MODEL_CATALOG: List[GenerateModelInfo] = [
         GenerateMode.FLUX2_KLEIN_4B,
         desc_key="FLUX2_KLEIN_4B",
         hf_repo="black-forest-labs/FLUX.2-klein-4B",
-        pipeline="flux",
+        pipeline="flux2_klein",
         default_guidance=1.0,
-        download_allow_patterns=_FLUX_ALLOW_PATTERNS,
+        download_allow_patterns=_DIFFUSERS_ALLOW_PATTERNS,
         is_default=False,
     ),
     GenerateModelInfo(
         GenerateMode.FLUX2_KLEIN_9B,
         desc_key="FLUX2_KLEIN_9B",
         hf_repo="black-forest-labs/FLUX.2-klein-9B",
-        pipeline="flux",
+        pipeline="flux2_klein",
         default_guidance=1.0,
-        download_allow_patterns=_FLUX_ALLOW_PATTERNS,
+        download_allow_patterns=_DIFFUSERS_ALLOW_PATTERNS,
         is_default=False,
     ),
     GenerateModelInfo(
         GenerateMode.FLUX2_KLEIN_BASE_4B,
         desc_key="FLUX2_KLEIN_BASE_4B",
         hf_repo="black-forest-labs/FLUX.2-klein-base-4B",
-        pipeline="flux",
+        pipeline="flux2_klein",
         default_guidance=4.0,
-        download_allow_patterns=_FLUX_ALLOW_PATTERNS,
+        download_allow_patterns=_DIFFUSERS_ALLOW_PATTERNS,
         is_default=True,
     ),
     GenerateModelInfo(
         GenerateMode.FLUX2_KLEIN_BASE_9B,
         desc_key="FLUX2_KLEIN_BASE_9B",
         hf_repo="black-forest-labs/FLUX.2-klein-base-9B",
-        pipeline="flux",
+        pipeline="flux2_klein",
         default_guidance=4.0,
-        download_allow_patterns=_FLUX_ALLOW_PATTERNS,
+        download_allow_patterns=_DIFFUSERS_ALLOW_PATTERNS,
         is_default=False,
     ),
     GenerateModelInfo(
-        GenerateMode.SDXL_TURBO,
-        desc_key="SDXL_TURBO",
-        hf_repo="stabilityai/sdxl-turbo",
-        pipeline="sdxl_turbo",
-        default_guidance=0.0,
-        download_allow_patterns=_SDXL_TURBO_ALLOW_PATTERNS,
-        weight_variant="fp16",
+        GenerateMode.FLUX2_DEV,
+        desc_key="FLUX2_DEV",
+        hf_repo="black-forest-labs/FLUX.2-dev",
+        pipeline="flux2",
+        default_guidance=4.0,
+        download_allow_patterns=_DIFFUSERS_ALLOW_PATTERNS,
+        sequential_cpu_offload=True,
         is_default=False,
     ),
     GenerateModelInfo(
-        GenerateMode.SD15,
-        desc_key="SD15",
-        hf_repo="stable-diffusion-v1-5/stable-diffusion-v1-5",
-        pipeline="sd15",
-        default_guidance=7.5,
-        download_allow_patterns=_SD15_ALLOW_PATTERNS,
-        weight_variant="fp16",
+        GenerateMode.FLUX2_KLEIN_9B_FP8,
+        desc_key="FLUX2_KLEIN_9B_FP8",
+        hf_repo="black-forest-labs/FLUX.2-klein-9b-fp8",
+        pipeline="flux2_klein_fp8",
+        default_guidance=1.0,
+        download_allow_patterns=("flux-2-klein-9b-fp8.safetensors",),
+        supporting_downloads=(
+            GenerateDownload(
+                "black-forest-labs/FLUX.2-klein-9B",
+                _FLUX2_KLEIN_FP8_COMPONENT_PATTERNS,
+            ),
+        ),
+        single_file_name="flux-2-klein-9b-fp8.safetensors",
+        sequential_cpu_offload=True,
+        is_default=False,
+    ),
+    GenerateModelInfo(
+        GenerateMode.QWEN_IMAGE,
+        desc_key="QWEN_IMAGE",
+        hf_repo="Qwen/Qwen-Image",
+        pipeline="qwen_image",
+        default_guidance=4.0,
+        download_allow_patterns=_DIFFUSERS_ALLOW_PATTERNS,
+        sequential_cpu_offload=True,
         is_default=False,
     ),
 ]
 
-_CATALOG_BY_MODE: Dict[GenerateMode, GenerateModelInfo] = {
-    m.mode: m for m in MODEL_CATALOG
-}
+_CATALOG_BY_MODE: Dict[GenerateMode, GenerateModelInfo] = {m.mode: m for m in MODEL_CATALOG}
 
 # Nothing On until the user installs (weights are large; Settings-only).
 DEFAULT_ENABLED_VALUES: tuple[str, ...] = ()
@@ -199,7 +206,8 @@ def uninstall_model(mode: GenerateMode) -> None:
     from backend.tools.hf_auth import remove_hf_repo_cache
 
     # Older releases kept a second copy in the shared Hugging Face cache.
-    remove_hf_repo_cache(info.hf_repo)
+    for download in model_downloads(info):
+        remove_hf_repo_cache(download.hf_repo)
     dest = model_dir(mode)
     try:
         if dest.is_dir():
@@ -216,6 +224,13 @@ def catalog_info(mode: GenerateMode) -> Optional[GenerateModelInfo]:
     return _CATALOG_BY_MODE.get(mode)
 
 
+def model_downloads(info: GenerateModelInfo) -> tuple[GenerateDownload, ...]:
+    return (
+        GenerateDownload(info.hf_repo, info.download_allow_patterns),
+        *info.supporting_downloads,
+    )
+
+
 def _validate_download_snapshot(info: GenerateModelInfo, dest: Path) -> None:
     required_files = [
         "model_index.json",
@@ -225,20 +240,11 @@ def _validate_download_snapshot(info: GenerateModelInfo, dest: Path) -> None:
         "vae/config.json",
     ]
     required_weight_dirs = ["text_encoder", "vae"]
-    if info.pipeline == "flux":
-        required_files.append("transformer/config.json")
-        required_weight_dirs.append("transformer")
+    required_files.append("transformer/config.json")
+    if info.single_file_name:
+        required_files.append(info.single_file_name)
     else:
-        required_files.append("unet/config.json")
-        required_weight_dirs.append("unet")
-    if info.pipeline == "sdxl_turbo":
-        required_files.extend(
-            [
-                "text_encoder_2/config.json",
-                "tokenizer_2/tokenizer_config.json",
-            ]
-        )
-        required_weight_dirs.append("text_encoder_2")
+        required_weight_dirs.append("transformer")
 
     missing = [rel for rel in required_files if not (dest / rel).is_file()]
     for rel in required_weight_dirs:
@@ -246,8 +252,7 @@ def _validate_download_snapshot(info: GenerateModelInfo, dest: Path) -> None:
             missing.append(f"{rel}/*.safetensors")
     if missing:
         raise RuntimeError(
-            f"Downloaded {info.mode.value} snapshot is incomplete; missing: "
-            + ", ".join(missing)
+            f"Downloaded {info.mode.value} snapshot is incomplete; missing: " + ", ".join(missing)
         )
 
 
@@ -361,30 +366,34 @@ def install_model(mode: GenerateMode) -> Path:
     apply_hf_token_to_env()
     try:
         reg.check_cancelled()
-        snapshot_download_with_progress(
-            repo_id=info.hf_repo,
-            local_dir=str(dest),
-            allow_patterns=list(info.download_allow_patterns),
-        )
-        reg.check_cancelled()
+        for download in model_downloads(info):
+            snapshot_download_with_progress(
+                repo_id=download.hf_repo,
+                local_dir=str(dest),
+                allow_patterns=list(download.allow_patterns),
+            )
+            reg.check_cancelled()
         _validate_download_snapshot(info, dest)
         # The runtime snapshot is complete; its download cache is redundant.
-        remove_hf_repo_cache(info.hf_repo, include_shared=False)
+        for download in model_downloads(info):
+            remove_hf_repo_cache(download.hf_repo, include_shared=False)
     except DownloadCancelled:
         discard_partial(mode)
         reg.fail(KIND_GENERATE, mode.value, keep_pending=True)
-        try:
-            remove_hf_repo_cache(info.hf_repo, include_shared=False)
-        except Exception:
-            pass
+        for download in model_downloads(info):
+            try:
+                remove_hf_repo_cache(download.hf_repo, include_shared=False)
+            except Exception:
+                pass
         raise
     except Exception as e:
         discard_partial(mode)
         reg.fail(KIND_GENERATE, mode.value, keep_pending=False)
-        try:
-            remove_hf_repo_cache(info.hf_repo, include_shared=False)
-        except Exception:
-            pass
+        for download in model_downloads(info):
+            try:
+                remove_hf_repo_cache(download.hf_repo, include_shared=False)
+            except Exception:
+                pass
         msg = str(e)
         lower = msg.lower()
         if "401" in msg or "403" in msg or "gated" in lower or "unauthorized" in lower:

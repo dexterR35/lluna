@@ -22,8 +22,9 @@ def test_required_model_inventory_is_unique() -> None:
         "sam2",
         "grounding-dino",
         "flux",
-        "sdxl-turbo",
-        "stable-diffusion-1.5",
+        "flux2-dev",
+        "flux2-klein-9b-fp8",
+        "qwen-image",
     }
     assert required == set(MODEL_REGISTRY)
     assert all(model.source and model.license for model in MODEL_REGISTRY.values())

@@ -68,7 +68,7 @@ The product is intended to keep media processing on the user's machine and to
 preserve source resolution where the selected operation allows it
 (`README.md:7-10`). Its functional surfaces are:
 
-- Generate Image: FLUX.2, SDXL Turbo, or SD 1.5 through Diffusers, CUDA-only
+- Generate Image: FLUX.2 Klein, FLUX.2 Dev, or Qwen-Image through Diffusers, CUDA-only
   (`README.md:53-84`, `backend/tools/generate_models.py:27-71`,
   `backend/tools/generate_models.py:321-349`).
 - Remove Text: OCR-assisted subtitle/text detection followed by STTN, LaMa,
@@ -669,10 +669,11 @@ feedback, issues, and releases UI therefore point at a different repository
 | MIRNet LOL | Google-hosted `MIRNet_LOL.pth` (`backend/tools/low_light_models.py:13-35`) | Downloaded/default. |
 | SAM2 Tiny + DINO Tiny | Fast pair (`backend/tools/select_object_models.py:71-89`) | Downloaded/default pair. |
 | SAM2 Large + DINO Base | Complex pair (`backend/tools/select_object_models.py:76-90`) | Optional download. |
-| FLUX.2 Klein 4B | HF `black-forest-labs/FLUX.2-klein-4B` (`backend/tools/generate_models.py:27-38`) | User-installed, default catalog choice; not enabled until installed. |
-| FLUX.2 Klein 9B | HF `black-forest-labs/FLUX.2-klein-9B` (`backend/tools/generate_models.py:39-49`) | Optional/gated. |
-| SDXL Turbo | HF `stabilityai/sdxl-turbo` (`backend/tools/generate_models.py:50-60`) | Optional. |
-| SD 1.5 | HF `runwayml/stable-diffusion-v1-5` (`backend/tools/generate_models.py:61-71`) | Optional. |
+| FLUX.2 Klein 4B distilled/base | HF `black-forest-labs/FLUX.2-klein-4B` and `black-forest-labs/FLUX.2-klein-base-4B` | User-installed; base is the default catalog choice. |
+| FLUX.2 Klein 9B distilled/base | HF `black-forest-labs/FLUX.2-klein-9B` and `black-forest-labs/FLUX.2-klein-base-9B` | Optional/gated. |
+| FLUX.2 Dev | HF `black-forest-labs/FLUX.2-dev` | Optional/gated full Diffusers snapshot. |
+| FLUX.2 Klein 9B FP8 | HF FP8 transformer plus components from the full Klein 9B repository | Optional/gated two-source install. |
+| Qwen-Image | HF `Qwen/Qwen-Image` | Optional Apache-2.0 full Diffusers snapshot. |
 
 Root README model-license labels exist for generation models
 (`README.md:73-80`), but no consolidated tracked third-party model license,

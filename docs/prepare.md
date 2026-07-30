@@ -668,9 +668,7 @@ Inventory:
 - MIRNet;
 - SAM2;
 - Grounding DINO;
-- FLUX models;
-- SDXL Turbo;
-- Stable Diffusion 1.5.
+- FLUX.2 Klein distilled/base, FLUX.2 Dev, Klein 9B FP8, and Qwen-Image.
 
 For every model document:
 
