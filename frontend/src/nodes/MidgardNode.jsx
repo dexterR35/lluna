@@ -12,7 +12,7 @@ const ACCENTS = { teal: "#63cbb6", blue: "#70b7f8", violet: "#a393fa", amber: "#
 function Port({ port, side }) {
   const output = side === "output";
   return <div className={`relative flex min-h-5 items-center gap-1.5 px-2.5 text-[9px] text-mg-secondary ${output ? "justify-end" : "justify-start"}`}>
-    <Handle id={port.id} type={output ? "source" : "target"} position={output ? Position.Right : Position.Left} style={{ backgroundColor: PORT_COLORS[port.type] || "#9298a7" }} aria-label={`${port.label}, ${port.type}`} />
+    <Handle id={port.id} type={output ? "source" : "target"} position={output ? Position.Right : Position.Left} className="midgard-port-handle" style={{ backgroundColor: PORT_COLORS[port.type] || "#9298a7" }} aria-label={`${port.label}, ${port.type}`} />
     <span className="truncate">{port.label}</span><span className="text-[7px] uppercase tracking-wide text-mg-muted">{port.type}</span>
   </div>;
 }

@@ -60,9 +60,43 @@ button { -webkit-tap-highlight-color: transparent; }
 }
 .react-flow__attribution { display: none; }
 .react-flow__node { font-size: inherit; }
-.react-flow__handle { width: 9px; height: 9px; border: 2px solid var(--mg-bg-node); }
-.react-flow__edge-path { stroke: #50566a; stroke-width: 1.5; }
-.react-flow__edge:hover .react-flow__edge-path, .react-flow__edge.selected .react-flow__edge-path { stroke: var(--mg-accent); stroke-width: 2; }
+.react-flow__handle.midgard-port-handle {
+  position: absolute;
+  width: 11px;
+  height: 11px;
+  border: 2px solid #0a0c10;
+  outline: 1px solid #4b5261;
+  transition: outline-color .15s ease, transform .15s ease;
+}
+.react-flow__handle-left.midgard-port-handle { left: -6px; }
+.react-flow__handle-right.midgard-port-handle { right: -6px; }
+.react-flow__handle.midgard-port-handle:hover,
+.react-flow__handle.midgard-port-handle.connecting,
+.react-flow__handle.midgard-port-handle.valid {
+  outline-color: var(--mg-accent);
+  transform: scale(1.15);
+}
+.react-flow__edge-path { stroke: #626a7d; stroke-width: 1.8; }
+.react-flow__edge:hover .react-flow__edge-path, .react-flow__edge.selected .react-flow__edge-path { stroke: var(--mg-accent); stroke-width: 2.4; }
+.midgard-edge-unlink {
+  z-index: 4;
+  border-color: #424957;
+  background: var(--mg-bg-panel);
+  color: #a6adba;
+  opacity: .72;
+  pointer-events: all;
+  transition: border-color .15s ease, background-color .15s ease, color .15s ease, opacity .15s ease, scale .15s ease;
+}
+.midgard-edge-unlink:hover,
+.midgard-edge-unlink:focus-visible,
+.midgard-edge-unlink.is-selected {
+  border-color: var(--mg-error);
+  background: color-mix(in srgb, var(--mg-error) 12%, var(--mg-bg-panel));
+  color: var(--mg-error);
+  opacity: 1;
+}
+.midgard-edge-unlink:hover { scale: 1.08; }
+.midgard-edge-unlink:focus-visible { outline: 2px solid color-mix(in srgb, var(--mg-error) 45%, transparent); outline-offset: 2px; }
 .react-flow__selection, .react-flow__nodesselection-rect { background: color-mix(in srgb, var(--mg-accent) 10%, transparent); border: 1px solid var(--mg-accent); }
 .react-flow__controls { overflow: hidden; border: 1px solid var(--mg-border); border-radius: 10px; }
 .react-flow__controls-button { background: var(--mg-bg-panel); border-color: var(--mg-border); fill: var(--mg-text-primary); }
