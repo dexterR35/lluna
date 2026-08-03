@@ -207,27 +207,24 @@ button { -webkit-tap-highlight-color: transparent; }
 }
 .midgard-node-prompt textarea::placeholder { color: var(--mg-text-muted); }
 .midgard-node-progress { padding: 6px 12px 0; }
-.midgard-node-body-controls {
-  display: flex;
-  min-width: 0;
-  flex-wrap: wrap;
-  gap: 6px;
-  border-top: 1px solid var(--mg-border-subtle);
-  background: #10131a;
-  padding: 9px 10px;
-}
 .midgard-node-footer {
   display: flex;
-  align-items: flex-end;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
   gap: 8px;
   padding: 10px 12px 12px;
 }
+.midgard-node-footer-options,
 .midgard-node-footer-actions {
   display: flex;
-  flex-shrink: 0;
+  min-width: 0;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
+}
+.midgard-node-footer-actions {
+  flex-shrink: 0;
+  justify-content: flex-end;
 }
 .midgard-node-gear {
   display: grid;
@@ -252,11 +249,11 @@ button { -webkit-tap-highlight-color: transparent; }
   background: #eceff4;
   color: #111318;
   cursor: pointer;
-  transition: transform .15s ease, filter .15s ease, opacity .15s ease;
+  transition: filter .15s ease, opacity .15s ease;
 }
 .midgard-node.is-selected .midgard-node-run { background: #fff; }
-.midgard-node-run:hover { filter: brightness(1.05); transform: scale(1.04); }
-.midgard-node-run:disabled { cursor: not-allowed; opacity: .45; transform: none; }
+.midgard-node-run:hover { filter: brightness(1.05); }
+.midgard-node-run:disabled { cursor: not-allowed; opacity: .45; }
 
 .react-flow__handle.midgard-port-handle {
   display: grid;

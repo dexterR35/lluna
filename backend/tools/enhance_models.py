@@ -19,8 +19,6 @@ from backend.tools.constant import EnhanceMode
 class EnhanceModelInfo:
     mode: EnhanceMode
     scale: int
-    """Translation key under [EnhanceMode] / [EnhanceModelDesc]."""
-    desc_key: str
     download_url: str
     version: str
     artifact: ExpectedFile
@@ -32,7 +30,6 @@ MODEL_CATALOG: List[EnhanceModelInfo] = [
     EnhanceModelInfo(
         EnhanceMode.X2PLUS,
         scale=2,
-        desc_key="X2PLUS",
         download_url=(
             "https://github.com/xinntao/Real-ESRGAN/releases/download/"
             "v0.2.1/RealESRGAN_x2plus.pth"
@@ -44,7 +41,6 @@ MODEL_CATALOG: List[EnhanceModelInfo] = [
     EnhanceModelInfo(
         EnhanceMode.X4PLUS,
         scale=4,
-        desc_key="X4PLUS",
         download_url=(
             "https://github.com/xinntao/Real-ESRGAN/releases/download/"
             "v0.1.0/RealESRGAN_x4plus.pth"

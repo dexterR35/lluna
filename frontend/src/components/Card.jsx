@@ -6,6 +6,7 @@ import { cn } from "./utils";
  *   children?: import("react").ReactNode,
  *   className?: string,
  *   as?: "article"|"div"|"section"|"li"|"button",
+ *   type?: "button"|"submit"|"reset",
  *   padded?: boolean,
  *   interactive?: boolean,
  *   selected?: boolean,

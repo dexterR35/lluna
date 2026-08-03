@@ -14,7 +14,6 @@ settings.ini
 subtitle.ini
 
 # Installer / packaging artifacts
-backend/tools/train/release_model/
 backend/test.py
 
 # Core STTN / LaMa parts / ProPainter parts / OCR / ffmpeg are tracked in git

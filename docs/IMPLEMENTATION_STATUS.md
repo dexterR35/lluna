@@ -72,7 +72,7 @@ Last verified: 2026-07-31 with Electron 43.2.0 and Electron Forge 7.11.2.
 ## File impact summary
 
 - Added `frontend/` Electron, React editor, component system, tests, and packaging configuration.
-- Added `backend/api`, `backend/graph`, `backend/artifacts`, `backend/projects`, model facade, and typed configuration service.
+- Added `backend/api`, `backend/graph`, `backend/artifacts`, model facade, and typed configuration service.
 - Reworked Python bootstrap/entrypoint and all direct settings consumers to remove GUI-global configuration.
 - Replaced packaging/build and CI desktop paths with Electron plus frozen sidecar.
 - Deleted the complete legacy desktop UI and its tests/launchers.

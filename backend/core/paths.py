@@ -22,7 +22,6 @@ class AppPaths:
     config_file: Path
     runtime_config_file: Path
     shipped_config_file: Path
-    translation_file: Path
     models_dir: Path
     runtime_file: Path
 
@@ -54,7 +53,6 @@ class AppPaths:
             config_file=config_dir / "config.json",
             runtime_config_file=config_dir / "runtime.json",
             shipped_config_file=root / "config" / "defaults.json",
-            translation_file=root / "backend" / "interface" / "en.ini",
             models_dir=models_dir,
             runtime_file=(
                 config_dir / "midgard_runtime.json"

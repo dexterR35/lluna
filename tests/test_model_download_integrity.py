@@ -137,7 +137,6 @@ def test_existing_realesrgan_weight_is_verified_before_load(tmp_path, monkeypatc
     info = enhance_models.EnhanceModelInfo(
         EnhanceMode.X2PLUS,
         scale=2,
-        desc_key="X2PLUS",
         download_url="https://example.invalid/model",
         version="test",
         artifact=artifact,

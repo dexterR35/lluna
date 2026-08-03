@@ -8,7 +8,6 @@ from .hardware_accelerator import HardwareAccelerator
 from .common_tools import get_readable_path
 from .ocr import get_coordinates
 from backend.configuration.models import SubtitleSettings
-from backend.i18n.translations import get_translations
 from backend.models.paths import SubtitleModelPaths
 from backend.scenedetect import scene_detect
 from backend.scenedetect.detectors import ContentDetector
@@ -37,7 +36,6 @@ class SubtitleDetect:
         self.sub_areas = list(sub_areas or ())
         self.settings = settings
         self.model_paths = model_paths
-        self.tr = get_translations()
         self._init_sample_step()
 
     def _init_sample_step(self):
@@ -146,9 +144,7 @@ class SubtitleDetect:
         # Phase 1: sample detection - run OCR only every sample_step frames
         sampled_results = {}  # frame_no -> temp_list
         if sub_remover:
-            sub_remover.append_output(
-                self.tr["Main"]["ProcessingStartFindingSubtitles"]
-            )
+            sub_remover.append_output("[Processing] Detecting subtitles...")
         while video_cap.isOpened():
             if sub_remover:
                 sub_remover.cancellation_token.raise_if_cancelled()
@@ -186,9 +182,7 @@ class SubtitleDetect:
             subtitle_frame_no_box_dict[detected_nos[-1]] = sampled_results[detected_nos[-1]]
         subtitle_frame_no_box_dict = self.unify_regions(subtitle_frame_no_box_dict)
         if sub_remover:
-            sub_remover.append_output(
-                self.tr["Main"]["FinishedFindingSubtitles"]
-            )
+            sub_remover.append_output("[Complete] Subtitle detection finished.")
         new_subtitle_frame_no_box_dict = dict()
         for key in subtitle_frame_no_box_dict.keys():
             if len(subtitle_frame_no_box_dict[key]) > 0:

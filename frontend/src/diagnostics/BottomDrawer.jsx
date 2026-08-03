@@ -112,7 +112,7 @@ export function BottomDrawer({ issues }) {
                   <span className="text-mg-muted">
                     {new Date(
                       line.timestamp || Date.now(),
-                    ).toLocaleTimeString()}
+                    ).toLocaleTimeString("en-US")}
                   </span>
                   <span>{line.message}</span>
                 </div>

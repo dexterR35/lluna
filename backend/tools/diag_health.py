@@ -82,11 +82,9 @@ def _report_bg_remove_models() -> None:
     diag.start("── models: background remove ──")
     try:
         from backend.configuration.service import get_settings
-        from backend.i18n.translations import get_translations
         from backend.tools import bg_remove_models as bgm
 
         settings = get_settings().background_removal
-        tr = get_translations()
         enabled = bgm.parse_enabled_values(settings.enabled_models)
         selected = settings.mode
         ok_n = miss_n = 0
@@ -97,7 +95,7 @@ def _report_bg_remove_models() -> None:
                 ok_n += 1
             else:
                 miss_n += 1
-            name = tr["BgRemoveMode"].get(mode.name, mode.value)
+            name = mode.value
             flags = []
             if mode.value in enabled:
                 flags.append("on")
@@ -122,11 +120,9 @@ def _report_enhance_models() -> None:
     diag.start("── models: enhance (Real-ESRGAN) ──")
     try:
         from backend.configuration.service import get_settings
-        from backend.i18n.translations import get_translations
         from backend.tools import enhance_models as em
 
         settings = get_settings().enhancement
-        tr = get_translations()
         enabled = em.parse_enabled_values(settings.enabled_models)
         selected = settings.mode
         ok_n = miss_n = 0
@@ -137,7 +133,7 @@ def _report_enhance_models() -> None:
                 ok_n += 1
             else:
                 miss_n += 1
-            name = tr["EnhanceMode"].get(mode.name, mode.value)
+            name = mode.value
             flags = []
             if mode.value in enabled:
                 flags.append("on")
@@ -276,10 +272,8 @@ def _report_select_object_models() -> None:
     diag.start("── models: select object (SAM2 + DINO) ──")
     try:
         from backend.configuration.service import get_settings
-        from backend.i18n.translations import get_translations
         from backend.tools import select_object_models as som
 
-        tr = get_translations()
         ok_n = miss_n = 0
         for info in som.PAIR_CATALOG:
             installed = som.is_pair_installed(info.pair_id)
@@ -287,7 +281,11 @@ def _report_select_object_models() -> None:
                 ok_n += 1
             else:
                 miss_n += 1
-            name = tr["SelectObjectPair"].get(info.desc_key, info.pair_id.value)
+            name = (
+                "Standard pair (SAM2 Tiny + DINO Tiny)"
+                if info.pair_id == som.SelectObjectPairId.FAST
+                else "More complex pair (SAM2 Large + DINO Base)"
+            )
             state = som.pair_install_state(info.pair_id)
             flags = []
             if info.is_default:

@@ -5,7 +5,7 @@ import argparse, importlib.util, json, platform, shutil, subprocess, sys
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 SPEC=ROOT/"packaging"/"backend-sidecar.spec"
-REQUIRED=(ROOT/"midgard.py", ROOT/"frontend"/"forge.config.js", ROOT/"package-lock.json", ROOT/"backend"/"interface"/"en.ini")
+REQUIRED=(ROOT/"midgard.py", ROOT/"frontend"/"forge.config.js", ROOT/"package-lock.json")
 def validate_repository(strict_python=True):
     errors=[]
     if strict_python and sys.version_info[:2] != (3,12): errors.append(f"Python 3.12 is required; received {sys.version_info.major}.{sys.version_info.minor}.")

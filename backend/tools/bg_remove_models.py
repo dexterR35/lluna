@@ -13,8 +13,6 @@ from backend.tools.constant import BgRemoveMode
 class BgRemoveModelInfo:
     mode: BgRemoveMode
     category: str
-    """Translation key under [BgRemoveModelDesc] for the short explanation."""
-    desc_key: str
     """Recommended / category default (badge only; On/Off still works)."""
     is_default: bool = False
 
@@ -22,25 +20,25 @@ class BgRemoveModelInfo:
 # Categories + one default each. Others are optional (install + on/off).
 MODEL_CATALOG: List[BgRemoveModelInfo] = [
     # General / quality - BiRefNet General is the app default
-    BgRemoveModelInfo(BgRemoveMode.BIREFNET, "General", "BIREFNET", True),
-    BgRemoveModelInfo(BgRemoveMode.ISNET, "General", "ISNET", False),
-    BgRemoveModelInfo(BgRemoveMode.U2NET, "General", "U2NET", False),
-    BgRemoveModelInfo(BgRemoveMode.U2NETP, "General", "U2NETP", False),
-    BgRemoveModelInfo(BgRemoveMode.SILUETA, "General", "SILUETA", False),
-    BgRemoveModelInfo(BgRemoveMode.BIREFNET_LITE, "General", "BIREFNET_LITE", False),
-    BgRemoveModelInfo(BgRemoveMode.BIREFNET_MASSIVE, "General", "BIREFNET_MASSIVE", False),
-    BgRemoveModelInfo(BgRemoveMode.BRIA_RMBG, "General", "BRIA_RMBG", False),
+    BgRemoveModelInfo(BgRemoveMode.BIREFNET, "General", True),
+    BgRemoveModelInfo(BgRemoveMode.ISNET, "General", False),
+    BgRemoveModelInfo(BgRemoveMode.U2NET, "General", False),
+    BgRemoveModelInfo(BgRemoveMode.U2NETP, "General", False),
+    BgRemoveModelInfo(BgRemoveMode.SILUETA, "General", False),
+    BgRemoveModelInfo(BgRemoveMode.BIREFNET_LITE, "General", False),
+    BgRemoveModelInfo(BgRemoveMode.BIREFNET_MASSIVE, "General", False),
+    BgRemoveModelInfo(BgRemoveMode.BRIA_RMBG, "General", False),
     # People
-    BgRemoveModelInfo(BgRemoveMode.U2NET_HUMAN, "People", "U2NET_HUMAN", True),
-    BgRemoveModelInfo(BgRemoveMode.BIREFNET_PORTRAIT, "People", "BIREFNET_PORTRAIT", False),
+    BgRemoveModelInfo(BgRemoveMode.U2NET_HUMAN, "People", True),
+    BgRemoveModelInfo(BgRemoveMode.BIREFNET_PORTRAIT, "People", False),
     # Anime
-    BgRemoveModelInfo(BgRemoveMode.ISNET_ANIME, "Anime", "ISNET_ANIME", True),
+    BgRemoveModelInfo(BgRemoveMode.ISNET_ANIME, "Anime", True),
     # Clothes
-    BgRemoveModelInfo(BgRemoveMode.U2NET_CLOTH, "Clothes", "U2NET_CLOTH", True),
+    BgRemoveModelInfo(BgRemoveMode.U2NET_CLOTH, "Clothes", True),
     # Specialty
-    BgRemoveModelInfo(BgRemoveMode.BIREFNET_DIS, "Specialty", "BIREFNET_DIS", False),
-    BgRemoveModelInfo(BgRemoveMode.BIREFNET_HRSOD, "Specialty", "BIREFNET_HRSOD", False),
-    BgRemoveModelInfo(BgRemoveMode.BIREFNET_COD, "Specialty", "BIREFNET_COD", False),
+    BgRemoveModelInfo(BgRemoveMode.BIREFNET_DIS, "Specialty", False),
+    BgRemoveModelInfo(BgRemoveMode.BIREFNET_HRSOD, "Specialty", False),
+    BgRemoveModelInfo(BgRemoveMode.BIREFNET_COD, "Specialty", False),
 ]
 
 _CATALOG_BY_MODE: Dict[BgRemoveMode, BgRemoveModelInfo] = {m.mode: m for m in MODEL_CATALOG}

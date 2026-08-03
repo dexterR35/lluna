@@ -17,7 +17,6 @@ _LOL_GDRIVE_ID = "1t_FcBuMZD5th2KWVVNXYGJ7bMz5ZAWvF"
 @dataclass(frozen=True)
 class LowLightModelInfo:
     mode: LowLightMode
-    desc_key: str
     download_url: str
     is_default: bool = False
 
@@ -25,7 +24,6 @@ class LowLightModelInfo:
 MODEL_CATALOG: List[LowLightModelInfo] = [
     LowLightModelInfo(
         LowLightMode.MIRNET_LOL,
-        desc_key="MIRNET_LOL",
         download_url=(
             "https://drive.usercontent.google.com/download"
             f"?id={_LOL_GDRIVE_ID}&export=download&confirm=t"

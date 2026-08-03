@@ -15,7 +15,6 @@ from backend.diagnostics.errors import DependencyError
 def _packaged_paths(tmp_path):
     root = tmp_path / "bundle"
     required = (
-        root / "backend/interface/en.ini",
         root / "backend/ffmpeg/linux_x64/ffmpeg",
         root / "backend/models/V5/ch_det/inference.pdiparams",
         root / "backend/models/V5/ch_det_fast/inference.pdiparams",
@@ -29,7 +28,6 @@ def _packaged_paths(tmp_path):
         path.write_bytes(b"present")
     return SimpleNamespace(
         project_root=root,
-        translation_file=root / "backend/interface/en.ini",
         config_dir=tmp_path / "config",
         data_dir=tmp_path / "data",
         models_dir=tmp_path / "data/models",
@@ -55,7 +53,7 @@ def test_packaged_preflight_checks_embedded_runtime_and_writes_log(monkeypatch, 
 def test_packaged_preflight_fails_when_release_resource_is_missing(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr("sys.frozen", True, raising=False)
     paths = _packaged_paths(tmp_path)
-    paths.translation_file.unlink()
+    (paths.project_root / "backend/ffmpeg/linux_x64/ffmpeg").unlink()
     with pytest.raises(DependencyError, match="missing packaged resources"):
         validate_packaged_runtime(
             paths,

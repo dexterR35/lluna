@@ -27,6 +27,7 @@ const SIZES = {
  *   size?: BadgeSize,
  *   className?: string,
  *   as?: "span"|"div"|"button"|"label",
+ *   type?: "button"|"submit"|"reset",
  *   title?: string,
  * } & import("react").HTMLAttributes<HTMLElement>} props
  */

@@ -147,7 +147,7 @@ test("model selection is in the node body and reacts to enabled inventory", asyn
   );
   const selector = screen.getByRole("combobox", { name: "Model for Generate" });
   expect(selector.closest("header")).toBeNull();
-  expect(selector.closest(".midgard-node-body")).not.toBeNull();
+  expect(selector.closest(".midgard-node")).not.toBeNull();
   expect(screen.getByRole("option", { name: "Model B" })).toBeEnabled();
   await user.selectOptions(selector, "b");
   expect(onModelChange).toHaveBeenCalledWith("node-1", "b");

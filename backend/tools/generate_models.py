@@ -44,7 +44,6 @@ class GenerateDownload:
 @dataclass(frozen=True)
 class GenerateModelInfo:
     mode: GenerateMode
-    desc_key: str
     hf_repo: str
     pipeline: str
     default_guidance: float
@@ -58,7 +57,6 @@ class GenerateModelInfo:
 MODEL_CATALOG: List[GenerateModelInfo] = [
     GenerateModelInfo(
         GenerateMode.FLUX2_KLEIN_4B,
-        desc_key="FLUX2_KLEIN_4B",
         hf_repo="black-forest-labs/FLUX.2-klein-4B",
         pipeline="flux2_klein",
         default_guidance=1.0,
@@ -67,7 +65,6 @@ MODEL_CATALOG: List[GenerateModelInfo] = [
     ),
     GenerateModelInfo(
         GenerateMode.FLUX2_KLEIN_9B,
-        desc_key="FLUX2_KLEIN_9B",
         hf_repo="black-forest-labs/FLUX.2-klein-9B",
         pipeline="flux2_klein",
         default_guidance=1.0,
@@ -76,7 +73,6 @@ MODEL_CATALOG: List[GenerateModelInfo] = [
     ),
     GenerateModelInfo(
         GenerateMode.FLUX2_KLEIN_BASE_4B,
-        desc_key="FLUX2_KLEIN_BASE_4B",
         hf_repo="black-forest-labs/FLUX.2-klein-base-4B",
         pipeline="flux2_klein",
         default_guidance=4.0,
@@ -85,7 +81,6 @@ MODEL_CATALOG: List[GenerateModelInfo] = [
     ),
     GenerateModelInfo(
         GenerateMode.FLUX2_KLEIN_BASE_9B,
-        desc_key="FLUX2_KLEIN_BASE_9B",
         hf_repo="black-forest-labs/FLUX.2-klein-base-9B",
         pipeline="flux2_klein",
         default_guidance=4.0,
@@ -94,7 +89,6 @@ MODEL_CATALOG: List[GenerateModelInfo] = [
     ),
     GenerateModelInfo(
         GenerateMode.FLUX2_DEV,
-        desc_key="FLUX2_DEV",
         hf_repo="black-forest-labs/FLUX.2-dev",
         pipeline="flux2",
         default_guidance=4.0,
@@ -104,7 +98,6 @@ MODEL_CATALOG: List[GenerateModelInfo] = [
     ),
     GenerateModelInfo(
         GenerateMode.FLUX2_KLEIN_9B_FP8,
-        desc_key="FLUX2_KLEIN_9B_FP8",
         hf_repo="black-forest-labs/FLUX.2-klein-9b-fp8",
         pipeline="flux2_klein_fp8",
         default_guidance=1.0,
@@ -121,7 +114,6 @@ MODEL_CATALOG: List[GenerateModelInfo] = [
     ),
     GenerateModelInfo(
         GenerateMode.QWEN_IMAGE,
-        desc_key="QWEN_IMAGE",
         hf_repo="Qwen/Qwen-Image",
         pipeline="qwen_image",
         default_guidance=4.0,

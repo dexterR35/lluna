@@ -7,6 +7,7 @@ import {
   Check,
   ChevronDown,
   Clock3,
+  Eye,
   FileImage,
   Film,
   Hash,
@@ -128,7 +129,7 @@ function BodySelect({ label, value, options, disabled, onChange, wide }) {
       as="label"
       size="md"
       title={label}
-      className={`nodrag nowheel relative hover:border-mg-secondary/50 hover:text-mg-primary ${wide ? "max-w-[148px]" : ""} ${disabled ? "opacity-55" : ""}`}
+      className={`nodrag nowheel relative ${wide ? "max-w-[148px]" : ""} ${disabled ? "opacity-55" : ""}`}
     >
       <span className="sr-only">{label}</span>
       <select
@@ -328,84 +329,6 @@ function MidgardNodeComponent({ id, data, selected }) {
             />
           </div>
         )}
-
-        {footerParams.length > 0 && (
-          <div className="midgard-node-body-controls">
-            {footerParams.map((parameter) => {
-              const isModel =
-                parameter.id === "model" || parameter.type === "model";
-              if (isModel) {
-                const options = [
-                  ...(!modelAvailable && modelValue
-                    ? [
-                        {
-                          value: String(modelValue),
-                          label: `${modelLabel} (disabled)`,
-                          disabled: true,
-                        },
-                      ]
-                    : []),
-                  ...(!modelOptions.length && !modelValue
-                    ? [
-                        {
-                          value: "",
-                          label: "No enabled model",
-                          disabled: true,
-                        },
-                      ]
-                    : []),
-                  ...modelOptions.map((option) => ({
-                    value: String(option.value),
-                    label: option.label,
-                    disabled: option.disabled,
-                  })),
-                ];
-                return (
-                  <BodySelect
-                    key={parameter.id}
-                    label={`Model for ${nodeLabel}`}
-                    value={String(modelValue ?? "")}
-                    options={options}
-                    wide
-                    disabled={data.disabled || busy || !modelOptions.length}
-                    onChange={(value) => {
-                      const option = modelOptions.find(
-                        (candidate) => String(candidate.value) === value,
-                      );
-                      if (option) actions.onModelChange?.(id, option.value);
-                    }}
-                  />
-                );
-              }
-              const raw = data.parameters?.[parameter.id] ?? parameter.default;
-              const options = (parameter.options || []).map((option) => ({
-                value: String(option.value),
-                label: option.label,
-                disabled: option.disabled,
-              }));
-              if (!options.length) return null;
-              return (
-                <BodySelect
-                  key={parameter.id}
-                  label={parameter.label}
-                  value={String(raw ?? "")}
-                  options={options}
-                  disabled={data.disabled || busy}
-                  onChange={(value) => {
-                    const option = parameter.options?.find(
-                      (candidate) => String(candidate.value) === value,
-                    );
-                    actions.onParameterChange?.(
-                      id,
-                      parameter.id,
-                      option ? option.value : value,
-                    );
-                  }}
-                />
-              );
-            })}
-          </div>
-        )}
       </div>
 
       {(status === "RUNNING" || status === "PAUSE_REQUESTED") && (
@@ -418,7 +341,80 @@ function MidgardNodeComponent({ id, data, selected }) {
       )}
 
       <footer className="midgard-node-footer">
-        <div className="midgard-node-footer-actions">
+        <div className="midgard-node-footer-options">
+          {footerParams.map((parameter) => {
+            const isModel =
+              parameter.id === "model" || parameter.type === "model";
+            if (isModel) {
+              const options = [
+                ...(!modelAvailable && modelValue
+                  ? [
+                      {
+                        value: String(modelValue),
+                        label: `${modelLabel} (disabled)`,
+                        disabled: true,
+                      },
+                    ]
+                  : []),
+                ...(!modelOptions.length && !modelValue
+                  ? [
+                      {
+                        value: "",
+                        label: "No enabled model",
+                        disabled: true,
+                      },
+                    ]
+                  : []),
+                ...modelOptions.map((option) => ({
+                  value: String(option.value),
+                  label: option.label,
+                  disabled: option.disabled,
+                })),
+              ];
+              return (
+                <BodySelect
+                  key={parameter.id}
+                  label={`Model for ${nodeLabel}`}
+                  value={String(modelValue ?? "")}
+                  options={options}
+                  wide
+                  disabled={data.disabled || busy || !modelOptions.length}
+                  onChange={(value) => {
+                    const option = modelOptions.find(
+                      (candidate) => String(candidate.value) === value,
+                    );
+                    if (option) actions.onModelChange?.(id, option.value);
+                  }}
+                />
+              );
+            }
+            const raw = data.parameters?.[parameter.id] ?? parameter.default;
+            const options = (parameter.options || []).map((option) => ({
+              value: String(option.value),
+              label: option.label,
+              disabled: option.disabled,
+            }));
+            if (!options.length) return null;
+            return (
+              <BodySelect
+                key={parameter.id}
+                label={parameter.label}
+                value={String(raw ?? "")}
+                options={options}
+                disabled={data.disabled || busy}
+                onChange={(value) => {
+                  const option = parameter.options?.find(
+                    (candidate) => String(candidate.value) === value,
+                  );
+                  actions.onParameterChange?.(
+                    id,
+                    parameter.id,
+                    option ? option.value : value,
+                  );
+                }}
+              />
+            );
+          })}
           <button
             type="button"
             className="nodrag nowheel midgard-node-gear"
@@ -432,6 +428,27 @@ function MidgardNodeComponent({ id, data, selected }) {
           >
             <Settings2 className="size-3.5" />
           </button>
+        </div>
+
+        <div className="midgard-node-footer-actions">
+          {artifactId && (
+            <Badge
+              as="button"
+              type="button"
+              size="md"
+              className="nodrag nowheel cursor-pointer gap-1.5"
+              aria-label={`Preview ${nodeLabel} image`}
+              title="Preview image"
+              onPointerDown={stopPointer}
+              onClick={(event) => {
+                event.stopPropagation();
+                actions.onPreview?.(id);
+              }}
+            >
+              <Eye className="size-3" />
+              Preview
+            </Badge>
+          )}
           <button
             type="button"
             className="nodrag nowheel midgard-node-run"

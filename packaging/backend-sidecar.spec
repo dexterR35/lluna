@@ -8,7 +8,7 @@ ROOT = Path(SPECPATH).resolve().parent
 def data(source, destination):
     return (str(source), destination)
 
-datas = [data(ROOT / "backend/interface/en.ini", "backend/interface")]
+datas = []
 release_metadata = ROOT / "build/release-metadata/midgard_release.json"
 if release_metadata.is_file(): datas.append(data(release_metadata, "."))
 for path in (ROOT / "backend/models/V5").rglob("*"):

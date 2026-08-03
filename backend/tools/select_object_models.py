@@ -35,7 +35,6 @@ class SelectObjectPairId(str, Enum):
 @dataclass(frozen=True)
 class SelectObjectPairInfo:
     pair_id: SelectObjectPairId
-    desc_key: str
     is_default: bool = False
 
 
@@ -43,7 +42,6 @@ class SelectObjectPairInfo:
 class SelectObjectModelInfo:
     model_id: SelectObjectModelId
     hf_repo: str
-    desc_key: str
     download_allow_patterns: tuple[str, ...]
     is_default: bool = False
     is_optional: bool = False
@@ -53,28 +51,24 @@ MODEL_CATALOG: List[SelectObjectModelInfo] = [
     SelectObjectModelInfo(
         SelectObjectModelId.SAM2_TINY,
         hf_repo="facebook/sam2-hiera-tiny",
-        desc_key="SAM2_TINY",
         download_allow_patterns=_SAM2_ALLOW_PATTERNS,
         is_default=True,
     ),
     SelectObjectModelInfo(
         SelectObjectModelId.SAM2_LARGE,
         hf_repo="facebook/sam2-hiera-large",
-        desc_key="SAM2_LARGE",
         download_allow_patterns=_SAM2_ALLOW_PATTERNS,
         is_optional=True,
     ),
     SelectObjectModelInfo(
         SelectObjectModelId.DINO_TINY,
         hf_repo="IDEA-Research/grounding-dino-tiny",
-        desc_key="DINO_TINY",
         download_allow_patterns=_DINO_ALLOW_PATTERNS,
         is_default=True,
     ),
     SelectObjectModelInfo(
         SelectObjectModelId.DINO_BASE,
         hf_repo="IDEA-Research/grounding-dino-base",
-        desc_key="DINO_BASE",
         download_allow_patterns=_DINO_ALLOW_PATTERNS,
         is_optional=True,
     ),
@@ -101,8 +95,8 @@ PAIR_MEMBERS: Dict[SelectObjectPairId, Tuple[SelectObjectModelId, SelectObjectMo
 }
 
 PAIR_CATALOG: List[SelectObjectPairInfo] = [
-    SelectObjectPairInfo(SelectObjectPairId.FAST, "PAIR_FAST", is_default=True),
-    SelectObjectPairInfo(SelectObjectPairId.COMPLEX, "PAIR_COMPLEX"),
+    SelectObjectPairInfo(SelectObjectPairId.FAST, is_default=True),
+    SelectObjectPairInfo(SelectObjectPairId.COMPLEX),
 ]
 
 

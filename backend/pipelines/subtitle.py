@@ -17,7 +17,6 @@ import cv2
 from functools import cached_property
 
 from backend.configuration.models import SubtitleSettings
-from backend.i18n.translations import get_translations
 from backend.tools.constant import InpaintMode, SubtitleDetectMode
 from backend.tools.hardware_accelerator import HardwareAccelerator
 from backend.tools.common_tools import get_readable_path, is_image_file, read_image
@@ -50,6 +49,18 @@ from backend.media.workspace import JobWorkspace
 
 logger = logging.getLogger(__name__)
 
+INPAINT_MODE_NAMES = {
+    InpaintMode.STTN_AUTO: "STTN Smart Inpainting (Recommended)",
+    InpaintMode.STTN_DET: "STTN Subtitle Detection",
+    InpaintMode.LAMA: "LAMA",
+    InpaintMode.PROPAINTER: "ProPainter",
+    InpaintMode.OPENCV: "OpenCV",
+}
+SUBTITLE_DETECT_MODE_NAMES = {
+    SubtitleDetectMode.PP_OCRv5_MOBILE: "Fast (Mobile)",
+    SubtitleDetectMode.PP_OCRv5_SERVER: "Precise (Server) (Recommended)",
+}
+
 
 class SubtitleRemover:
     def __init__(
@@ -65,7 +76,6 @@ class SubtitleRemover:
 
             settings = get_settings().subtitle
         self.settings = settings
-        self.tr = get_translations()
         self.cancellation_token = cancellation_token or CancellationToken()
         # Thread lock
         self.lock = threading.RLock()
@@ -223,9 +233,7 @@ class SubtitleRemover:
         )
         sub_list = sub_detector.find_subtitle_frame_no(sub_remover=self)
         if len(sub_list) == 0:
-            raise InferenceError(
-                self.tr["Main"]["NoSubtitleDetected"].format(self.video_path)
-            )
+            raise InferenceError(f"No subtitles detected. Check file: {self.video_path}")
         continuous_frame_no_list = sub_detector.find_continuous_ranges_with_same_mask(sub_list)
         scene_div_points = sub_detector.get_scene_div_frame_no(self.video_path)
         continuous_frame_no_list = sub_detector.split_range_by_scene(continuous_frame_no_list,
@@ -243,9 +251,7 @@ class SubtitleRemover:
             register_video_inpaint_model(propainter_inpaint)
         except Exception:
             pass
-        self.append_output(
-            self.tr["Main"]["ProcessingStartRemovingSubtitles"]
-        )
+        self.append_output("[Processing] Removing subtitles...")
         index = 0
         # Prefetch frames so I/O overlaps with inference
         reader = FramePrefetcher(self.video_cap)
@@ -341,9 +347,7 @@ class SubtitleRemover:
         """
         Inpaint the selected region with STTN without subtitle detection
         """
-        self.append_output(
-            self.tr["Main"]["ProcessingStartRemovingSubtitles"]
-        )
+        self.append_output("[Processing] Removing subtitles...")
         mask_area_coordinates = []
         for sub_area in self.sub_areas:
             ymin, ymax, xmin, xmax = sub_area
@@ -372,9 +376,7 @@ class SubtitleRemover:
         )
         sub_list = sub_detector.find_subtitle_frame_no(sub_remover=self)
         if len(sub_list) == 0:
-            raise InferenceError(
-                self.tr["Main"]["NoSubtitleDetected"].format(self.video_path)
-            )
+            raise InferenceError(f"No subtitles detected. Check file: {self.video_path}")
         continuous_frame_no_list = sub_detector.find_continuous_ranges_with_same_mask(sub_list)
         tbar.write(f"Subtitle detected: {continuous_frame_no_list}")
         continuous_frame_no_list = expand_frame_ranges(
@@ -401,9 +403,7 @@ class SubtitleRemover:
             # consumed by the inner loop and deadlock the outer loop
             start_end_map[start] = min(end, self.frame_count)
         current_frame_index = 0
-        self.append_output(
-            self.tr["Main"]["ProcessingStartRemovingSubtitles"]
-        )
+        self.append_output("[Processing] Removing subtitles...")
         # Prefetch frames so I/O overlaps with inference
         reader = FramePrefetcher(self.video_cap)
         while True:
@@ -501,14 +501,16 @@ class SubtitleRemover:
         start_time = time.time()
         mode = InpaintMode(self.settings.inpaint_mode)
         if len(self.sub_areas) == 0:
-            self.append_output(self.tr["Main"]["FullScreenProcessingNote"])
+            self.append_output(
+                "Processing full screen (no area selected). Quality may vary."
+            )
             self.sub_areas.append((0, self.frame_height, 0, self.frame_width))
-        self.append_output(self.tr["Main"]["SubtitleArea"].format(self.sub_areas))
+        self.append_output(f"Subtitle Area: {self.sub_areas}")
         self.append_output(
-            self.tr["Main"]["ABSection"].format(
+            "Processing block: {}".format(
                 str(self.ab_sections).replace("range", "")
                 if self.ab_sections is not None and len(self.ab_sections) > 0
-                else self.tr["Main"]["ABSectionAll"]
+                else "All"
             )
         )
         # Print GPU acceleration tip when an accelerator is available
@@ -518,7 +520,9 @@ class SubtitleRemover:
                 InpaintMode.STTN_AUTO,
                 InpaintMode.STTN_DET,
             }:
-                self.append_output(self.tr["Main"]["DirectMLWarning"])
+                self.append_output(
+                    "Warning: DirectML acceleration only works with STTN model."
+                )
         os.makedirs(os.path.dirname(self.video_out_path), exist_ok=True)
         # Reset progress bar
         self.progress_total = 0
@@ -533,9 +537,7 @@ class SubtitleRemover:
         if self.is_picture:
             original_frame = read_image(self.video_path)
             if original_frame is None:
-                raise InvalidMediaError(
-                    self.tr["Main"]["ReadImageFailed"].format(self.video_path)
-                )
+                raise InvalidMediaError(f"Failed to read image: {self.video_path}")
             sub_detector = SubtitleDetect(
                 self.video_path,
                 self.sub_areas,
@@ -585,19 +587,17 @@ class SubtitleRemover:
             self.merge_audio_to_video()
         tbar.close()
         self.append_output(
-            self.tr["Main"]["FinishedProcessing"].format(self.video_out_path)
+            f"[Complete] Subtitles removed. Output saved to: {self.video_out_path}"
         )
         self.append_output(
-            self.tr["Main"]["ProcessingTime"].format(round(time.time() - start_time))
+            f"Processing time: {round(time.time() - start_time)} seconds"
         )
         self.isFinished = True
         self.progress_total = 100
 
     def log_model(self):
         mode = InpaintMode(self.settings.inpaint_mode)
-        model_friendly_name = list(self.tr["InpaintMode"].values())[
-            list(InpaintMode).index(mode)
-        ]
+        model_friendly_name = INPAINT_MODE_NAMES[mode]
         model_device = "CPU"
         if mode != InpaintMode.OPENCV and self.hardware_accelerator.has_accelerator():
             accelerator_name = self.hardware_accelerator.accelerator_name
@@ -609,20 +609,14 @@ class SubtitleRemover:
             if self.hardware_accelerator.has_cuda() or self.hardware_accelerator.has_mps():
                 model_device = accelerator_name
         self.append_output(
-            self.tr["Main"]["SubtitleRemoverModel"].format(
-                f"{model_friendly_name} ({model_device})"
-            )
+            f"Subtitle removal model: {model_friendly_name} ({model_device})"
         )
         providers = ", ".join(self.hardware_accelerator.onnx_providers)
         providers_str = f" ({providers})" if providers else ""
         detect_mode = SubtitleDetectMode(self.settings.subtitle_detect_mode)
-        detect_mode_name = list(self.tr["SubtitleDetectMode"].values())[
-            list(SubtitleDetectMode).index(detect_mode)
-        ]
+        detect_mode_name = SUBTITLE_DETECT_MODE_NAMES[detect_mode]
         self.append_output(
-            self.tr["Main"]["SubtitleDetectionModel"].format(
-                f"{detect_mode_name}{providers_str}"
-            )
+            f"Subtitle detection model: {detect_mode_name}{providers_str}"
         )
 
     def merge_audio_to_video(self):
@@ -642,9 +636,7 @@ class SubtitleRemover:
                 )
         except Exception as e:
             traceback.print_exc()
-            self.append_output(
-                self.tr["Main"]["FailToExtractAudio"].format(str(e))
-            )
+            self.append_output(f"Audio extraction failed: {e}")
             return
         else:
             if os.path.exists(self.video_temp_path):
@@ -664,9 +656,7 @@ class SubtitleRemover:
                         )
                 except Exception as e:
                     traceback.print_exc()
-                    self.append_output(
-                        self.tr["Main"]["FailToMergeAudio"].format(str(e))
-                    )
+                    self.append_output(f"Audio merge failed: {e}")
                     return
             if os.path.exists(temp_path):
                 try:
@@ -681,11 +671,8 @@ class SubtitleRemover:
                     shutil.copy2(self.video_temp_path, self.video_out_path)
                 except IOError as e:
                     self.append_output(
-                        self.tr["Main"]["CopyFileFailed"].format(
-                            self.video_temp_path,
-                            self.video_out_path,
-                            str(e),
-                        )
+                        f"Failed to copy {self.video_temp_path} to "
+                        f"{self.video_out_path}. Reason: {e}"
                     )
 
     @cached_property

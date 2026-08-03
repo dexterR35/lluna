@@ -108,7 +108,7 @@ export function NodeLibrary({ onAdd }) {
     const grouped = {};
     for (const item of filtered)
       (grouped[item.category || "Other"] ||= []).push(item);
-    return Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b));
+    return Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b, "en-US"));
   }, [visibleDefinitions, query]);
 
   return (

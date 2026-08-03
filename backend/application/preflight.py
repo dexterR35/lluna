@@ -74,7 +74,6 @@ def validate_packaged_runtime(
         checks.append(f"release target {selected.key}")
 
     required = (
-        paths.translation_file,
         _ffmpeg_path(paths.project_root, selected.platform),
         paths.project_root / "backend/models/V5/ch_det/inference.pdiparams",
         paths.project_root / "backend/models/V5/ch_det_fast/inference.pdiparams",

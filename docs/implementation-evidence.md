@@ -77,7 +77,7 @@ Compatibility facades were retained until callers had moved.
 
 The implementation is grouped in:
 
-- `backend/core`, `backend/configuration`, `backend/i18n`, and `backend/diagnostics`;
+- `backend/core`, `backend/configuration`, and `backend/diagnostics`;
 - `backend/hardware`, `backend/models`, and `backend/settings`;
 - `backend/application`, `backend/media`, `backend/services`, and
   `backend/pipelines`;
