@@ -26,3 +26,27 @@ def test_fake_worker_vertical_slice_commits_artifact(monkeypatch,tmp_path):
     assert snapshot.artifact_ids
     artifact=ArtifactStore.instance().get(snapshot.artifact_ids[-1])
     assert artifact.width==4 and artifact.height==3
+    cached_run=manager.start(workflow)
+    deadline=time.monotonic()+3
+    while time.monotonic()<deadline:
+        cached_snapshot=manager.get(cached_run.run_id)
+        if cached_snapshot.status in {"COMPLETED","FAILED","CANCELLED"}:break
+        time.sleep(.02)
+    assert cached_snapshot.status=="COMPLETED",cached_snapshot.error
+    assert cached_snapshot.nodes["enhance"].status=="CACHED"
+    assert cached_snapshot.nodes["enhance"].artifact_ids
+
+def test_load_image_uses_saved_artifact_when_desktop_grant_has_expired(tmp_path):
+    source_path=tmp_path/"persisted.png";Image.new("RGB",(5,4),(10,20,30)).save(source_path)
+    ArtifactStore._instance=ArtifactStore(tmp_path/"artifacts")
+    artifact=ArtifactStore.instance().register_source(source_path)
+    DesktopGrantStore._instance=None
+    RunManager._instance=None;manager=RunManager.instance()
+    node=WorkflowNode(
+        id="load",
+        schema_id="midgard.input.image",
+        parameters={"pathGrantId":"expired-grant"},
+        result={"status":"READY","artifactIds":[artifact.artifact_id]},
+    )
+    loaded=manager._load_granted_media(node)
+    assert loaded.artifact_id==artifact.artifact_id

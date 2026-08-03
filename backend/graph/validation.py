@@ -14,12 +14,90 @@ def _port(definition, port_id: str, *, output: bool):
     return next((item for item in ports if item.id == port_id), None)
 
 
-def topological_order(workflow: WorkflowDocument) -> list[str]:
-    node_ids = {node.id for node in workflow.nodes}
-    incoming = {node_id: 0 for node_id in node_ids}
+def _node_label(node) -> str:
+    if node.label:
+        return node.label
+    definition = NODE_REGISTRY.get(node.schema_id)
+    return definition.name if definition else node.schema_id
+
+
+def runnable_node_ids(workflow: WorkflowDocument) -> set[str]:
+    """Nodes that feed a Save/Preview output, in dependency order priority.
+
+    When the graph has no output nodes yet, every node stays runnable so
+    incomplete drafts still validate. Orphan nodes outside an output chain are
+    skipped once a Save/Preview exists.
+    """
+    nodes = {node.id: node for node in workflow.nodes}
+    outputs = [
+        node.id
+        for node in workflow.nodes
+        if (definition := NODE_REGISTRY.get(node.schema_id)) and definition.kind == "output"
+    ]
+    if not outputs:
+        return set(nodes)
+    parents, _children = _adjacency(workflow)
+    return _closure(outputs, parents)
+
+
+def _adjacency(workflow: WorkflowDocument) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
+    nodes = {node.id for node in workflow.nodes}
+    parents: dict[str, list[str]] = defaultdict(list)
+    children: dict[str, list[str]] = defaultdict(list)
+    for edge in workflow.edges:
+        if edge.source_node_id in nodes and edge.target_node_id in nodes:
+            parents[edge.target_node_id].append(edge.source_node_id)
+            children[edge.source_node_id].append(edge.target_node_id)
+    return parents, children
+
+
+def _closure(seeds: set[str] | list[str], adjacency: dict[str, list[str]]) -> set[str]:
+    active: set[str] = set()
+    stack = list(seeds)
+    while stack:
+        current = stack.pop()
+        if current in active:
+            continue
+        active.add(current)
+        stack.extend(adjacency.get(current, ()))
+    return active
+
+
+def scoped_node_ids(
+    workflow: WorkflowDocument,
+    *,
+    mode: str = "all",
+    selected_node_ids: list[str] | None = None,
+) -> set[str]:
+    """Choose which nodes execute for a run.
+
+    - all: every node feeding a Save/Preview output
+    - from: selected node, its upstream inputs, then every downstream node
+    - selected: selected node and the upstream inputs it needs
+    """
+    known = {node.id for node in workflow.nodes}
+    selected = [node_id for node_id in (selected_node_ids or []) if node_id in known]
+    if mode == "all" or not selected:
+        return runnable_node_ids(workflow)
+    parents, children = _adjacency(workflow)
+    seeds = set(selected)
+    if mode == "selected":
+        return seeds | _closure(seeds, parents)
+    if mode == "from":
+        # A downstream merge can depend on a side branch that is not below the
+        # selected start node. Include those prerequisites too, otherwise the
+        # plan validates connected inputs that never receive a runtime value.
+        downstream = seeds | _closure(seeds, children)
+        return downstream | _closure(downstream, parents)
+    return runnable_node_ids(workflow)
+
+
+def topological_order(workflow: WorkflowDocument, node_ids: set[str] | None = None) -> list[str]:
+    selected = node_ids if node_ids is not None else {node.id for node in workflow.nodes}
+    incoming = {node_id: 0 for node_id in selected}
     outgoing: dict[str, list[str]] = defaultdict(list)
     for edge in workflow.edges:
-        if edge.source_node_id in node_ids and edge.target_node_id in node_ids:
+        if edge.source_node_id in selected and edge.target_node_id in selected:
             outgoing[edge.source_node_id].append(edge.target_node_id)
             incoming[edge.target_node_id] += 1
     queue = deque(sorted(node_id for node_id, count in incoming.items() if count == 0))
@@ -34,9 +112,17 @@ def topological_order(workflow: WorkflowDocument) -> list[str]:
     return ordered
 
 
-def validate_workflow(workflow: WorkflowDocument) -> ValidationResult:
+def validate_workflow(
+    workflow: WorkflowDocument,
+    *,
+    mode: str = "all",
+    selected_node_ids: list[str] | None = None,
+) -> ValidationResult:
     issues: list[ValidationIssue] = []
     nodes = {node.id: node for node in workflow.nodes}
+    active = scoped_node_ids(workflow, mode=mode, selected_node_ids=selected_node_ids)
+    if mode in {"from", "selected"} and selected_node_ids and not active:
+        issues.append(ValidationIssue(severity="error", code="NO_SELECTION", message="Select a node before running from here."))
     if len(nodes) != len(workflow.nodes):
         issues.append(ValidationIssue(severity="error", code="DUPLICATE_NODE_ID", message="Node IDs must be unique."))
     seen_edges: set[str] = set()
@@ -50,6 +136,8 @@ def validate_workflow(workflow: WorkflowDocument) -> ValidationResult:
             issues.append(ValidationIssue(severity="error", code="NODE_VERSION", message=f"Unsupported schema version for {definition.name}.", node_id=node.id, action="Migrate this workflow."))
         if not definition.available:
             issues.append(ValidationIssue(severity="error", code="NODE_UNAVAILABLE", message=definition.unavailable_reason or f"{definition.name} is unavailable.", node_id=node.id))
+        if node.id not in active or node.disabled:
+            continue
         for parameter in definition.parameters:
             if parameter.required and not node.parameters.get(parameter.id):
                 issues.append(ValidationIssue(severity="error", code="REQUIRED_PARAMETER", message=f"{parameter.label} is required.", node_id=node.id))
@@ -87,11 +175,22 @@ def validate_workflow(workflow: WorkflowDocument) -> ValidationResult:
         definition = NODE_REGISTRY.get(node.schema_id)
         if definition is None or node.disabled:
             continue
+        if node.id not in active:
+            if mode == "all":
+                issues.append(ValidationIssue(
+                    severity="warning",
+                    code="UNUSED_NODE",
+                    message=f"{_node_label(node)} is not connected to a Save/Preview output and will be skipped.",
+                    node_id=node.id,
+                    action="Connect it into the output chain or delete it.",
+                ))
+            continue
         for input_port in definition.inputs:
             if input_port.required and not connected_inputs[(node.id, input_port.id)]:
                 issues.append(ValidationIssue(severity="error", code="MISSING_INPUT", message=f"{input_port.label} is required.", node_id=node.id, action="Connect a compatible output."))
-    if len(topological_order(workflow)) != len(nodes):
+    ordered = topological_order(workflow)
+    if len(ordered) != len(nodes):
         issues.append(ValidationIssue(severity="error", code="CYCLE", message="Workflow cycles are not supported.", action="Remove the feedback connection."))
-    if workflow.nodes and not any(NODE_REGISTRY.get(node.schema_id) and NODE_REGISTRY[node.schema_id].kind == "output" for node in workflow.nodes):
+    if mode == "all" and workflow.nodes and not any(NODE_REGISTRY.get(node.schema_id) and NODE_REGISTRY[node.schema_id].kind == "output" for node in workflow.nodes):
         issues.append(ValidationIssue(severity="warning", code="NO_OUTPUT", message="Workflow has no preview or save output."))
     return ValidationResult(valid=not any(issue.severity == "error" for issue in issues), issues=issues)

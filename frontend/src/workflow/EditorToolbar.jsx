@@ -1,6 +1,49 @@
-import { FolderOpen, LayoutGrid, Logs, Pause, Play, Redo2, Save, Settings, SidebarClose, SidebarOpen, Square, Undo2, Workflow } from "lucide-react";
-import { ToolbarButton } from "../components";
+import { FolderOpen, Layers3, Logs, PanelLeft, Pause, Play, Redo2, Save, Settings, Sparkles, Square, Undo2, Workflow } from "lucide-react";
+import { Button, ToolbarButton } from "../components";
 import { useDesktopStore } from "../state/desktopStore";
 import { useEditorStore } from "../state/editorStore";
 import { useRunStore } from "../state/runStore";
-export function EditorToolbar({ actions }){const past=useEditorStore(store=>store.past.length);const future=useEditorStore(store=>store.future.length);const undo=useEditorStore(store=>store.undo);const redo=useEditorStore(store=>store.redo);const run=useRunStore(store=>store.run);const pause=useRunStore(store=>store.pause);const resume=useRunStore(store=>store.resume);const cancel=useRunStore(store=>store.cancel);const desktop=useDesktopStore();const active=["RUNNING","PAUSE_REQUESTED","PAUSED"].includes(run?.status);return <header className="flex h-12 items-center gap-1 border-b border-mg-border bg-mg-panel px-2"><ToolbarButton label="New" shortcut="Ctrl+N" icon={<Workflow className="size-4"/>} onClick={actions.newWorkflow}/><ToolbarButton label="Open" shortcut="Ctrl+O" icon={<FolderOpen className="size-4"/>} onClick={actions.openWorkflow}/><ToolbarButton label="Save" shortcut="Ctrl+S" icon={<Save className="size-4"/>} onClick={actions.saveWorkflow}/><span className="mx-1 h-6 w-px bg-mg-border"/><ToolbarButton label="Undo" shortcut="Ctrl+Z" icon={<Undo2 className="size-4"/>} disabled={!past} onClick={undo}/><ToolbarButton label="Redo" shortcut="Ctrl+Shift+Z" icon={<Redo2 className="size-4"/>} disabled={!future} onClick={redo}/><span className="mx-1 h-6 w-px bg-mg-border"/><ToolbarButton label="Validate" icon={<LayoutGrid className="size-4"/>} onClick={actions.validate}/>{!active?<ToolbarButton label="Run" shortcut="Ctrl+Enter" icon={<Play className="size-4"/>} onClick={actions.run}/>:<><ToolbarButton label={run?.status==="PAUSED"?"Resume":"Pause"} icon={<Pause className="size-4"/>} onClick={run?.status==="PAUSED"?resume:pause}/><ToolbarButton label="Stop" icon={<Square className="size-4"/>} onClick={cancel}/></>}<span className="flex-1"/><ToolbarButton label="Library" active={desktop.libraryVisible} icon={desktop.libraryVisible?<SidebarClose className="size-4"/>:<SidebarOpen className="size-4"/>} onClick={()=>desktop.toggle("libraryVisible")}/><ToolbarButton label="Inspector" active={desktop.inspectorVisible} icon={<SidebarOpen className="size-4"/>} onClick={()=>desktop.toggle("inspectorVisible")}/><ToolbarButton label="Logs" active={desktop.drawerVisible} icon={<Logs className="size-4"/>} onClick={()=>desktop.toggle("drawerVisible")}/><ToolbarButton label="Settings" icon={<Settings className="size-4"/>} onClick={()=>desktop.setValue("settingsOpen",true)}/></header>;}
+
+export function EditorToolbar({ actions }) {
+  const past = useEditorStore(store => store.past.length);
+  const future = useEditorStore(store => store.future.length);
+  const selected = useEditorStore(store => store.nodes.some(node => node.selected));
+  const name = useEditorStore(store => store.project.name);
+  const dirty = useEditorStore(store => store.dirty);
+  const undo = useEditorStore(store => store.undo);
+  const redo = useEditorStore(store => store.redo);
+  const run = useRunStore(store => store.run);
+  const pause = useRunStore(store => store.pause);
+  const resume = useRunStore(store => store.resume);
+  const cancel = useRunStore(store => store.cancel);
+  const desktop = useDesktopStore();
+  const active = ["RUNNING", "PAUSE_REQUESTED", "PAUSED"].includes(run?.status);
+
+  return <header className="flex h-full items-center gap-1 border-b border-mg-border bg-mg-panel px-2">
+    <div className="mr-1 flex min-w-0 items-center gap-2 px-1">
+      <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-mg-accent to-mg-running text-white"><Sparkles className="size-3.5" /></span>
+      <div className="hidden min-w-0 xl:block">
+        <div className="flex items-center gap-1.5"><strong className="max-w-40 truncate text-[11px] font-semibold">{name}</strong>{dirty && <span className="size-1.5 rounded-full bg-mg-warning" title="Unsaved changes" />}</div>
+        <span className="block text-[9px] uppercase tracking-[.14em] text-mg-muted">Midgard workflow</span>
+      </div>
+    </div>
+    <span className="ui-divider" />
+    <ToolbarButton label="New" shortcut="Ctrl+N" icon={<Workflow className="size-3.5" />} onClick={actions.newWorkflow} />
+    <ToolbarButton label="Open" shortcut="Ctrl+O" icon={<FolderOpen className="size-3.5" />} onClick={actions.openWorkflow} />
+    <ToolbarButton label="Save" shortcut="Ctrl+S" icon={<Save className="size-3.5" />} onClick={actions.saveWorkflow} />
+    <span className="ui-divider" />
+    <ToolbarButton label="Undo" shortcut="Ctrl+Z" icon={<Undo2 className="size-3.5" />} disabled={!past} onClick={undo} />
+    <ToolbarButton label="Redo" shortcut="Ctrl+Shift+Z" icon={<Redo2 className="size-3.5" />} disabled={!future} onClick={redo} />
+    <span className="ui-divider" />
+    <ToolbarButton label="Flow box" icon={<Layers3 className="size-3.5" />} disabled={!selected} onClick={actions.createFlow} />
+    <span className="flex-1" />
+    {!active ? <Button onClick={actions.run} className="min-w-20"><Play className="size-3.5 fill-current" />Run</Button> : <>
+      <Button variant="secondary" onClick={run?.status === "PAUSED" ? resume : pause}><Pause className="size-3.5" />{run?.status === "PAUSED" ? "Resume" : "Pause"}</Button>
+      <ToolbarButton label="Stop" icon={<Square className="size-3.5" />} onClick={cancel} />
+    </>}
+    <span className="ui-divider" />
+    <ToolbarButton label="Library" active={desktop.libraryVisible} icon={<PanelLeft className="size-3.5" />} onClick={() => desktop.toggle("libraryVisible")} />
+    <ToolbarButton label="Activity" active={desktop.drawerVisible} icon={<Logs className="size-3.5" />} onClick={() => desktop.toggle("drawerVisible")} />
+    <ToolbarButton label="Settings" icon={<Settings className="size-3.5" />} onClick={() => desktop.setValue("settingsOpen", true)} />
+  </header>;
+}

@@ -29,6 +29,23 @@ function findSourceRoot(startPath) {
   }
 }
 
+function installedVenvPython(projectRoot) {
+  let venvName = "midgardEnv";
+  try {
+    const runtime = JSON.parse(fs.readFileSync(path.join(projectRoot, "midgard_runtime.json"), "utf8"));
+    if (typeof runtime?.venv === "string" && runtime.venv) venvName = runtime.venv;
+  } catch { /* Fall back to the installer default and .venv. */ }
+  return process.platform === "win32"
+    ? [
+      path.join(projectRoot, venvName, "Scripts", "python.exe"),
+      path.join(projectRoot, ".venv", "Scripts", "python.exe"),
+    ]
+    : [
+      path.join(projectRoot, venvName, "bin", "python"),
+      path.join(projectRoot, ".venv", "bin", "python"),
+    ];
+}
+
 function resolveBackendCommand() {
   if (app.isPackaged) {
     const executable = process.platform === "win32" ? "midgard-backend.exe" : "midgard-backend";
@@ -37,9 +54,10 @@ function resolveBackendCommand() {
   const appRoot = app.getAppPath();
   const projectRoot = findSourceRoot(appRoot);
   if (!projectRoot) throw new Error(`Could not locate the Midgard source root from ${appRoot}`);
-  const candidates = process.platform === "win32"
-    ? [path.join(projectRoot, ".venv", "Scripts", "python.exe"), "python.exe"]
-    : [path.join(projectRoot, ".venv", "bin", "python"), "python3.12", "python3"];
+  const candidates = [
+    ...installedVenvPython(projectRoot),
+    ...(process.platform === "win32" ? ["python.exe"] : ["python3.12", "python3"]),
+  ];
   return { command: process.env.MIDGARD_PYTHON || candidates.find((candidate) => !path.isAbsolute(candidate) || fs.existsSync(candidate)) || candidates.at(-1), args: ["-m", "backend.api.app"], cwd: projectRoot };
 }
 

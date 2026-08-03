@@ -20,7 +20,7 @@ Last verified: 2026-07-31 with Electron 43.2.0 and Electron Forge 7.11.2.
 - [x] Tailwind is the only styling framework; the forbidden-framework guard passes.
 - [x] All required Midgard component filenames exist with focus/disabled/ARIA behavior and modal focus trapping.
 - [x] Semantic design tokens and reduced-motion handling are present.
-- [x] Native menus, toolbar, searchable category library, inspector, preview, settings, models, drawer, and status bar are connected.
+- [x] Native menus, toolbar, searchable category library, per-node editors and previews, settings, models, drawer, and status bar are connected.
 - [x] Layout visibility/sizes persist locally.
 - [ ] Strict `checkJs` is enabled but does not yet pass because component props/state need complete JSDoc annotations.
 
@@ -34,8 +34,8 @@ Last verified: 2026-07-31 with Electron 43.2.0 and Electron Forge 7.11.2.
 
 ## Node editor and workflow
 
-- [x] Backend-owned catalog includes inputs, values, all seven existing AI adapters, preview/save, metadata, and notes.
-- [x] Nodes add, move, select, duplicate, copy/paste, delete, label, disable, bypass, collapse, and serialize.
+- [x] Backend-owned catalog includes media/prompt inputs, all seven existing AI adapters, and preview/save outputs.
+- [x] Nodes add, move, select, duplicate, copy/paste, delete, label, disable, collapse, and serialize.
 - [x] Typed connections reject incompatible or occupied inputs with a user-facing explanation; edges select/delete.
 - [x] Pan, zoom, fit, grid, snap, box/multi-select, minimap, file drop, search-to-add, and simple auto-layout work.
 - [x] Undo/redo and groups are represented; workflow saves/loads and 30-second atomic recovery autosave are wired.

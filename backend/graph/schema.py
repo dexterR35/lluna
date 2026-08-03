@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from backend.graph.types import PortType
 
@@ -52,7 +52,7 @@ class NodeDefinition(ContractModel):
     category: str
     description: str
     icon: str = "box"
-    kind: Literal["input", "processor", "output", "utility"] = "processor"
+    kind: Literal["input", "processor", "output"] = "processor"
     inputs: list[PortDefinition] = Field(default_factory=list)
     outputs: list[PortDefinition] = Field(default_factory=list)
     parameters: list[ParameterDefinition] = Field(default_factory=list)
@@ -80,9 +80,17 @@ class WorkflowNode(ContractModel):
     label: str = ""
     position: Position = Field(default_factory=Position)
     parameters: dict[str, Any] = Field(default_factory=dict)
+    appearance: dict[str, Any] = Field(default_factory=dict)
+    result: dict[str, Any] | None = None
     disabled: bool = False
-    bypass: bool = False
     collapsed: bool = False
+
+    @model_validator(mode="before")
+    @classmethod
+    def discard_legacy_bypass(cls, value: Any) -> Any:
+        if isinstance(value, dict) and "bypass" in value:
+            value = {key: item for key, item in value.items() if key != "bypass"}
+        return value
 
 
 class WorkflowEdge(ContractModel):
@@ -97,10 +105,13 @@ class WorkflowGroup(ContractModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
     label: str = "Group"
     node_ids: list[str] = Field(default_factory=list)
+    start_node_ids: list[str] = Field(default_factory=list)
     position: Position = Field(default_factory=Position)
     width: float = 360
     height: float = 240
     color: str = "accent"
+    kind: str = "flow"
+    appearance: dict[str, Any] = Field(default_factory=dict)
 
 
 class WorkflowDocument(ContractModel):

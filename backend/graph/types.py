@@ -23,8 +23,6 @@ class PortType(str, Enum):
     COLOR = "COLOR"
     SEED = "SEED"
     MODEL = "MODEL"
-    METADATA = "METADATA"
-    ARTIFACT = "ARTIFACT"
 
 
 PORT_LABELS = {port: port.value.title() for port in PortType}

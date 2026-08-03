@@ -1,5 +1,6 @@
 """Artifact media and desktop path-grant routes."""
 
+import shutil
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -17,13 +18,28 @@ class GrantRequest(BaseModel):
     mode: str = "read"
 
 
+class SaveArtifactRequest(BaseModel):
+    destinationGrantId: str
+
+
 @router.post("/desktop/grants")
 def issue_grant(request: GrantRequest) -> dict:
     try:
         grant = DesktopGrantStore.instance().issue(request.path, mode=request.mode)
+        source = ArtifactStore.instance().register_source(grant.path) if grant.mode == "read" else None
     except (OSError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return {"grantId": grant.grant_id, "name": grant.display_name, "mode": grant.mode}
+    response = {"grantId": grant.grant_id, "name": grant.display_name, "mode": grant.mode}
+    if source is not None:
+        response.update(
+            artifactId=source.artifact_id,
+            mediaType=source.media_type,
+            width=source.width,
+            height=source.height,
+            byteSize=source.byte_size,
+            alpha=source.alpha,
+        )
+    return response
 
 
 def artifact(artifact_id: str):
@@ -50,3 +66,22 @@ def get_artifact_metadata(artifact_id: str) -> dict:
 def get_thumbnail(artifact_id: str):
     record = artifact(artifact_id)
     return FileResponse(record.path, media_type=record.media_type)
+
+
+@router.post("/artifacts/{artifact_id}/save")
+def save_artifact(artifact_id: str, request: SaveArtifactRequest) -> dict:
+    """Copy a completed artifact to an explicitly granted desktop destination."""
+    record = artifact(artifact_id)
+    try:
+        destination = DesktopGrantStore.instance().resolve(request.destinationGrantId, mode="write")
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail="The save destination expired. Choose it again.") from exc
+    source = Path(record.path)
+    try:
+        if source != destination:
+            temporary = destination.with_suffix(destination.suffix + ".tmp")
+            shutil.copy2(source, temporary)
+            temporary.replace(destination)
+    except OSError as exc:
+        raise HTTPException(status_code=400, detail=f"Could not save artifact: {exc}") from exc
+    return {"saved": True, "artifactId": artifact_id, "name": destination.name}

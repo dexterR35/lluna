@@ -19,7 +19,7 @@ function installNativeMenu(window, dispatch) {
     ]},
     { label: "View", submenu: [
       item("Zoom In", "view:zoom-in", "CmdOrCtrl+=", options), item("Zoom Out", "view:zoom-out", "CmdOrCtrl+-", options), item("Actual Size", "view:actual-size", "CmdOrCtrl+0", options), item("Fit Workflow", "view:fit", "F", options), item("Center Selection", "view:center-selection", "Shift+F", options),
-      { type: "separator" }, item("Toggle Node Library", "view:library", undefined, options), item("Toggle Inspector", "view:inspector", undefined, options), item("Toggle Minimap", "view:minimap", undefined, options), item("Toggle Logs", "view:logs", undefined, options), item("Toggle Downloads", "view:downloads", undefined, options), item("Reset Layout", "view:reset-layout", undefined, options),
+      { type: "separator" }, item("Toggle Node Library", "view:library", undefined, options), item("Toggle Minimap", "view:minimap", undefined, options), item("Toggle Logs", "view:logs", undefined, options), item("Toggle Downloads", "view:downloads", undefined, options), item("Reset Layout", "view:reset-layout", undefined, options),
       { role: "togglefullscreen", accelerator: "F11" }, ...(process.env.NODE_ENV === "development" ? [{ role: "toggleDevTools" }] : []),
     ]},
     { label: "Workflow", submenu: [
@@ -29,7 +29,7 @@ function installNativeMenu(window, dispatch) {
     ]},
     { label: "Nodes", submenu: [
       item("Add Node", "node:search", "Tab", options), item("Group Selection", "node:group", undefined, options), item("Ungroup", "node:ungroup", undefined, options), { type: "separator" },
-      item("Enable", "node:enable", undefined, options), item("Disable", "node:disable", undefined, options), item("Bypass", "node:bypass", undefined, options), item("Collapse", "node:collapse", undefined, options), item("Expand", "node:expand", undefined, options), item("Auto Layout", "node:auto-layout", undefined, options),
+      item("Enable", "node:enable", undefined, options), item("Disable", "node:disable", undefined, options), item("Collapse", "node:collapse", undefined, options), item("Expand", "node:expand", undefined, options), item("Auto Layout", "node:auto-layout", undefined, options),
     ]},
     { label: "Models", submenu: [item("Manage Models", "view:models", undefined, options), item("Download Queue", "view:downloads", undefined, options), item("Refresh Model Status", "models:refresh", undefined, options), item("Open Models Directory", "models:directory", undefined, options), item("Release Loaded Models", "models:release", undefined, options)] },
     { label: "Help", submenu: [item("Documentation", "help:documentation", undefined, options), item("Node Authoring Guide", "help:nodes", undefined, options), item("Keyboard Shortcuts", "help:shortcuts", undefined, options), item("Diagnostics", "view:diagnostics", undefined, options), item("Check for Updates", "updates:check", undefined, options), item("Report an Issue", "help:issues", undefined, options), item("Project Homepage", "help:homepage", undefined, options), { role: "about" }] },

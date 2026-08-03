@@ -49,6 +49,19 @@
         "title": "Position",
         "type": "object"
       },
+      "SaveArtifactRequest": {
+        "properties": {
+          "destinationGrantId": {
+            "title": "Destinationgrantid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "destinationGrantId"
+        ],
+        "title": "SaveArtifactRequest",
+        "type": "object"
+      },
       "StartRunRequest": {
         "properties": {
           "force": {
@@ -61,11 +74,11 @@
             "title": "Mode",
             "type": "string"
           },
-          "selected_node_ids": {
+          "selectedNodeIds": {
             "items": {
               "type": "string"
             },
-            "title": "Selected Node Ids",
+            "title": "Selectednodeids",
             "type": "array"
           },
           "workflow": {
@@ -80,6 +93,13 @@
       },
       "ValidationError": {
         "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
           "loc": {
             "items": {
               "anyOf": [
@@ -222,6 +242,11 @@
       "WorkflowGroup": {
         "additionalProperties": true,
         "properties": {
+          "appearance": {
+            "additionalProperties": true,
+            "title": "Appearance",
+            "type": "object"
+          },
           "color": {
             "default": "accent",
             "title": "Color",
@@ -234,6 +259,11 @@
           },
           "id": {
             "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "default": "flow",
+            "title": "Kind",
             "type": "string"
           },
           "label": {
@@ -251,6 +281,13 @@
           "position": {
             "$ref": "#/components/schemas/Position"
           },
+          "startNodeIds": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Startnodeids",
+            "type": "array"
+          },
           "width": {
             "default": 360,
             "title": "Width",
@@ -263,10 +300,10 @@
       "WorkflowNode": {
         "additionalProperties": true,
         "properties": {
-          "bypass": {
-            "default": false,
-            "title": "Bypass",
-            "type": "boolean"
+          "appearance": {
+            "additionalProperties": true,
+            "title": "Appearance",
+            "type": "object"
           },
           "collapsed": {
             "default": false,
@@ -294,6 +331,18 @@
           },
           "position": {
             "$ref": "#/components/schemas/Position"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result"
           },
           "schemaId": {
             "title": "Schemaid",
@@ -459,6 +508,90 @@
           }
         },
         "summary": "Get Artifact Metadata"
+      }
+    },
+    "/api/artifacts/{artifact_id}/save": {
+      "post": {
+        "description": "Copy a completed artifact to an explicitly granted desktop destination.",
+        "operationId": "save_artifact_api_artifacts__artifact_id__save_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "artifact_id",
+            "required": true,
+            "schema": {
+              "title": "Artifact Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-midgard-token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Midgard-Token"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveArtifactRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Save Artifact Api Artifacts  Artifact Id  Save Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Artifact"
       }
     },
     "/api/artifacts/{artifact_id}/thumbnail": {

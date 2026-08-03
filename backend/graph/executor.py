@@ -77,9 +77,18 @@ class ExecutionFailure(RuntimeError):
 
 
 class _RunControl:
-    def __init__(self, snapshot: RunSnapshot, workflow: WorkflowDocument) -> None:
+    def __init__(
+        self,
+        snapshot: RunSnapshot,
+        workflow: WorkflowDocument,
+        *,
+        mode: str = "all",
+        selected_node_ids: list[str] | None = None,
+    ) -> None:
         self.snapshot = snapshot
         self.workflow = workflow
+        self.mode = mode
+        self.selected_node_ids = list(selected_node_ids or [])
         self.cancel = threading.Event()
         self.pause = threading.Event()
         self.condition = threading.Condition()
@@ -118,23 +127,31 @@ class RunManager:
         from backend.core.atomic import atomic_write_json
         atomic_write_json(self._cache_path, self._cache)
 
-    def start(self, workflow: WorkflowDocument) -> RunSnapshot:
-        plan = compile_workflow(workflow)
+    def start(
+        self,
+        workflow: WorkflowDocument,
+        *,
+        mode: str = "all",
+        selected_node_ids: list[str] | None = None,
+    ) -> RunSnapshot:
+        plan = compile_workflow(workflow, mode=mode, selected_node_ids=selected_node_ids)
         if not plan.validation.valid:
             raise ExecutionFailure(
                 "VALIDATION",
                 "Workflow validation failed.",
             )
+        if not plan.steps:
+            raise ExecutionFailure("EMPTY_PLAN", "Nothing to run from the selected node.")
         run_id = str(uuid4())
         snapshot = RunSnapshot(
             run_id=run_id,
             workflow_id=workflow.project_id,
             nodes={node.id: NodeRun(node_id=node.id, status="DISABLED" if node.disabled else "IDLE") for node in workflow.nodes},
         )
-        control = _RunControl(snapshot, workflow)
+        control = _RunControl(snapshot, workflow, mode=mode, selected_node_ids=selected_node_ids)
         with self._lock:
             self._runs[run_id] = control
-        self._events.publish("run.queued", run_id=run_id, payload={"workflowId": workflow.project_id})
+        self._events.publish("run.queued", run_id=run_id, payload={"workflowId": workflow.project_id, "mode": mode})
         threading.Thread(target=self._execute, args=(control,), name=f"workflow-{run_id[:8]}", daemon=True).start()
         return snapshot.model_copy(deep=True)
 
@@ -209,7 +226,7 @@ class RunManager:
     def _execute(self, control: _RunControl) -> None:
         snapshot = control.snapshot
         workflow = control.workflow
-        plan = compile_workflow(workflow)
+        plan = compile_workflow(workflow, mode=control.mode, selected_node_ids=control.selected_node_ids)
         nodes = {node.id: node for node in workflow.nodes}
         incoming: dict[str, dict[str, tuple[str, str]]] = {}
         for edge in workflow.edges:
@@ -240,7 +257,9 @@ class RunManager:
                         artifact = self._artifacts.get(cached_id)
                         result = artifact
                         self._node_state(control, node.id, "CACHED", 100, "Loaded from cache")
-                        self._events.publish("node.cached", run_id=snapshot.run_id, node_id=node.id, payload={"artifactId": artifact.artifact_id})
+                        with control.lock:
+                            control.snapshot.nodes[node.id].artifact_ids = [artifact.artifact_id]
+                        self._events.publish("node.cached", run_id=snapshot.run_id, node_id=node.id, payload={"artifactIds": [artifact.artifact_id]})
                     except (KeyError, FileNotFoundError):
                         result = self._run_node(control, node, input_values, input_artifacts, cache_key)
                 else:
@@ -268,19 +287,38 @@ class RunManager:
             self._events.publish("run.completed", run_id=snapshot.run_id, payload={"artifactIds": snapshot.artifact_ids})
         except ExecutionFailure as exc:
             cancelled = exc.code == "CANCELLED"
+            node_status = "CANCELLED" if cancelled else "FAILED"
             with control.lock:
                 snapshot.status = RunStatus.CANCELLED if cancelled else RunStatus.FAILED
                 snapshot.completed_at = datetime.now(timezone.utc)
                 snapshot.error = {"code": exc.code, "message": str(exc), "retryable": exc.retryable}
-                if snapshot.current_node_id:
-                    snapshot.nodes[snapshot.current_node_id].status = "CANCELLED" if cancelled else "FAILED"
+                if snapshot.current_node_id and snapshot.current_node_id in snapshot.nodes:
+                    state = snapshot.nodes[snapshot.current_node_id]
+                    state.status = node_status
+                    state.message = str(exc)
+                    state.completed_at = snapshot.completed_at
+            if snapshot.current_node_id:
+                self._events.publish(
+                    "node.cancelled" if cancelled else "node.failed",
+                    run_id=snapshot.run_id,
+                    node_id=snapshot.current_node_id,
+                    payload=snapshot.error or {},
+                )
             self._events.publish("run.cancelled" if cancelled else "run.failed", run_id=snapshot.run_id, node_id=snapshot.current_node_id, payload=snapshot.error or {})
         except Exception as exc:
+            error = {"code": "INTERNAL", "message": str(exc), "retryable": False}
             with control.lock:
                 snapshot.status = RunStatus.FAILED
                 snapshot.completed_at = datetime.now(timezone.utc)
-                snapshot.error = {"code": "INTERNAL", "message": str(exc), "retryable": False}
-            self._events.publish("run.failed", run_id=snapshot.run_id, node_id=snapshot.current_node_id, payload=snapshot.error)
+                snapshot.error = error
+                if snapshot.current_node_id and snapshot.current_node_id in snapshot.nodes:
+                    state = snapshot.nodes[snapshot.current_node_id]
+                    state.status = "FAILED"
+                    state.message = str(exc)
+                    state.completed_at = snapshot.completed_at
+            if snapshot.current_node_id:
+                self._events.publish("node.failed", run_id=snapshot.run_id, node_id=snapshot.current_node_id, payload=error)
+            self._events.publish("run.failed", run_id=snapshot.run_id, node_id=snapshot.current_node_id, payload=error)
 
     def _wait_if_paused(self, control: _RunControl) -> None:
         if not control.pause.is_set():
@@ -307,23 +345,14 @@ class RunManager:
         run_id = control.snapshot.run_id
         self._node_state(control, node.id, "RUNNING", 0)
         self._events.publish("node.started", run_id=run_id, node_id=node.id, payload={"schemaId": node.schema_id})
-        if node.bypass and inputs:
-            result = next(iter(inputs.values()))
-        elif definition.adapter in {"load_image", "load_video", "load_mask"}:
-            grant_id = str(node.parameters.get("pathGrantId") or "")
-            path = self._grants.resolve(grant_id, mode="read")
-            result = self._artifacts.register_source(path)
+        if definition.adapter in {"load_image", "load_video", "load_mask"}:
+            result = self._load_granted_media(node)
         elif definition.adapter == "literal":
             result = {definition.outputs[0].id: node.parameters.get("value")}
         elif definition.adapter == "passthrough":
             result = next(iter(inputs.values()))
         elif definition.adapter == "save":
             result = self._save_output(node, next(iter(inputs.values())))
-        elif definition.adapter == "metadata":
-            artifact = next(iter(inputs.values()))
-            result = {"metadata": artifact.model_dump(mode="json") if isinstance(artifact, ArtifactRecord) else {}}
-        elif definition.adapter == "noop":
-            result = None
         else:
             result = self._run_inference(control, node, inputs, input_artifacts, cache_key)
         self._node_state(control, node.id, "SUCCEEDED", 100)
@@ -333,11 +362,56 @@ class RunManager:
         self._events.publish("node.completed", run_id=run_id, node_id=node.id, payload={"artifactIds": artifact_ids})
         return result
 
+    def _resolve_grant(self, grant_id: str, *, mode: str, empty_message: str) -> Path:
+        if not grant_id:
+            raise ExecutionFailure("MISSING_INPUT", empty_message)
+        try:
+            return self._grants.resolve(grant_id, mode=mode)
+        except PermissionError as exc:
+            raise ExecutionFailure(
+                "EXPIRED_GRANT",
+                "The selected file expired after restart. Choose the file again on this node.",
+            ) from exc
+
+    def _load_granted_media(self, node: WorkflowNode) -> ArtifactRecord:
+        persisted_ids = (node.result or {}).get("artifactIds") or (node.result or {}).get("artifact_ids") or []
+        persisted = None
+        if persisted_ids:
+            try:
+                persisted = self._artifacts.get(str(persisted_ids[-1]))
+            except (KeyError, FileNotFoundError):
+                persisted = None
+
+        grant_id = str(node.parameters.get("pathGrantId") or "")
+        if grant_id:
+            try:
+                path = self._grants.resolve(grant_id, mode="read")
+            except PermissionError as exc:
+                if persisted is not None:
+                    return persisted
+                raise ExecutionFailure(
+                    "EXPIRED_GRANT",
+                    "The selected file expired after restart. Choose the file again on this node.",
+                ) from exc
+            try:
+                return self._artifacts.register_source(path)
+            except FileNotFoundError as exc:
+                if persisted is not None:
+                    return persisted
+                raise ExecutionFailure("MISSING_FILE", f"The selected file is missing: {path}") from exc
+
+        if persisted is not None:
+            return persisted
+        raise ExecutionFailure("MISSING_INPUT", "Choose a local file for this node.")
+
     def _save_output(self, node: WorkflowNode, value: Any) -> ArtifactRecord:
         if not isinstance(value, ArtifactRecord):
             raise ExecutionFailure("MISSING_INPUT", "Save node needs an artifact.")
-        grant_id = str(node.parameters.get("destinationGrantId") or "")
-        destination = self._grants.resolve(grant_id, mode="write")
+        destination = self._resolve_grant(
+            str(node.parameters.get("destinationGrantId") or ""),
+            mode="write",
+            empty_message="Choose a destination file for Save Image.",
+        )
         source = Path(value.path)
         temporary = destination.with_suffix(destination.suffix + ".tmp")
         shutil.copy2(source, temporary)
@@ -366,7 +440,7 @@ class RunManager:
         params = node.parameters
         payload: dict[str, Any] = {"hardware_acceleration": settings.subtitle.hardware_acceleration, "output_path": output_raw}
         if adapter == "enhance":
-            payload.update(input_path=artifact_path("image"), mode=params.get("model") or settings.enhancement.mode, denoise=bool(params.get("denoise", settings.enhancement.denoise_enabled)), denoise_strength=settings.enhancement.denoise_strength, effective_settings={"max_long_edge": settings.enhancement.max_long_edge})
+            payload.update(input_path=artifact_path("image"), mode=params.get("model") or settings.enhancement.mode, denoise=bool(params.get("denoise", settings.enhancement.denoise_enabled)), denoise_strength=params.get("denoiseStrength") or settings.enhancement.denoise_strength, effective_settings={"max_long_edge": int(params.get("maxLongEdge") or settings.enhancement.max_long_edge)})
         elif adapter == "low_light":
             payload.update(input_path=artifact_path("image"), mode=params.get("model") or settings.low_light.mode)
         elif adapter == "generate":

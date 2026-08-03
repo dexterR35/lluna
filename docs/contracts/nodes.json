@@ -348,13 +348,56 @@
     ],
     "parameters": [
       {
-        "default": "",
+        "default": "FLUX.2-klein-base-4B",
         "description": "",
         "id": "model",
         "label": "Model",
         "maximum": null,
         "minimum": null,
-        "options": [],
+        "options": [
+          {
+            "description": "Recommended balance of quality and memory.",
+            "label": "FLUX.2 Klein Base 4B",
+            "modelId": "flux",
+            "value": "FLUX.2-klein-base-4B"
+          },
+          {
+            "description": "Fast distilled 4B generation.",
+            "label": "FLUX.2 Klein 4B",
+            "modelId": "flux",
+            "value": "FLUX.2-klein-4B"
+          },
+          {
+            "description": "Higher-quality base model.",
+            "label": "FLUX.2 Klein Base 9B",
+            "modelId": "flux",
+            "value": "FLUX.2-klein-base-9B"
+          },
+          {
+            "description": "Fast higher-capacity generation.",
+            "label": "FLUX.2 Klein 9B",
+            "modelId": "flux",
+            "value": "FLUX.2-klein-9B"
+          },
+          {
+            "description": "Large non-commercial development model.",
+            "label": "FLUX.2 Dev",
+            "modelId": "flux2-dev",
+            "value": "FLUX.2-dev"
+          },
+          {
+            "description": "Lower-memory FP8 variant.",
+            "label": "FLUX.2 Klein 9B FP8",
+            "modelId": "flux2-klein-9b-fp8",
+            "value": "FLUX.2-klein-9b-fp8"
+          },
+          {
+            "description": "Apache-licensed image generation.",
+            "label": "Qwen-Image",
+            "modelId": "qwen-image",
+            "value": "Qwen-Image"
+          }
+        ],
         "required": false,
         "step": null,
         "type": "model"
@@ -397,7 +440,7 @@
       },
       {
         "default": -1,
-        "description": "",
+        "description": "Use -1 for a random seed.",
         "id": "seed",
         "label": "Seed",
         "maximum": null,
@@ -454,13 +497,26 @@
     ],
     "parameters": [
       {
-        "default": "",
+        "default": "RealESRGAN_x2plus",
         "description": "",
         "id": "model",
         "label": "Model",
         "maximum": null,
         "minimum": null,
-        "options": [],
+        "options": [
+          {
+            "description": "Balanced detail restoration and 2\u00d7 enlargement.",
+            "label": "Real-ESRGAN \u00d72",
+            "modelId": "realesrgan-x2",
+            "value": "RealESRGAN_x2plus"
+          },
+          {
+            "description": "Maximum enlargement with higher memory use.",
+            "label": "Real-ESRGAN \u00d74",
+            "modelId": "realesrgan-x4",
+            "value": "RealESRGAN_x4plus"
+          }
+        ],
         "required": false,
         "step": null,
         "type": "model"
@@ -469,13 +525,46 @@
         "default": false,
         "description": "",
         "id": "denoise",
-        "label": "Denoise",
+        "label": "Pre-denoise",
         "maximum": null,
         "minimum": null,
         "options": [],
         "required": false,
         "step": null,
         "type": "boolean"
+      },
+      {
+        "default": "safe",
+        "description": "",
+        "id": "denoiseStrength",
+        "label": "Denoise strength",
+        "maximum": null,
+        "minimum": null,
+        "options": [
+          {
+            "label": "Safe",
+            "value": "safe"
+          },
+          {
+            "label": "Medium",
+            "value": "medium"
+          }
+        ],
+        "required": false,
+        "step": null,
+        "type": "select"
+      },
+      {
+        "default": 5000,
+        "description": "Caps the final image size to manage memory.",
+        "id": "maxLongEdge",
+        "label": "Maximum long edge",
+        "maximum": 32768.0,
+        "minimum": 256.0,
+        "options": [],
+        "required": false,
+        "step": null,
+        "type": "integer"
       }
     ],
     "requiredModels": [
@@ -498,7 +587,7 @@
       "onnx"
     ],
     "category": "Image/Remove",
-    "description": "Produces a transparent cutout using a local rembg model.",
+    "description": "Produces a transparent cutout using a selected local segmentation model.",
     "icon": "scissors",
     "inputs": [
       {
@@ -540,13 +629,62 @@
     ],
     "parameters": [
       {
-        "default": "",
+        "default": "birefnet-general",
         "description": "",
         "id": "model",
         "label": "Model",
         "maximum": null,
         "minimum": null,
-        "options": [],
+        "options": [
+          {
+            "description": "Best general-purpose cutouts.",
+            "label": "BiRefNet General",
+            "modelId": "rembg",
+            "value": "birefnet-general"
+          },
+          {
+            "description": "Faster general-purpose removal.",
+            "label": "BiRefNet Lite",
+            "modelId": "rembg",
+            "value": "birefnet-general-lite"
+          },
+          {
+            "description": "Optimized for people and portraits.",
+            "label": "BiRefNet Portrait",
+            "modelId": "rembg",
+            "value": "birefnet-portrait"
+          },
+          {
+            "description": "Fast human segmentation.",
+            "label": "U\u00b2-Net Human",
+            "modelId": "rembg",
+            "value": "u2net_human_seg"
+          },
+          {
+            "description": "Separates clothing categories.",
+            "label": "U\u00b2-Net Clothing",
+            "modelId": "rembg",
+            "value": "u2net_cloth_seg"
+          },
+          {
+            "description": "Illustration and anime artwork.",
+            "label": "IS-Net Anime",
+            "modelId": "rembg",
+            "value": "isnet-anime"
+          },
+          {
+            "description": "Balanced classic segmentation.",
+            "label": "IS-Net General",
+            "modelId": "rembg",
+            "value": "isnet-general-use"
+          },
+          {
+            "description": "High-quality general background removal.",
+            "label": "BRIA RMBG",
+            "modelId": "rembg",
+            "value": "bria-rmbg"
+          }
+        ],
         "required": false,
         "step": null,
         "type": "model"
@@ -596,13 +734,20 @@
     ],
     "parameters": [
       {
-        "default": "",
+        "default": "MIRNet_LOL",
         "description": "",
         "id": "model",
         "label": "Model",
         "maximum": null,
         "minimum": null,
-        "options": [],
+        "options": [
+          {
+            "description": "Low-light image restoration.",
+            "label": "MIRNet LOL",
+            "modelId": "mirnet",
+            "value": "MIRNet_LOL"
+          }
+        ],
         "required": false,
         "step": null,
         "type": "model"
@@ -846,7 +991,7 @@
     "cachePolicy": "content-addressed",
     "capabilities": [],
     "category": "Output/Preview",
-    "description": "Shows an image artifact in the inspector.",
+    "description": "Shows the final image artifact on the node.",
     "icon": "eye",
     "inputs": [
       {
@@ -1024,83 +1169,6 @@
     "schemaId": "midgard.output.save_video",
     "schemaVersion": 1,
     "sideEffects": true,
-    "supportsCancel": true,
-    "supportsPause": false,
-    "supportsPreview": false,
-    "unavailableReason": "",
-    "version": 1
-  },
-  {
-    "adapter": "metadata",
-    "available": true,
-    "cachePolicy": "content-addressed",
-    "capabilities": [],
-    "category": "Utility",
-    "description": "Displays artifact metadata.",
-    "icon": "box",
-    "inputs": [
-      {
-        "description": "",
-        "id": "artifact",
-        "label": "Artifact",
-        "multiple": false,
-        "required": true,
-        "type": "ARTIFACT"
-      }
-    ],
-    "kind": "utility",
-    "name": "Show Metadata",
-    "outputs": [
-      {
-        "description": "",
-        "id": "metadata",
-        "label": "Metadata",
-        "multiple": false,
-        "required": false,
-        "type": "METADATA"
-      }
-    ],
-    "parameters": [],
-    "requiredModels": [],
-    "schemaId": "midgard.utility.metadata",
-    "schemaVersion": 1,
-    "sideEffects": false,
-    "supportsCancel": true,
-    "supportsPause": false,
-    "supportsPreview": false,
-    "unavailableReason": "",
-    "version": 1
-  },
-  {
-    "adapter": "noop",
-    "available": true,
-    "cachePolicy": "none",
-    "capabilities": [],
-    "category": "Utility",
-    "description": "Adds documentation to a workflow.",
-    "icon": "sticky-note",
-    "inputs": [],
-    "kind": "utility",
-    "name": "Workflow Note",
-    "outputs": [],
-    "parameters": [
-      {
-        "default": "",
-        "description": "",
-        "id": "text",
-        "label": "Note",
-        "maximum": null,
-        "minimum": null,
-        "options": [],
-        "required": false,
-        "step": null,
-        "type": "textarea"
-      }
-    ],
-    "requiredModels": [],
-    "schemaId": "midgard.utility.note",
-    "schemaVersion": 1,
-    "sideEffects": false,
     "supportsCancel": true,
     "supportsPause": false,
     "supportsPreview": false,
