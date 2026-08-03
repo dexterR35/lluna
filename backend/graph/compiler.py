@@ -14,8 +14,14 @@ def compile_workflow(
     *,
     mode: str = "all",
     selected_node_ids: list[str] | None = None,
+    check_model_availability: bool = False,
 ) -> ExecutionPlan:
-    validation = validate_workflow(workflow, mode=mode, selected_node_ids=selected_node_ids)
+    validation = validate_workflow(
+        workflow,
+        mode=mode,
+        selected_node_ids=selected_node_ids,
+        check_model_availability=check_model_availability,
+    )
     if not validation.valid:
         return ExecutionPlan(workflow_id=workflow.project_id, steps=[], validation=validation)
     active = scoped_node_ids(workflow, mode=mode, selected_node_ids=selected_node_ids)

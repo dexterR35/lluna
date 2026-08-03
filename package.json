@@ -13,7 +13,7 @@
     "check": "npm --workspace frontend run check && python3 scripts/static_guards.py",
     "test": "npm run test:frontend && npm run test:backend",
     "test:frontend": "npm --workspace frontend run test",
-    "test:backend": "python3 -m pytest -q",
+    "test:backend": "node scripts/run-python-tests.mjs",
     "test:e2e": "npm --workspace frontend run test:e2e",
     "package": "npm --workspace frontend run package",
     "make": "npm --workspace frontend run make",

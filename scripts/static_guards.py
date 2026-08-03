@@ -18,7 +18,8 @@ all_dependencies={**packages.get("dependencies",{}),**packages.get("devDependenc
 for forbidden in ("@chakra-ui/react","@mui/material","@mantine/core","@radix-ui/react-dialog","bootstrap","antd","primereact","@fluentui/react","styled-components","@emotion/react"):
     if forbidden in all_dependencies: errors.append(f"Forbidden UI framework dependency: {forbidden}")
 for source in (ROOT/"frontend"/"src").rglob("*"):
-    if source.is_file() and source.suffix not in {".js",".jsx",".css"}: errors.append(f"Frontend application source must be JS/JSX/CSS: {source.relative_to(ROOT)}")
+    if source.is_file() and source.suffix not in {".js",".jsx",".css"} and not source.name.endswith(".d.ts"):
+        errors.append(f"Frontend application source must be JS/JSX/CSS (declaration-only .d.ts files are allowed): {source.relative_to(ROOT)}")
 if errors:
     print("\n".join(errors),file=sys.stderr);raise SystemExit(1)
 print("Static desktop guards passed: Electron-only, Qt-free Python, no forbidden UI framework.")

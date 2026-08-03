@@ -50,3 +50,30 @@ def test_load_image_uses_saved_artifact_when_desktop_grant_has_expired(tmp_path)
     )
     loaded=manager._load_granted_media(node)
     assert loaded.artifact_id==artifact.artifact_id
+
+def test_selected_run_reuses_boundary_artifact_without_running_upstream(monkeypatch,tmp_path):
+    monkeypatch.setenv("MIDGARD_FAKE_WORKER","1")
+    source_path=tmp_path/"boundary.png";Image.new("RGB",(6,5),(30,40,50)).save(source_path)
+    ArtifactStore._instance=ArtifactStore(tmp_path/"artifacts")
+    artifact=ArtifactStore.instance().register_source(source_path)
+    DesktopGrantStore._instance=None
+    RunManager._instance=None;manager=RunManager.instance()
+    source=WorkflowNode(
+        id="source",
+        schema_id="midgard.input.image",
+        result={"status":"SUCCEEDED","artifactIds":[artifact.artifact_id]},
+    )
+    enhance=WorkflowNode(id="enhance",schema_id="midgard.image.upscale",parameters={"model":"test"})
+    workflow=WorkflowDocument(
+        nodes=[source,enhance],
+        edges=[WorkflowEdge(source_node_id="source",source_port_id="image",target_node_id="enhance",target_port_id="image")],
+    )
+    run=manager.start(workflow,mode="selected",selected_node_ids=["enhance"])
+    deadline=time.monotonic()+3
+    while time.monotonic()<deadline:
+        snapshot=manager.get(run.run_id)
+        if snapshot.status in {"COMPLETED","FAILED","CANCELLED"}:break
+        time.sleep(.02)
+    assert snapshot.status=="COMPLETED",snapshot.error
+    assert set(snapshot.nodes)=={"enhance"}
+    assert snapshot.nodes["enhance"].status in {"SUCCEEDED","CACHED"}

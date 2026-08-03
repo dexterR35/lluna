@@ -1,46 +1,145 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Background, BackgroundVariant, Controls, MiniMap, ReactFlow, ReactFlowProvider, useKeyPress, useReactFlow, ViewportPortal } from "@xyflow/react";
+import {
+  Background,
+  BackgroundVariant,
+  Controls,
+  MiniMap,
+  ReactFlow,
+  ReactFlowProvider,
+  useKeyPress,
+  useReactFlow,
+  ViewportPortal,
+} from "@xyflow/react";
 import { Check, Layers3, Play, X } from "lucide-react";
 import "@xyflow/react/dist/style.css";
 import { Badge, ContextMenu } from "../components";
 import { useDesktopStore } from "../state/desktopStore";
 import { boundsForNodes, useEditorStore } from "../state/editorStore";
 import { useRunStore } from "../state/runStore";
+import { useServerStore } from "../state/serverStore";
 import { useToast } from "../components/ToastContext";
 import { MidgardEdge } from "./MidgardEdge";
 import { MidgardNode } from "../nodes/MidgardNode";
-const nodeTypes = { midgard: MidgardNode }; const edgeTypes = { midgard: MidgardEdge };
-const FLOW_COLORS = { teal: "#63cbb6", blue: "#70b7f8", violet: "#a393fa", amber: "#e8b768", rose: "#ef7182", slate: "#9298a7" };
+/** @typedef {import("../types").EditorNode} EditorNode */
+/** @typedef {{onAdd: (position: {x: number, y: number}) => void, onRunFlow?: (ids: string[]) => void, onRunNode?: (id: string) => void, onOpenNode?: (id: string) => void, onPreviewNode?: (id: string) => void, onViewportChange?: (viewport: import("@xyflow/react").Viewport) => void}} CanvasProps */
+/** @type {import("@xyflow/react").NodeTypes} */
+const nodeTypes = { midgard: MidgardNode };
+/** @type {import("@xyflow/react").EdgeTypes} */
+const edgeTypes = { midgard: MidgardEdge };
+/** @type {Record<string, string>} */
+const FLOW_COLORS = {
+  teal: "#63cbb6",
+  blue: "#70b7f8",
+  violet: "#a393fa",
+  amber: "#e8b768",
+  rose: "#ef7182",
+  slate: "#9298a7",
+};
 const DEFAULT_VIEWPORT = { x: 0, y: 0, zoom: 0.78 };
-const FIT_VIEW_OPTIONS = { padding: 0.3, minZoom: 0.2, maxZoom: 0.85, duration: 280 };
-const FOCUS_VIEW_OPTIONS = { padding: 0.5, minZoom: 0.2, maxZoom: 0.95, duration: 240 };
+const FIT_VIEW_OPTIONS = {
+  padding: 0.3,
+  minZoom: 0.2,
+  maxZoom: 0.85,
+  duration: 280,
+};
+const FOCUS_VIEW_OPTIONS = {
+  padding: 0.5,
+  minZoom: 0.2,
+  maxZoom: 0.95,
+  duration: 240,
+};
 
+/** @param {{group: import("../types").WorkflowGroup, nodes: EditorNode[], selected: boolean, onSelect: () => void, onRun: (ids: string[]) => void}} props */
 function FlowBox({ group, nodes, selected, onSelect, onRun }) {
-  const nodeStates = useRunStore(store => store.nodeStates);
+  const nodeStates = useRunStore((store) => store.nodeStates);
   const bounds = boundsForNodes(nodes, group.nodeIds);
-  const members = group.nodeIds.map(id => nodes.find(node => node.id === id)).filter(Boolean);
-  const states = members.map(node => {
-    if (node.data.disabled) return { status: "DISABLED", artifactIds: [] };
-    const live = nodeStates[node.id];
-    return live?.status && live.status !== "IDLE" ? live : node.data.result || live;
-  }).filter(Boolean);
-  const failed = states.some(state => state.status === "FAILED");
-  const running = states.some(state => ["RUNNING", "QUEUED", "PAUSED", "PAUSE_REQUESTED"].includes(state.status));
-  const completed = states.length === members.length && states.length > 0 && states.every(state => ["SUCCEEDED", "CACHED", "DISABLED"].includes(state.status));
-  const outputs = new Set(states.flatMap(state => state.artifactIds || [])).size;
+  const members = group.nodeIds.flatMap((id) => {
+    const node = nodes.find((candidate) => candidate.id === id);
+    return node ? [node] : [];
+  });
+  const states = members
+    .map((node) => {
+      if (node.data.disabled) return { status: "DISABLED", artifactIds: [] };
+      const live = nodeStates[node.id];
+      return live?.status && live.status !== "IDLE"
+        ? live
+        : node.data.result || live;
+    })
+    .filter(Boolean);
+  const failed = states.some((state) => state.status === "FAILED");
+  const running = states.some((state) =>
+    ["RUNNING", "QUEUED", "PAUSED", "PAUSE_REQUESTED"].includes(
+      state.status || "",
+    ),
+  );
+  const completed =
+    states.length === members.length &&
+    states.length > 0 &&
+    states.every((state) =>
+      ["SUCCEEDED", "CACHED", "DISABLED"].includes(state.status || ""),
+    );
+  const outputs = new Set(states.flatMap((state) => state.artifactIds || []))
+    .size;
   const StatusIcon = failed ? X : completed ? Check : Layers3;
   const color = FLOW_COLORS[group.color] || FLOW_COLORS.teal;
   return (
     <section
       aria-label={`${group.label} flow box`}
       className={`pointer-events-none absolute rounded-2xl border transition ${selected ? "" : "border-dashed"}`}
-      style={{ transform: `translate(${bounds.position.x}px,${bounds.position.y}px)`, width: bounds.width, height: bounds.height, borderColor: selected ? color : `color-mix(in srgb, ${color} 30%, transparent)`, background: `color-mix(in srgb, ${color} 2.5%, transparent)` }}
+      style={{
+        transform: `translate(${bounds.position.x}px,${bounds.position.y}px)`,
+        width: bounds.width,
+        height: bounds.height,
+        borderColor: selected
+          ? color
+          : `color-mix(in srgb, ${color} 30%, transparent)`,
+        background: `color-mix(in srgb, ${color} 2.5%, transparent)`,
+      }}
     >
-      <header className="pointer-events-auto absolute inset-x-2.5 top-2 flex h-9 items-center gap-2 rounded-xl border border-mg-border bg-mg-panel/95 px-2 backdrop-blur" onPointerDown={event => { event.stopPropagation(); onSelect(); }}>
-        <span className="grid size-6 place-items-center rounded-lg border" style={{ color, borderColor: `color-mix(in srgb, ${color} 22%, transparent)`, background: `color-mix(in srgb, ${color} 9%, transparent)` }}><StatusIcon className={`size-3 ${running ? "animate-pulse" : ""}`} /></span>
-        <span className="min-w-0"><strong className="block truncate text-[10px] font-semibold">{group.label}</strong><span className="block text-[8px] text-mg-muted">{group.nodeIds.length} nodes{outputs ? ` · ${outputs} results` : ""}</span></span>
-        {completed && <Badge tone="success" className="ml-auto">Complete</Badge>}
-        <button type="button" className={`nodrag ${completed ? "" : "ml-auto"} grid size-7 place-items-center rounded-lg text-white transition hover:brightness-110`} style={{ background: color }} aria-label={`Run ${group.label} from start to end`} onClick={event => { event.stopPropagation(); onRun(group.startNodeIds?.length ? group.startNodeIds : [group.nodeIds[0]]); }}>
+      <header
+        className="pointer-events-auto absolute inset-x-2.5 top-2 flex h-10 items-center gap-2 rounded-2xl border border-mg-border bg-mg-panel/95 px-2.5 shadow-soft backdrop-blur"
+        onPointerDown={(event) => {
+          event.stopPropagation();
+          onSelect();
+        }}
+      >
+        <span
+          className="grid size-7 place-items-center rounded-xl border"
+          style={{
+            color,
+            borderColor: `color-mix(in srgb, ${color} 22%, transparent)`,
+            background: `color-mix(in srgb, ${color} 9%, transparent)`,
+          }}
+        >
+          <StatusIcon className={`size-3 ${running ? "animate-pulse" : ""}`} />
+        </span>
+        <span className="min-w-0">
+          <strong className="block truncate text-[11px] font-semibold tracking-tight">
+            {group.label}
+          </strong>
+          <span className="block text-[10px] text-mg-muted">
+            {group.nodeIds.length} nodes{outputs ? ` · ${outputs} results` : ""}
+          </span>
+        </span>
+        {completed && (
+          <Badge tone="success" className="ml-auto">
+            Complete
+          </Badge>
+        )}
+        <button
+          type="button"
+          className={`nodrag ${completed ? "" : "ml-auto"} grid size-7 place-items-center rounded-full text-white transition hover:brightness-110`}
+          style={{ background: color }}
+          aria-label={`Run ${group.label} from start to end`}
+          onClick={(event) => {
+            event.stopPropagation();
+            onRun(
+              group.startNodeIds?.length
+                ? group.startNodeIds
+                : [group.nodeIds[0]],
+            );
+          }}
+        >
           <Play className="size-3 fill-current" />
         </button>
       </header>
@@ -48,14 +147,275 @@ function FlowBox({ group, nodes, selected, onSelect, onRun }) {
   );
 }
 
-function CanvasBody({ onAdd, onRunFlow, onRunNode, onOpenNode, onPreviewNode, onViewportChange }) { const wrapper = useRef(null); const flow = useReactFlow(); const toast = useToast(); const nodes = useEditorStore(store=>store.nodes); const edges=useEditorStore(store=>store.edges); const groups=useEditorStore(store=>store.groups); const selectedGroupId=useEditorStore(store=>store.selectedGroupId); const selectGroup=useEditorStore(store=>store.selectGroup); const onNodesChange=useEditorStore(store=>store.onNodesChange); const onEdgesChange=useEditorStore(store=>store.onEdgesChange); const connect=useEditorStore(store=>store.connect); const addNode=useEditorStore(store=>store.addNode); const setViewport=useEditorStore(store=>store.setViewport); const minimap=useDesktopStore(store=>store.minimapVisible); const [menu,setMenu]=useState(null);
-  const spacePressed=useKeyPress("Space",{preventDefault:true});
-  useEffect(()=>{const fit=()=>void flow.fitView(FIT_VIEW_OPTIONS);const focus=event=>{const id=event.detail?.id;if(!id)return;void flow.fitView({...FOCUS_VIEW_OPTIONS,nodes:[{id}]});};window.addEventListener("midgard:fit",fit);window.addEventListener("midgard:focus-node",focus);return()=>{window.removeEventListener("midgard:fit",fit);window.removeEventListener("midgard:focus-node",focus);};},[flow]);
-  const canvasNodes=useMemo(()=>nodes.map(node=>({...node,data:{...node.data,nodeActions:{onOpen:onOpenNode,onRun:onRunNode,onPreview:onPreviewNode}}})),[nodes,onOpenNode,onPreviewNode,onRunNode]);
-  const drop=useCallback(async event=>{event.preventDefault();const position=flow.screenToFlowPosition({x:event.clientX,y:event.clientY});const schemaId=event.dataTransfer.getData("application/x-midgard-node");if(schemaId){addNode(schemaId,position);return;}const files=[...event.dataTransfer.files];if(files.length&&window.midgardDesktop?.registerDroppedFiles){try{const grants=await window.midgardDesktop.registerDroppedFiles(files);grants.forEach((grant,index)=>{const video=grant.mediaType?.startsWith("video/")||/\.(mp4|mov|mkv|webm|avi)$/i.test(grant.name);const id=addNode(video?"midgard.input.video":"midgard.input.image",{x:position.x+index*28,y:position.y+index*28});if(id){useRunStore.getState().clearNodeResult(id);useEditorStore.getState().updateNode(id,{parameters:{pathGrantId:grant.grantId},result:{status:"READY",artifactIds:grant.artifactId?[grant.artifactId]:[],sourceName:grant.name,completedAt:new Date().toISOString()}});}});}catch(error){toast.push(error?.message||"Could not load the dropped file","error");}}},[addNode,flow,toast]);
-  return <div ref={wrapper} className="relative h-full w-full" onContextMenu={event=>{event.preventDefault();setMenu({x:event.clientX,y:event.clientY,position:flow.screenToFlowPosition({x:event.clientX,y:event.clientY})});}}><ReactFlow className={spacePressed?"artboard-panning":""} nodes={canvasNodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onPaneClick={()=>useEditorStore.getState().deselect()} onConnect={connection=>{const result=connect(connection);if(!result.valid)toast.push(result.reason,"error");}} isValidConnection={connection=>useEditorStore.getState().canConnect(connection).valid} onDrop={drop} onDragOver={event=>{event.preventDefault();event.dataTransfer.dropEffect="copy";}} onMove={(_,viewport)=>onViewportChange?.(viewport)} onMoveEnd={(_,viewport)=>{setViewport(viewport);onViewportChange?.(viewport);}} defaultViewport={DEFAULT_VIEWPORT} fitView fitViewOptions={FIT_VIEW_OPTIONS} zoomOnDoubleClick={false} zoomOnScroll={false} zoomActivationKeyCode={["Control","Meta"]} panOnScroll={false} panOnDrag={spacePressed} panActivationKeyCode={null} nodesDraggable={!spacePressed} elementsSelectable={!spacePressed} snapToGrid snapGrid={[16,16]} selectionOnDrag={!spacePressed} deleteKeyCode={["Backspace","Delete"]} multiSelectionKeyCode="Shift" minZoom={.2} maxZoom={2} connectionRadius={26}>
-    <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="#282b34"/><Controls showInteractive={false}/>{minimap&&<MiniMap pannable zoomable nodeColor="#343844" maskColor="rgba(9,10,13,.76)"/>}
-    <ViewportPortal>{groups.map(group=><FlowBox key={group.id} group={group} nodes={nodes} selected={selectedGroupId===group.id} onSelect={()=>selectGroup(group.id)} onRun={ids=>onRunFlow?.(ids)}/>)}</ViewportPortal>
-  </ReactFlow><ContextMenu open={Boolean(menu)} x={menu?.x||0} y={menu?.y||0} onClose={()=>setMenu(null)} onSelect={id=>{if(id==="add")onAdd(menu.position);if(id==="flow"){const created=useEditorStore.getState().createFlowFromSelected();if(!created)toast.push("Select a start node first","error");}if(id==="fit")flow.fitView(FIT_VIEW_OPTIONS);if(id==="select")useEditorStore.getState().selectAll();if(id==="layout")useEditorStore.getState().autoLayout();}} items={[{id:"add",label:"Add node…"},{id:"flow",label:"Create flow box to end"},{id:"select",label:"Select all",shortcut:"Ctrl+A"},{id:"fit",label:"Fit workflow",shortcut:"F"},{id:"layout",label:"Auto layout"}]}/></div>;
+/** @param {CanvasProps} props */
+function CanvasBody({
+  onAdd,
+  onRunFlow,
+  onRunNode,
+  onOpenNode,
+  onPreviewNode,
+  onViewportChange,
+}) {
+  const wrapper = useRef(/** @type {HTMLDivElement | null} */ (null));
+  const flow = useReactFlow();
+  const toast = useToast();
+  const nodes = useEditorStore((store) => store.nodes);
+  const models = useServerStore((store) => store.models);
+  const edges = useEditorStore((store) => store.edges);
+  const groups = useEditorStore((store) => store.groups);
+  const selectedGroupId = useEditorStore((store) => store.selectedGroupId);
+  const selectGroup = useEditorStore((store) => store.selectGroup);
+  const onNodesChange = useEditorStore((store) => store.onNodesChange);
+  const onEdgesChange = useEditorStore((store) => store.onEdgesChange);
+  const connect = useEditorStore((store) => store.connect);
+  const addNode = useEditorStore((store) => store.addNode);
+  const setNodeModel = useEditorStore((store) => store.setNodeModel);
+  const updateNode = useEditorStore((store) => store.updateNode);
+  const setViewport = useEditorStore((store) => store.setViewport);
+  const minimap = useDesktopStore((store) => store.minimapVisible);
+  const [menu, setMenu] = useState(
+    /** @type {{x: number, y: number, position: {x: number, y: number}} | null} */ (
+      null
+    ),
+  );
+  const spacePressed = useKeyPress("Space", { preventDefault: true });
+  useEffect(() => {
+    const fit = () => void flow.fitView(FIT_VIEW_OPTIONS);
+    const focus = (/** @type {Event} */ event) => {
+      const id = event instanceof CustomEvent ? event.detail?.id : null;
+      if (typeof id !== "string") return;
+      void flow.fitView({ ...FOCUS_VIEW_OPTIONS, nodes: [{ id }] });
+    };
+    window.addEventListener("midgard:fit", fit);
+    window.addEventListener("midgard:focus-node", focus);
+    return () => {
+      window.removeEventListener("midgard:fit", fit);
+      window.removeEventListener("midgard:focus-node", focus);
+    };
+  }, [flow]);
+  const changeModel = useCallback(
+    (/** @type {string} */ nodeId, /** @type {string | number} */ value) => {
+      setNodeModel(nodeId, value);
+      useRunStore.getState().clearNodeResult(nodeId);
+    },
+    [setNodeModel],
+  );
+  const changeParameter = useCallback(
+    (
+      /** @type {string} */ nodeId,
+      /** @type {string} */ key,
+      /** @type {unknown} */ value,
+    ) => {
+      const current = useEditorStore
+        .getState()
+        .nodes.find((node) => node.id === nodeId);
+      if (!current) return;
+      updateNode(nodeId, {
+        parameters: { ...current.data.parameters, [key]: value },
+      });
+      useRunStore.getState().clearNodeResult(nodeId);
+    },
+    [updateNode],
+  );
+  const canvasNodes = useMemo(
+    () =>
+      nodes.map((node) => ({
+        ...node,
+        data: {
+          ...node.data,
+          nodeActions: {
+            onOpen: onOpenNode,
+            onRun: onRunNode,
+            onPreview: onPreviewNode,
+            onModelChange: changeModel,
+            onParameterChange: changeParameter,
+          },
+          modelInventory: models,
+        },
+      })),
+    [
+      changeModel,
+      changeParameter,
+      models,
+      nodes,
+      onOpenNode,
+      onPreviewNode,
+      onRunNode,
+    ],
+  );
+  const drop = useCallback(
+    async (/** @type {import("react").DragEvent<HTMLDivElement>} */ event) => {
+      event.preventDefault();
+      const position = flow.screenToFlowPosition({
+        x: event.clientX,
+        y: event.clientY,
+      });
+      const schemaId = event.dataTransfer.getData("application/x-midgard-node");
+      if (schemaId) {
+        addNode(schemaId, position);
+        return;
+      }
+      const files = [...event.dataTransfer.files];
+      if (files.length && window.midgardDesktop?.registerDroppedFiles) {
+        try {
+          const grants =
+            await window.midgardDesktop.registerDroppedFiles(files);
+          grants.forEach((grant, index) => {
+            const video =
+              grant.mediaType?.startsWith("video/") ||
+              /\.(mp4|mov|mkv|webm|avi)$/i.test(grant.name);
+            const id = addNode(
+              video ? "midgard.input.video" : "midgard.input.image",
+              { x: position.x + index * 28, y: position.y + index * 28 },
+            );
+            if (id) {
+              useRunStore.getState().clearNodeResult(id);
+              useEditorStore
+                .getState()
+                .updateNode(id, {
+                  parameters: { pathGrantId: grant.grantId },
+                  result: {
+                    status: "READY",
+                    artifactIds: grant.artifactId ? [grant.artifactId] : [],
+                    sourceName: grant.name,
+                    completedAt: new Date().toISOString(),
+                  },
+                });
+            }
+          });
+        } catch (error) {
+          toast.push(
+            error instanceof Error
+              ? error.message
+              : "Could not load the dropped file",
+            "error",
+          );
+        }
+      }
+    },
+    [addNode, flow, toast],
+  );
+  return (
+    <div
+      ref={wrapper}
+      className="relative h-full w-full"
+      onContextMenu={(event) => {
+        event.preventDefault();
+        setMenu({
+          x: event.clientX,
+          y: event.clientY,
+          position: flow.screenToFlowPosition({
+            x: event.clientX,
+            y: event.clientY,
+          }),
+        });
+      }}
+    >
+      <ReactFlow
+        className={spacePressed ? "artboard-panning" : ""}
+        nodes={canvasNodes}
+        edges={edges}
+        nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onPaneClick={() => useEditorStore.getState().deselect()}
+        onConnect={(connection) => {
+          const result = connect(connection);
+          if (!result.valid) toast.push(result.reason, "error");
+        }}
+        isValidConnection={(connection) =>
+          useEditorStore.getState().canConnect(connection).valid
+        }
+        onDrop={drop}
+        onDragOver={(event) => {
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "copy";
+        }}
+        onMove={(_, viewport) => onViewportChange?.(viewport)}
+        onMoveEnd={(_, viewport) => {
+          setViewport(viewport);
+          onViewportChange?.(viewport);
+        }}
+        defaultViewport={DEFAULT_VIEWPORT}
+        fitView
+        fitViewOptions={FIT_VIEW_OPTIONS}
+        zoomOnDoubleClick={false}
+        zoomOnScroll={false}
+        zoomActivationKeyCode={["Control", "Meta"]}
+        panOnScroll={false}
+        panOnDrag={spacePressed}
+        panActivationKeyCode={null}
+        nodesDraggable={!spacePressed}
+        elementsSelectable={!spacePressed}
+        snapToGrid
+        snapGrid={[16, 16]}
+        selectionOnDrag={!spacePressed}
+        deleteKeyCode={["Backspace", "Delete"]}
+        multiSelectionKeyCode="Shift"
+        minZoom={0.2}
+        maxZoom={2}
+        connectionRadius={26}
+      >
+        <Background
+          variant={BackgroundVariant.Dots}
+          gap={24}
+          size={1}
+          color="#2a2f3a"
+        />
+        <Controls showInteractive={false} />
+        {minimap && (
+          <MiniMap
+            pannable
+            zoomable
+            nodeColor="#343844"
+            maskColor="rgba(9,10,13,.76)"
+          />
+        )}
+        <ViewportPortal>
+          {groups.map((group) => (
+            <FlowBox
+              key={group.id}
+              group={group}
+              nodes={nodes}
+              selected={selectedGroupId === group.id}
+              onSelect={() => selectGroup(group.id)}
+              onRun={(ids) => onRunFlow?.(ids)}
+            />
+          ))}
+        </ViewportPortal>
+      </ReactFlow>
+      <ContextMenu
+        open={Boolean(menu)}
+        x={menu?.x || 0}
+        y={menu?.y || 0}
+        onClose={() => setMenu(null)}
+        onSelect={(id) => {
+          if (id === "add" && menu) onAdd(menu.position);
+          if (id === "flow") {
+            const created = useEditorStore.getState().createFlowFromSelected();
+            if (!created) toast.push("Select a start node first", "error");
+          }
+          if (id === "fit") flow.fitView(FIT_VIEW_OPTIONS);
+          if (id === "select") useEditorStore.getState().selectAll();
+          if (id === "layout") useEditorStore.getState().autoLayout();
+        }}
+        items={[
+          { id: "add", label: "Add node…" },
+          { id: "flow", label: "Create flow box to end" },
+          { id: "select", label: "Select all", shortcut: "Ctrl+A" },
+          { id: "fit", label: "Fit workflow", shortcut: "F" },
+          { id: "layout", label: "Auto layout" },
+        ]}
+      />
+    </div>
+  );
 }
-export function WorkflowCanvas(props){return <ReactFlowProvider><CanvasBody {...props}/></ReactFlowProvider>;}
+/** @param {CanvasProps} props */
+export function WorkflowCanvas(props) {
+  return (
+    <ReactFlowProvider>
+      <CanvasBody {...props} />
+    </ReactFlowProvider>
+  );
+}

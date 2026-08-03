@@ -1,1 +1,3 @@
+/** @typedef {Omit<import("react").InputHTMLAttributes<HTMLInputElement>, "value"|"min"|"max"|"onChange"> & {label: import("react").ReactNode, value: number, min?: number, max?: number, onChange?: (value: number) => void}} SliderProps */
+/** @param {SliderProps} props */
 export function Slider({label,value,min=0,max=100,onChange,...props}){return <label className="grid gap-1.5 text-sm text-mg-secondary"><span className="flex justify-between"><span>{label}</span><output>{value}</output></span><input type="range" value={value} min={min} max={max} onChange={event=>onChange?.(Number(event.target.value))} className="h-6 w-full accent-mg-accent" {...props}/></label>}

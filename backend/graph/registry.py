@@ -19,27 +19,27 @@ def option(value: str, label: str, model_id: str, description: str = "") -> dict
 
 
 BACKGROUND_MODELS = [
-    option("birefnet-general", "BiRefNet General", "rembg", "Best general-purpose cutouts."),
-    option("birefnet-general-lite", "BiRefNet Lite", "rembg", "Faster general-purpose removal."),
-    option("birefnet-portrait", "BiRefNet Portrait", "rembg", "Optimized for people and portraits."),
-    option("u2net_human_seg", "U²-Net Human", "rembg", "Fast human segmentation."),
-    option("u2net_cloth_seg", "U²-Net Clothing", "rembg", "Separates clothing categories."),
-    option("isnet-anime", "IS-Net Anime", "rembg", "Illustration and anime artwork."),
-    option("isnet-general-use", "IS-Net General", "rembg", "Balanced classic segmentation."),
-    option("bria-rmbg", "BRIA RMBG", "rembg", "High-quality general background removal."),
+    option("birefnet-general", "BiRefNet General", "bg-remove:birefnet-general", "Best general-purpose cutouts."),
+    option("birefnet-general-lite", "BiRefNet Lite", "bg-remove:birefnet-general-lite", "Faster general-purpose removal."),
+    option("birefnet-portrait", "BiRefNet Portrait", "bg-remove:birefnet-portrait", "Optimized for people and portraits."),
+    option("u2net_human_seg", "U²-Net Human", "bg-remove:u2net_human_seg", "Fast human segmentation."),
+    option("u2net_cloth_seg", "U²-Net Clothing", "bg-remove:u2net_cloth_seg", "Separates clothing categories."),
+    option("isnet-anime", "IS-Net Anime", "bg-remove:isnet-anime", "Illustration and anime artwork."),
+    option("isnet-general-use", "IS-Net General", "bg-remove:isnet-general-use", "Balanced classic segmentation."),
+    option("bria-rmbg", "BRIA RMBG", "bg-remove:bria-rmbg", "High-quality general background removal."),
 ]
 UPSCALE_MODELS = [
     option("RealESRGAN_x2plus", "Real-ESRGAN ×2", "realesrgan-x2", "Balanced detail restoration and 2× enlargement."),
     option("RealESRGAN_x4plus", "Real-ESRGAN ×4", "realesrgan-x4", "Maximum enlargement with higher memory use."),
 ]
 GENERATE_MODELS = [
-    option("FLUX.2-klein-base-4B", "FLUX.2 Klein Base 4B", "flux", "Recommended balance of quality and memory."),
-    option("FLUX.2-klein-4B", "FLUX.2 Klein 4B", "flux", "Fast distilled 4B generation."),
-    option("FLUX.2-klein-base-9B", "FLUX.2 Klein Base 9B", "flux", "Higher-quality base model."),
-    option("FLUX.2-klein-9B", "FLUX.2 Klein 9B", "flux", "Fast higher-capacity generation."),
-    option("FLUX.2-dev", "FLUX.2 Dev", "flux2-dev", "Large non-commercial development model."),
-    option("FLUX.2-klein-9b-fp8", "FLUX.2 Klein 9B FP8", "flux2-klein-9b-fp8", "Lower-memory FP8 variant."),
-    option("Qwen-Image", "Qwen-Image", "qwen-image", "Apache-licensed image generation."),
+    option("FLUX.2-klein-base-4B", "FLUX.2 Klein Base 4B", "generate:FLUX.2-klein-base-4B", "Recommended balance of quality and memory."),
+    option("FLUX.2-klein-4B", "FLUX.2 Klein 4B", "generate:FLUX.2-klein-4B", "Fast distilled 4B generation."),
+    option("FLUX.2-klein-base-9B", "FLUX.2 Klein Base 9B", "generate:FLUX.2-klein-base-9B", "Higher-quality base model."),
+    option("FLUX.2-klein-9B", "FLUX.2 Klein 9B", "generate:FLUX.2-klein-9B", "Fast higher-capacity generation."),
+    option("FLUX.2-dev", "FLUX.2 Dev", "generate:FLUX.2-dev", "Large non-commercial development model."),
+    option("FLUX.2-klein-9b-fp8", "FLUX.2 Klein 9B FP8", "generate:FLUX.2-klein-9b-fp8", "Lower-memory FP8 variant."),
+    option("Qwen-Image", "Qwen-Image", "generate:Qwen-Image", "Apache-licensed image generation."),
 ]
 
 

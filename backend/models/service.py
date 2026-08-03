@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import threading
+import json
+import os
 from dataclasses import asdict
 from pathlib import Path
 from typing import Callable
@@ -11,6 +13,47 @@ from backend.api.events import EventBroker
 from backend.configuration.service import get_settings
 from backend.core.paths import PATHS
 from backend.models.registry import MODEL_REGISTRY
+from backend.core.atomic import atomic_write_json
+
+_GENERATION_REGISTRY_IDS = {"flux", "flux2-dev", "flux2-klein-9b-fp8", "qwen-image"}
+_STATE_LOCK = threading.RLock()
+
+
+def _state_path() -> Path:
+    return Path(os.environ.get("MIDGARD_CONFIG_DIR", PATHS.config_dir)) / "model-lifecycle.json"
+
+
+def _enabled_overrides() -> dict[str, bool]:
+    try:
+        value = json.loads(_state_path().read_text(encoding="utf-8"))
+        return {str(key): bool(enabled) for key, enabled in value.items()}
+    except (OSError, ValueError, TypeError):
+        return {}
+
+
+def _set_enabled_override(model_id: str, enabled: bool) -> None:
+    with _STATE_LOCK:
+        values = _enabled_overrides()
+        values[model_id] = enabled
+        atomic_write_json(_state_path(), values)
+
+
+def _variant_ids() -> list[str]:
+    from backend.tools.bg_remove_models import MODEL_CATALOG as background_models
+    from backend.tools.generate_models import MODEL_CATALOG as generation_models
+    return [
+        *(f"bg-remove:{item.mode.value}" for item in background_models),
+        *(f"generate:{item.mode.value}" for item in generation_models),
+    ]
+
+
+def known_model_ids() -> set[str]:
+    generic = set(MODEL_REGISTRY) - {"rembg"} - _GENERATION_REGISTRY_IDS
+    return generic | set(_variant_ids())
+
+
+def model_available(model_id: str) -> bool:
+    return model_id in known_model_ids() and _installed(model_id) and _enabled(model_id)
 
 
 def _model_path(raw: str) -> Path:
@@ -21,10 +64,15 @@ def _model_path(raw: str) -> Path:
 
 
 def _installed(model_id: str) -> bool:
+    if model_id.startswith("bg-remove:"):
+        from backend.tools.bg_remove_models import is_model_installed
+        from backend.tools.constant import BgRemoveMode
+        return is_model_installed(BgRemoveMode(model_id.removeprefix("bg-remove:")))
+    if model_id.startswith("generate:"):
+        from backend.tools.generate_models import is_model_installed
+        from backend.tools.constant import GenerateMode
+        return is_model_installed(GenerateMode(model_id.removeprefix("generate:")))
     metadata = MODEL_REGISTRY[model_id]
-    if model_id == "rembg":
-        from backend.tools.bg_remove_models import installed_modes
-        return bool(installed_modes())
     if model_id in {"sam2", "grounding-dino"}:
         from backend.tools.select_object_models import is_fast_pair_installed
         return is_fast_pair_installed()
@@ -48,14 +96,43 @@ def _installed(model_id: str) -> bool:
 
 def list_models() -> list[dict]:
     result = []
-    for model_id, metadata in MODEL_REGISTRY.items():
-        item = asdict(metadata)
+    for model_id in sorted(known_model_ids()):
+        item = _model_description(model_id)
         item["installed"] = _installed(model_id)
         item["state"] = "installed" if item["installed"] else "not_installed"
         item["enabled"] = _enabled(model_id)
-        item["disk_usage_bytes"] = _disk_usage(_model_path(metadata.local_path))
+        item["disk_usage_bytes"] = _disk_usage(Path(item["resolved_path"]))
+        item["can_install"] = model_id.startswith(("bg-remove:", "generate:")) or model_id in {
+            "realesrgan-x2", "realesrgan-x4", "mirnet", "sam2", "grounding-dino"
+        }
+        item["can_uninstall"] = item["can_install"]
+        item["can_toggle"] = True
         result.append(item)
     return result
+
+
+def _model_description(model_id: str) -> dict:
+    if model_id.startswith("bg-remove:"):
+        from backend.tools.bg_remove_models import catalog_info, model_file_path
+        from backend.tools.constant import BgRemoveMode
+        mode = BgRemoveMode(model_id.removeprefix("bg-remove:"))
+        info = catalog_info(mode)
+        item = asdict(MODEL_REGISTRY["rembg"])
+        item.update(id=model_id, display_name=mode.value, purpose=f"Background removal · {info.category if info else 'Local model'}", resolved_path=str(model_file_path(mode)))
+        return item
+    if model_id.startswith("generate:"):
+        from backend.tools.constant import GenerateMode
+        from backend.tools.generate_models import catalog_info, model_dir
+        mode = GenerateMode(model_id.removeprefix("generate:"))
+        info = catalog_info(mode)
+        parent_id = "qwen-image" if mode == GenerateMode.QWEN_IMAGE else "flux2-dev" if mode == GenerateMode.FLUX2_DEV else "flux2-klein-9b-fp8" if mode == GenerateMode.FLUX2_KLEIN_9B_FP8 else "flux"
+        item = asdict(MODEL_REGISTRY[parent_id])
+        item.update(id=model_id, display_name=mode.value, source=info.hf_repo if info else item["source"], resolved_path=str(model_dir(mode)))
+        return item
+    metadata = MODEL_REGISTRY[model_id]
+    item = asdict(metadata)
+    item["resolved_path"] = str(_model_path(metadata.local_path))
+    return item
 
 
 def _disk_usage(path: Path) -> int:
@@ -69,23 +146,37 @@ def _disk_usage(path: Path) -> int:
 
 def _enabled(model_id: str) -> bool:
     settings = get_settings()
+    if model_id.startswith("bg-remove:"):
+        from backend.tools.bg_remove_models import get_enabled_values
+        return model_id.removeprefix("bg-remove:") in get_enabled_values()
+    if model_id.startswith("generate:"):
+        from backend.tools.generate_models import get_enabled_values
+        return model_id.removeprefix("generate:") in get_enabled_values()
     if model_id == "realesrgan-x2":
         return "RealESRGAN_x2plus" in settings.enhancement.enabled_models
     if model_id == "realesrgan-x4":
         return "RealESRGAN_x4plus" in settings.enhancement.enabled_models
     if model_id == "mirnet":
         return "MIRNet_LOL" in settings.low_light.enabled_models
-    if model_id == "rembg":
-        return settings.background_removal.enabled_models != "__none__"
-    if model_id in {"flux", "flux2-dev", "flux2-klein-9b-fp8", "qwen-image"}:
-        return settings.generation.enabled_models != "__none__"
-    return MODEL_REGISTRY[model_id].enabled_by_default
+    return _enabled_overrides().get(model_id, MODEL_REGISTRY[model_id].enabled_by_default)
 
 
 def _action(model_id: str, operation: str) -> None:
-    if model_id not in MODEL_REGISTRY:
+    if model_id not in known_model_ids():
         raise KeyError(model_id)
     settings = get_settings()
+    if model_id.startswith("bg-remove:"):
+        from backend.tools.bg_remove_models import install_model, set_model_enabled, uninstall_model
+        from backend.tools.constant import BgRemoveMode
+        mode = BgRemoveMode(model_id.removeprefix("bg-remove:"))
+        {"install": install_model, "remove": uninstall_model}.get(operation, lambda value: set_model_enabled(value, operation == "enable"))(mode)
+        return
+    if model_id.startswith("generate:"):
+        from backend.tools.constant import GenerateMode
+        from backend.tools.generate_models import install_model, set_model_enabled, uninstall_model
+        mode = GenerateMode(model_id.removeprefix("generate:"))
+        {"install": install_model, "remove": uninstall_model}.get(operation, lambda value: set_model_enabled(value, operation == "enable"))(mode)
+        return
     if model_id in {"realesrgan-x2", "realesrgan-x4"}:
         from backend.tools.constant import EnhanceMode
         from backend.tools.enhance_models import install_model, set_model_enabled, uninstall_model
@@ -106,28 +197,35 @@ def _action(model_id: str, operation: str) -> None:
         return
     if model_id in {"sam2", "grounding-dino"}:
         from backend.tools.select_object_models import SelectObjectPairId, install_pair, uninstall_pair
-        if operation == "install": install_pair(SelectObjectPairId.FAST, skip_if_complete=True)
-        elif operation == "remove": uninstall_pair(SelectObjectPairId.FAST)
-        return
-    if model_id in {"flux", "flux2-dev", "flux2-klein-9b-fp8", "qwen-image"}:
-        from backend.tools.constant import GenerateMode
-        from backend.tools.generate_models import install_model, set_model_enabled, uninstall_model
-        mode = GenerateMode(settings.generation.mode)
-        {"install": install_model, "remove": uninstall_model}.get(operation, lambda value: set_model_enabled(value, operation == "enable"))(mode)
+        if operation == "install":
+            install_pair(SelectObjectPairId.FAST, skip_if_complete=True)
+            _set_enabled_override(model_id, True)
+        elif operation == "remove":
+            uninstall_pair(SelectObjectPairId.FAST)
+            _set_enabled_override(model_id, False)
+        else:
+            _set_enabled_override(model_id, operation == "enable")
         return
     if operation == "install" and model_id in {"lama", "sttn-auto", "sttn-detection", "propainter"}:
         from backend.models.paths import SubtitleModelPaths, prepare_bundled_subtitle_models
         prepare_bundled_subtitle_models(SubtitleModelPaths.resolve(settings.subtitle))
         return
+    if operation in {"enable", "disable"}:
+        _set_enabled_override(model_id, operation == "enable")
+        return
     if operation == "remove":
-        raise PermissionError("Bundled models cannot be removed independently")
+        raise PermissionError("This shipped runtime cannot be uninstalled independently")
+    if operation == "install":
+        raise PermissionError("This runtime is supplied by the Midgard installation")
 
 
 def start_model_action(model_id: str, operation: str) -> str:
+    if model_id not in known_model_ids():
+        raise KeyError(model_id)
     action_id = f"{operation}:{model_id}"
     events = EventBroker.instance()
     def run() -> None:
-        events.publish("download.queued" if operation == "install" else "model.changed", payload={"downloadId": action_id, "modelId": model_id, "operation": operation})
+        events.publish("download.queued" if operation == "install" else "model.action.started", payload={"downloadId": action_id, "modelId": model_id, "operation": operation})
         try:
             _action(model_id, operation)
             events.publish("download.completed" if operation == "install" else "model.changed", payload={"downloadId": action_id, "modelId": model_id, "operation": operation})

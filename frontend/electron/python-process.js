@@ -5,6 +5,7 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { app } from "electron";
 
+/** @returns {Promise<number>} */
 function reservePort() {
   return new Promise((resolve, reject) => {
     const server = net.createServer();
@@ -19,6 +20,7 @@ function reservePort() {
   });
 }
 
+/** @param {string} startPath @returns {string | null} */
 function findSourceRoot(startPath) {
   let candidate = path.resolve(startPath);
   while (true) {
@@ -29,6 +31,7 @@ function findSourceRoot(startPath) {
   }
 }
 
+/** @param {string} projectRoot @returns {string[]} */
 function installedVenvPython(projectRoot) {
   let venvName = "midgardEnv";
   try {
@@ -58,9 +61,12 @@ function resolveBackendCommand() {
     ...installedVenvPython(projectRoot),
     ...(process.platform === "win32" ? ["python.exe"] : ["python3.12", "python3"]),
   ];
-  return { command: process.env.MIDGARD_PYTHON || candidates.find((candidate) => !path.isAbsolute(candidate) || fs.existsSync(candidate)) || candidates.at(-1), args: ["-m", "backend.api.app"], cwd: projectRoot };
+  const command = process.env.MIDGARD_PYTHON || candidates.find((candidate) => !path.isAbsolute(candidate) || fs.existsSync(candidate)) || candidates.at(-1);
+  if (!command) throw new Error("Could not resolve a Python executable");
+  return { command, args: ["-m", "backend.api.app"], cwd: projectRoot };
 }
 
+/** @param {string} baseUrl @param {import("node:child_process").ChildProcess} child @param {number} [timeoutMs] */
 async function waitForReady(baseUrl, child, timeoutMs = 30000) {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
@@ -96,8 +102,8 @@ async function startPythonControlPlane() {
     windowsHide: true,
     stdio: ["ignore", "pipe", "pipe"],
   });
-  child.stdout.pipe(log, { end: false });
-  child.stderr.pipe(log, { end: false });
+  child.stdout?.pipe(log, { end: false });
+  child.stderr?.pipe(log, { end: false });
   try {
     await waitForReady(baseUrl, child);
   } catch (error) {

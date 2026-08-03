@@ -20,10 +20,14 @@ module.exports = {
     name: "Midgard",
     asar: true,
     executableName: "Midgard",
+    icon: path.resolve(__dirname, "assets", "app-icon", "midgard"),
     electronZipDir: process.env.MIDGARD_ELECTRON_ZIP_DIR || undefined,
-    extraResource: [path.resolve(__dirname, "..", "build", "backend-sidecar", "midgard-backend")],
+    extraResource: [
+      path.resolve(__dirname, "..", "build", "backend-sidecar", "midgard-backend"),
+      { from: path.resolve(__dirname, "assets", "app-icon"), to: "app-icon" },
+    ],
     afterCopyExtraResources: [
-      (buildPath, _electronVersion, _platform, _arch, done) => {
+      (/** @type {string} */ buildPath, /** @type {string} */ _electronVersion, /** @type {string} */ _platform, /** @type {string} */ _arch, /** @type {(error?: unknown) => void} */ done) => {
         const resourcesPath = path.join(buildPath, "resources");
         rename(path.join(resourcesPath, "midgard-backend"), path.join(resourcesPath, "backend-sidecar")).then(() => done(), done);
       },

@@ -134,11 +134,15 @@ class RunManager:
         mode: str = "all",
         selected_node_ids: list[str] | None = None,
     ) -> RunSnapshot:
-        plan = compile_workflow(workflow, mode=mode, selected_node_ids=selected_node_ids)
+        plan = compile_workflow(workflow, mode=mode, selected_node_ids=selected_node_ids, check_model_availability=True)
         if not plan.validation.valid:
+            first_error = next(
+                (issue for issue in plan.validation.issues if issue.severity == "error"),
+                None,
+            )
             raise ExecutionFailure(
                 "VALIDATION",
-                "Workflow validation failed.",
+                first_error.message if first_error else "Workflow validation failed.",
             )
         if not plan.steps:
             raise ExecutionFailure("EMPTY_PLAN", "Nothing to run from the selected node.")
@@ -146,7 +150,7 @@ class RunManager:
         snapshot = RunSnapshot(
             run_id=run_id,
             workflow_id=workflow.project_id,
-            nodes={node.id: NodeRun(node_id=node.id, status="DISABLED" if node.disabled else "IDLE") for node in workflow.nodes},
+            nodes={step.node_id: NodeRun(node_id=step.node_id) for step in plan.steps},
         )
         control = _RunControl(snapshot, workflow, mode=mode, selected_node_ids=selected_node_ids)
         with self._lock:
@@ -226,17 +230,18 @@ class RunManager:
     def _execute(self, control: _RunControl) -> None:
         snapshot = control.snapshot
         workflow = control.workflow
-        plan = compile_workflow(workflow, mode=control.mode, selected_node_ids=control.selected_node_ids)
+        plan = compile_workflow(workflow, mode=control.mode, selected_node_ids=control.selected_node_ids, check_model_availability=True)
         nodes = {node.id: node for node in workflow.nodes}
         incoming: dict[str, dict[str, tuple[str, str]]] = {}
         for edge in workflow.edges:
             incoming.setdefault(edge.target_node_id, {})[edge.target_port_id] = (edge.source_node_id, edge.source_port_id)
-        values: dict[tuple[str, str], Any] = {}
+        active = {step.node_id for step in plan.steps}
         with control.lock:
             snapshot.status = RunStatus.RUNNING
             snapshot.started_at = datetime.now(timezone.utc)
         self._events.publish("run.started", run_id=snapshot.run_id)
         try:
+            values = self._boundary_values(workflow, active)
             total = max(len(plan.steps), 1)
             for index, step in enumerate(plan.steps):
                 self._wait_if_paused(control)
@@ -319,6 +324,43 @@ class RunManager:
             if snapshot.current_node_id:
                 self._events.publish("node.failed", run_id=snapshot.run_id, node_id=snapshot.current_node_id, payload=error)
             self._events.publish("run.failed", run_id=snapshot.run_id, node_id=snapshot.current_node_id, payload=error)
+
+    def _boundary_values(
+        self,
+        workflow: WorkflowDocument,
+        active: set[str],
+    ) -> dict[tuple[str, str], Any]:
+        """Resolve stored outputs entering the plan without executing their source nodes."""
+        nodes = {node.id: node for node in workflow.nodes}
+        values: dict[tuple[str, str], Any] = {}
+        for edge in workflow.edges:
+            if edge.target_node_id not in active or edge.source_node_id in active:
+                continue
+            source = nodes.get(edge.source_node_id)
+            definition = NODE_REGISTRY.get(source.schema_id) if source else None
+            if source is None or definition is None:
+                continue
+            if definition.adapter == "literal":
+                value = source.parameters.get("value")
+            else:
+                result = source.result or {}
+                outputs = result.get("outputs")
+                value = outputs.get(edge.source_port_id) if isinstance(outputs, dict) else None
+                if value is None:
+                    value = result.get(edge.source_port_id, result.get("value"))
+                if value is None:
+                    artifact_ids = result.get("artifactIds") or result.get("artifact_ids") or []
+                    if artifact_ids:
+                        try:
+                            value = self._artifacts.get(artifact_ids[-1])
+                        except (KeyError, FileNotFoundError) as exc:
+                            raise ExecutionFailure(
+                                "BOUNDARY_INPUT_UNAVAILABLE",
+                                "Required input has no completed output.",
+                            ) from exc
+            if value is not None:
+                values[(source.id, edge.source_port_id)] = value
+        return values
 
     def _wait_if_paused(self, control: _RunControl) -> None:
         if not control.pause.is_set():

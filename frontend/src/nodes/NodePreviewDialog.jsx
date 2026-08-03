@@ -4,6 +4,7 @@ import { ArtifactPreview } from "../preview/ArtifactPreview";
 import { useEditorStore } from "../state/editorStore";
 import { useRunStore } from "../state/runStore";
 
+/** @param {{nodeId: string | null, onClose: () => void}} props */
 export function NodePreviewDialog({ nodeId, onClose }) {
   const node = useEditorStore(store => store.nodes.find(item => item.id === nodeId));
   const liveRun = useRunStore(store => nodeId ? store.nodeStates[nodeId] : null);
@@ -15,6 +16,6 @@ export function NodePreviewDialog({ nodeId, onClose }) {
 
   return <Dialog open onClose={onClose} wide title={`${label} preview`} description="Latest locally stored image or video output." bodyClassName="!max-h-[78vh]">
     <div className="mb-2 flex items-center gap-2 text-[9px] text-mg-muted"><ImageIcon className="size-3.5" />Completed output</div>
-    <ArtifactPreview artifactId={artifactId} effect={node.data.appearance?.imageEffect} />
+    <ArtifactPreview artifactId={artifactId} effect={String(node.data.appearance?.imageEffect || "none")} />
   </Dialog>;
 }

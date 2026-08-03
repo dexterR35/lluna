@@ -1,70 +1,455 @@
-import { memo } from "react";
-import { Handle, Position } from "@xyflow/react";
-import { AlertTriangle, Ban, Box, Check, Clock3, Eye, LoaderCircle, Pause, Play, Settings2, Sparkles, X } from "lucide-react";
-import { Badge, ProgressBar } from "../components";
+import { memo, useState } from "react";
+import * as XYFlow from "@xyflow/react";
+import {
+  AlertTriangle,
+  Ban,
+  Box,
+  Check,
+  ChevronDown,
+  Clock3,
+  FileImage,
+  Film,
+  Hash,
+  Image as ImageIcon,
+  LoaderCircle,
+  Pause,
+  Play,
+  Settings2,
+  Sparkles,
+  Type,
+  X,
+  ZoomIn,
+} from "lucide-react";
+import { ProgressBar, Badge, IconTile } from "../components";
 import { ArtifactThumbnail } from "../preview/ArtifactPreview";
 import { useRunStore } from "../state/runStore";
 import { PORT_COLORS } from "./portTypes";
+import { enabledModelOptions } from "../models/modelAvailability";
 
-const STATUS_ICON = { RUNNING: LoaderCircle, SUCCEEDED: Check, FAILED: X, CACHED: Sparkles, PAUSED: Pause, PAUSE_REQUESTED: Clock3, DISABLED: Ban, INVALID: AlertTriangle };
-const ACCENTS = { teal: "#63cbb6", blue: "#70b7f8", violet: "#a393fa", amber: "#e8b768", rose: "#ef7182", slate: "#9298a7" };
+/** @typedef {import("react").ComponentType<{className?: string, "aria-hidden"?: boolean, style?: import("react").CSSProperties}>} NodeIcon */
+/** @type {Record<string, NodeIcon>} */
+const STATUS_ICON = {
+  RUNNING: LoaderCircle,
+  SUCCEEDED: Check,
+  FAILED: X,
+  CACHED: Sparkles,
+  PAUSED: Pause,
+  PAUSE_REQUESTED: Clock3,
+  DISABLED: Ban,
+  INVALID: AlertTriangle,
+};
 
-function Port({ port, side }) {
+/** @type {Record<string, "neutral"|"success"|"warning"|"error"|"running"|"cached"|"accent">} */
+const STATUS_TONE = {
+  RUNNING: "running",
+  QUEUED: "running",
+  SUCCEEDED: "success",
+  FAILED: "error",
+  INVALID: "error",
+  CACHED: "cached",
+  PAUSED: "warning",
+  PAUSE_REQUESTED: "warning",
+  DISABLED: "neutral",
+};
+
+/** @type {Record<string, NodeIcon>} */
+const PORT_ICONS = {
+  IMAGE: ImageIcon,
+  MASK: ImageIcon,
+  ALPHA: ImageIcon,
+  VIDEO: Film,
+  PROMPT: Type,
+  TEXT: Type,
+  STRING: Type,
+  NUMBER: Hash,
+  INTEGER: Hash,
+  FILE: FileImage,
+  DIRECTORY: FileImage,
+  MODEL: Box,
+};
+
+/** @type {Record<string, NodeIcon>} */
+const NODE_ICONS = {
+  image: ImageIcon,
+  film: Film,
+  sparkles: Sparkles,
+  "zoom-in": ZoomIn,
+  eye: ImageIcon,
+  play: Play,
+};
+
+/** @param {string | undefined} type */
+function portIcon(type) {
+  return PORT_ICONS[type || ""] || Box;
+}
+
+/** @param {import("../types").NodeDefinition} definition */
+function nodeIcon(definition) {
+  return NODE_ICONS[definition.icon || ""] || Box;
+}
+
+/**
+ * Outside connection circle for linking ports.
+ * @param {{port: import("../types").PortDefinition, side: "input"|"output", top: string, active: boolean}} props
+ */
+function PortCircle({ port, side, top, active }) {
   const output = side === "output";
-  return <div className={`relative flex min-h-5 items-center gap-1.5 px-2.5 text-[9px] text-mg-secondary ${output ? "justify-end" : "justify-start"}`}>
-    <Handle id={port.id} type={output ? "source" : "target"} position={output ? Position.Right : Position.Left} className="midgard-port-handle" style={{ backgroundColor: PORT_COLORS[port.type] || "#9298a7" }} aria-label={`${port.label}, ${port.type}`} />
-    <span className="truncate">{port.label}</span><span className="text-[7px] uppercase tracking-wide text-mg-muted">{port.type}</span>
-  </div>;
+  const Icon = portIcon(port.type);
+  const color = PORT_COLORS[port.type] || "#9298a7";
+  return (
+    <XYFlow.Handle
+      id={port.id}
+      type={output ? "source" : "target"}
+      position={output ? XYFlow.Position.Right : XYFlow.Position.Left}
+      className={`midgard-port-handle ${active ? "is-active" : ""} ${output ? "is-output" : "is-input"}`}
+      style={/** @type {import("react").CSSProperties} */ ({ top, "--port-color": color })}
+      aria-label={`${port.label}, ${port.type}`}
+      title={`${port.label} · ${port.type}`}
+    >
+      <Icon aria-hidden className="midgard-port-glyph" style={{ color }} />
+    </XYFlow.Handle>
+  );
 }
 
-function PortList({ definition, side, compact = false }) {
-  if (compact) return <div className="grid grid-cols-2 border-t border-mg-border py-0.5">{definition.inputs?.map(port => <Port key={`in-${port.id}`} port={port} side="input" />)}{definition.outputs?.map(port => <Port key={`out-${port.id}`} port={port} side="output" />)}</div>;
-  const ports = side === "input" ? definition.inputs : definition.outputs;
-  return <div className="grid gap-px py-1">{ports?.map(port => <Port key={port.id} port={port} side={side} />)}{!ports?.length && (side === "input" ? <p className="line-clamp-2 px-2.5 py-1 text-[9px] leading-4 text-mg-muted">{definition.description}</p> : <span className="px-2.5 py-1 text-[8px] text-mg-muted">No output</span>)}</div>;
+/**
+ * Compact select control styled as a Badge pill.
+ * @param {{
+ *   label: string,
+ *   value: string,
+ *   options: {value: string|number, label: string, disabled?: boolean}[],
+ *   disabled?: boolean,
+ *   onChange: (value: string) => void,
+ *   wide?: boolean,
+ * }} props
+ */
+function BodySelect({ label, value, options, disabled, onChange, wide }) {
+  return (
+    <Badge
+      as="label"
+      size="md"
+      title={label}
+      className={`nodrag nowheel relative hover:border-mg-secondary/50 hover:text-mg-primary ${wide ? "max-w-[148px]" : ""} ${disabled ? "opacity-55" : ""}`}
+    >
+      <span className="sr-only">{label}</span>
+      <select
+        aria-label={label}
+        disabled={disabled}
+        value={value}
+        className="max-w-[132px] cursor-pointer appearance-none bg-transparent py-0 pr-4 pl-0 text-[10px] font-medium text-inherit outline-none disabled:cursor-not-allowed"
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => event.stopPropagation()}
+        onKeyDown={(event) => event.stopPropagation()}
+        onChange={(event) => {
+          event.stopPropagation();
+          onChange(event.target.value);
+        }}
+      >
+        {options.map((option) => (
+          <option
+            key={String(option.value)}
+            value={String(option.value)}
+            disabled={option.disabled}
+          >
+            {option.label}
+          </option>
+        ))}
+      </select>
+      <ChevronDown
+        aria-hidden
+        className="pointer-events-none absolute right-2 size-2.5 opacity-70"
+      />
+    </Badge>
+  );
 }
 
+/** @param {import("@xyflow/react").NodeProps<import("../types").EditorNode>} props */
 function MidgardNodeComponent({ id, data, selected }) {
-  const state = useRunStore(store => store.nodeStates[id]);
-  const definition = data.definition || { inputs: [], outputs: [], name: data.schemaId, description: "Unknown node" };
+  const state = useRunStore((store) => store.nodeStates[id]);
+  const [hovered, setHovered] = useState(false);
+  /** @type {import("../types").NodeDefinition} */
+  const definition = data.definition || {
+    schemaId: data.schemaId,
+    schemaVersion: data.schemaVersion,
+    inputs: [],
+    outputs: [],
+    parameters: [],
+    name: data.schemaId,
+    description: "Unknown node",
+  };
   const appearance = data.appearance || {};
-  const cardStyle = appearance.cardStyle || "visual";
   const persistedResult = data.result;
-  const status = data.disabled ? "DISABLED" : (state?.status && state.status !== "IDLE" ? state.status : persistedResult?.status || "IDLE");
-  const artifactIds = state?.artifactIds?.length ? state.artifactIds : persistedResult?.artifactIds || [];
+  const status = data.disabled
+    ? "DISABLED"
+    : state?.status && state.status !== "IDLE"
+      ? state.status
+      : persistedResult?.status || "IDLE";
+  const artifactIds = state?.artifactIds?.length
+    ? state.artifactIds
+    : persistedResult?.artifactIds || [];
   const artifactId = artifactIds.at(-1);
   const StatusIcon = STATUS_ICON[status] || Box;
-  const tone = status === "FAILED" || status === "INVALID" ? "error" : status === "RUNNING" ? "running" : status === "CACHED" ? "cached" : status === "SUCCEEDED" ? "success" : "neutral";
-  const accent = ACCENTS[appearance.accent] || ACCENTS.teal;
-  const width = cardStyle === "compact" ? "w-48" : cardStyle === "visual" ? "w-64" : "w-56";
-  const modelParameter = definition.parameters?.find(parameter => parameter.id === "model");
-  const modelValue = data.parameters?.model || modelParameter?.default;
-  const modelLabel = modelParameter?.options?.find(option => option.value === modelValue)?.label || modelValue;
+  const HeaderIcon = nodeIcon(definition);
+  const busy = status === "RUNNING" || status === "QUEUED";
+  const showPorts = selected || hovered || busy;
   const nodeLabel = data.label || definition.name;
   const runLabel = definition.kind === "input" ? "Run" : "Run from here";
   const actions = data.nodeActions || {};
-  const stopPointer = event => event.stopPropagation();
+  const parameters = definition.parameters || [];
+  const modelParameter = parameters.find(
+    (parameter) => parameter.id === "model" || parameter.type === "model",
+  );
+  const modelValue = data.parameters?.model || modelParameter?.default;
+  const modelOptions = enabledModelOptions(
+    modelParameter?.options || [],
+    data.modelInventory || [],
+  );
+  const modelLabel = String(
+    modelParameter?.options?.find((option) => option.value === modelValue)
+      ?.label ||
+      modelValue ||
+      "",
+  );
+  const modelAvailable = modelOptions.some(
+    (option) => String(option.value) === String(modelValue),
+  );
+  const footerParams = parameters.filter((parameter) => {
+    if (parameter.id === "model" || parameter.type === "model") return true;
+    if (parameter.type === "select" || parameter.type === "enum") return true;
+    return Boolean(parameter.options?.length);
+  });
+  const promptParam = parameters.find(
+    (parameter) =>
+      parameter.type === "textarea" ||
+      parameter.id === "value" ||
+      parameter.id === "prompt" ||
+      parameter.id === "text",
+  );
+  const showPromptField =
+    Boolean(promptParam) &&
+    (definition.kind === "input" ||
+      definition.schemaId?.includes("prompt") ||
+      definition.schemaId?.includes("generate"));
+  const inputs = definition.inputs || [];
+  const outputs = definition.outputs || [];
+  /** @param {import("react").SyntheticEvent} event */
+  const stopPointer = (event) => event.stopPropagation();
 
-  return <article aria-label={`${nodeLabel} node`} title="Use the settings button to edit this node" className={`${width} relative overflow-hidden rounded-xl border bg-mg-node transition-[border-color,opacity] ${selected ? "border-mg-focus outline outline-1 outline-offset-1 outline-mg-focus/40" : "border-mg-border hover:border-mg-secondary/40"} ${data.disabled ? "opacity-50" : ""}`} style={{ "--node-accent": accent }}>
-    <div className="absolute inset-y-0 left-0 w-0.5" style={{ background: "var(--node-accent)" }} />
-    <header className="flex min-h-10 items-center gap-2 border-b border-mg-border px-2.5">
-      <span className="grid size-6 shrink-0 place-items-center rounded-lg border" style={{ color: "var(--node-accent)", borderColor: "color-mix(in srgb, var(--node-accent) 22%, transparent)", background: "color-mix(in srgb, var(--node-accent) 9%, transparent)" }}><StatusIcon aria-hidden className={`size-3 ${status === "RUNNING" ? "animate-spin" : ""}`} /></span>
-      <span className="min-w-0 flex-1"><strong className="block truncate text-[10px] font-semibold leading-4">{nodeLabel}</strong><span className="block truncate text-[8px] text-mg-muted">{modelLabel || definition.category || data.schemaId}</span></span>
-      {status !== "IDLE" && <Badge tone={tone}>{status.replaceAll("_", " ")}</Badge>}
-      <button type="button" className="nodrag nowheel grid size-7 shrink-0 place-items-center rounded-lg border border-mg-border text-mg-muted transition hover:border-mg-secondary/40 hover:bg-mg-elevated hover:text-mg-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mg-focus/40" aria-label={`Open ${nodeLabel} options`} title="Node options" onPointerDown={stopPointer} onClick={event => { event.stopPropagation(); actions.onOpen?.(id); }}><Settings2 className="size-3.5" /></button>
-    </header>
-    {appearance.showPreview !== false && cardStyle === "visual" && artifactId && <ArtifactThumbnail artifactId={artifactId} effect={appearance.imageEffect} fit={appearance.imageFit} ratio={appearance.imageRatio} label={`${data.label || definition.name} output`} />}
-    {!data.collapsed && cardStyle !== "compact" && <>
-      <div><div className="px-2.5 pt-1.5 text-[7px] font-semibold uppercase tracking-[.12em] text-mg-muted">Inputs</div><PortList definition={definition} side="input" /></div>
-      {definition.parameters?.length > 0 && <div className="grid gap-1 border-t border-mg-border bg-mg-app/20 px-2.5 py-1.5 text-[8px] text-mg-muted">{definition.parameters.slice(0, 2).map(item => { const rawValue = data.parameters?.[item.id]; const displayValue = item.type === "file" ? (data.result?.sourceName || (rawValue ? "Selected" : "Not selected")) : String(rawValue ?? ""); return <div key={item.id} className="flex justify-between gap-2"><span className="truncate">{item.label}</span><span className="max-w-24 truncate font-medium text-mg-secondary">{displayValue}</span></div>; })}</div>}
-      <div className="border-t border-mg-border"><div className="px-2.5 pt-1.5 text-[7px] font-semibold uppercase tracking-[.12em] text-mg-muted">Outputs</div><PortList definition={definition} side="output" /></div>
-    </>}
-    {cardStyle === "compact" && !data.collapsed && <PortList definition={definition} compact />}
-    {(status === "RUNNING" || status === "PAUSE_REQUESTED") && <div className="px-2.5 py-1.5"><ProgressBar value={state?.progress || 0} label={`${data.label} progress`} /></div>}
-    <footer className="flex min-h-9 items-center justify-end gap-1.5 border-t border-mg-border bg-mg-app/20 px-2 py-1.5">
-      {artifactId && <button type="button" className="nodrag nowheel inline-flex min-h-6 items-center gap-1 rounded-lg px-2 text-[8px] font-medium text-mg-secondary transition hover:bg-mg-elevated hover:text-mg-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mg-focus/40" aria-label={`Open ${nodeLabel} preview`} onPointerDown={stopPointer} onClick={event => { event.stopPropagation(); actions.onPreview?.(id); }}><Eye className="size-3" />Preview</button>}
-      <button type="button" className="nodrag nowheel grid size-7 shrink-0 place-items-center rounded-full bg-mg-accent text-white transition hover:scale-105 hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mg-focus/50 disabled:cursor-not-allowed disabled:opacity-50" aria-label={`${runLabel} ${nodeLabel}`} title={runLabel} disabled={data.disabled || status === "RUNNING" || status === "QUEUED"} onPointerDown={stopPointer} onClick={event => { event.stopPropagation(); actions.onRun?.(id); }}><Play className="size-3 fill-current" /></button>
-    </footer>
-  </article>;
+  /** @param {number} index @param {number} total */
+  const portTop = (index, total) =>
+    total <= 1 ? "50%" : `${((index + 1) / (total + 1)) * 100}%`;
+
+  return (
+    <article
+      aria-label={`${nodeLabel} node`}
+      title="Use the settings button to edit this node"
+      className={`midgard-node ${selected ? "is-selected" : ""} ${data.disabled ? "is-disabled" : ""} ${showPorts ? "is-ports-open" : ""}`}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      {inputs.map((port, index) => (
+        <PortCircle
+          key={`in-${port.id}`}
+          port={port}
+          side="input"
+          top={portTop(index, inputs.length)}
+          active={showPorts}
+        />
+      ))}
+      {outputs.map((port, index) => (
+        <PortCircle
+          key={`out-${port.id}`}
+          port={port}
+          side="output"
+          top={portTop(index, outputs.length)}
+          active={showPorts}
+        />
+      ))}
+
+      <header className="midgard-node-header">
+        <IconTile
+          size="sm"
+          active={selected}
+          className="border-transparent bg-transparent"
+          aria-hidden
+        >
+          {status !== "IDLE" && status !== "SUCCEEDED" ? (
+            <StatusIcon
+              className={`size-3.5 ${status === "RUNNING" ? "animate-spin" : ""}`}
+            />
+          ) : (
+            <HeaderIcon className="size-3.5" />
+          )}
+        </IconTile>
+        <strong className="midgard-node-title">{nodeLabel}</strong>
+        {status !== "IDLE" && (
+          <Badge size="xs" tone={STATUS_TONE[status] || "neutral"}>
+            {status.replaceAll("_", " ")}
+          </Badge>
+        )}
+      </header>
+
+      <div className="midgard-node-body">
+        {appearance.showPreview !== false && artifactId ? (
+          <ArtifactThumbnail
+            artifactId={artifactId}
+            effect={String(appearance.imageEffect || "none")}
+            fit={String(appearance.imageFit || "cover")}
+            ratio="square"
+            label={`${nodeLabel} output`}
+          />
+        ) : (
+          <div className="midgard-node-stage" aria-hidden>
+            {!showPromptField && (
+              <ImageIcon className="midgard-node-stage-glyph" />
+            )}
+          </div>
+        )}
+
+        {showPromptField && promptParam && (
+          <div className="midgard-node-prompt">
+            <Type aria-hidden className="size-3.5 shrink-0 text-mg-muted" />
+            <textarea
+              className="nodrag nowheel"
+              rows={2}
+              placeholder={
+                promptParam.description ||
+                `Describe the ${definition.category?.split("/")[0]?.toLowerCase() || "result"} you want…`
+              }
+              aria-label={promptParam.label || "Prompt"}
+              disabled={data.disabled || busy}
+              value={String(data.parameters?.[promptParam.id] ?? "")}
+              onPointerDown={stopPointer}
+              onClick={stopPointer}
+              onKeyDown={stopPointer}
+              onChange={(event) => {
+                event.stopPropagation();
+                actions.onParameterChange?.(id, promptParam.id, event.target.value);
+              }}
+            />
+          </div>
+        )}
+
+        {footerParams.length > 0 && (
+          <div className="midgard-node-body-controls">
+            {footerParams.map((parameter) => {
+              const isModel =
+                parameter.id === "model" || parameter.type === "model";
+              if (isModel) {
+                const options = [
+                  ...(!modelAvailable && modelValue
+                    ? [
+                        {
+                          value: String(modelValue),
+                          label: `${modelLabel} (disabled)`,
+                          disabled: true,
+                        },
+                      ]
+                    : []),
+                  ...(!modelOptions.length && !modelValue
+                    ? [
+                        {
+                          value: "",
+                          label: "No enabled model",
+                          disabled: true,
+                        },
+                      ]
+                    : []),
+                  ...modelOptions.map((option) => ({
+                    value: String(option.value),
+                    label: option.label,
+                    disabled: option.disabled,
+                  })),
+                ];
+                return (
+                  <BodySelect
+                    key={parameter.id}
+                    label={`Model for ${nodeLabel}`}
+                    value={String(modelValue ?? "")}
+                    options={options}
+                    wide
+                    disabled={data.disabled || busy || !modelOptions.length}
+                    onChange={(value) => {
+                      const option = modelOptions.find(
+                        (candidate) => String(candidate.value) === value,
+                      );
+                      if (option) actions.onModelChange?.(id, option.value);
+                    }}
+                  />
+                );
+              }
+              const raw = data.parameters?.[parameter.id] ?? parameter.default;
+              const options = (parameter.options || []).map((option) => ({
+                value: String(option.value),
+                label: option.label,
+                disabled: option.disabled,
+              }));
+              if (!options.length) return null;
+              return (
+                <BodySelect
+                  key={parameter.id}
+                  label={parameter.label}
+                  value={String(raw ?? "")}
+                  options={options}
+                  disabled={data.disabled || busy}
+                  onChange={(value) => {
+                    const option = parameter.options?.find(
+                      (candidate) => String(candidate.value) === value,
+                    );
+                    actions.onParameterChange?.(
+                      id,
+                      parameter.id,
+                      option ? option.value : value,
+                    );
+                  }}
+                />
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {(status === "RUNNING" || status === "PAUSE_REQUESTED") && (
+        <div className="midgard-node-progress">
+          <ProgressBar
+            value={state?.progress || 0}
+            label={`${nodeLabel} progress`}
+          />
+        </div>
+      )}
+
+      <footer className="midgard-node-footer">
+        <div className="midgard-node-footer-actions">
+          <button
+            type="button"
+            className="nodrag nowheel midgard-node-gear"
+            aria-label={`Open ${nodeLabel} options`}
+            title="Node options"
+            onPointerDown={stopPointer}
+            onClick={(event) => {
+              event.stopPropagation();
+              actions.onOpen?.(id);
+            }}
+          >
+            <Settings2 className="size-3.5" />
+          </button>
+          <button
+            type="button"
+            className="nodrag nowheel midgard-node-run"
+            aria-label={`${runLabel} ${nodeLabel}`}
+            title={runLabel}
+            disabled={data.disabled || busy}
+            onPointerDown={stopPointer}
+            onClick={(event) => {
+              event.stopPropagation();
+              actions.onRun?.(id);
+            }}
+          >
+            <Play className="size-3.5 fill-current" />
+          </button>
+        </div>
+      </footer>
+    </article>
+  );
 }
 
 export const MidgardNode = memo(MidgardNodeComponent);

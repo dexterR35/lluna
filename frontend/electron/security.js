@@ -7,6 +7,7 @@ const EXTERNAL_URLS = Object.freeze({
   issues: "https://github.com/dexterR35/midgard/issues",
 });
 
+/** @param {string} rawUrl @param {string | undefined} devServerUrl */
 function isLocalRendererUrl(rawUrl, devServerUrl) {
   try {
     const url = new URL(rawUrl);
@@ -17,9 +18,10 @@ function isLocalRendererUrl(rawUrl, devServerUrl) {
   }
 }
 
+/** @param {import("electron").BrowserWindow} window @param {string | undefined} devServerUrl */
 function installWindowSecurity(window, devServerUrl) {
   window.webContents.setWindowOpenHandler(({ url }) => {
-    const approved = Object.values(EXTERNAL_URLS).includes(url);
+    const approved = Object.values(EXTERNAL_URLS).some(value => value === url);
     if (approved) void shell.openExternal(url);
     return { action: "deny" };
   });
@@ -29,6 +31,7 @@ function installWindowSecurity(window, devServerUrl) {
   window.webContents.on("will-attach-webview", (event) => event.preventDefault());
 }
 
+/** @param {string | undefined} devServerUrl */
 function installContentSecurityPolicy(devServerUrl) {
   const scriptSource = devServerUrl ? "script-src 'self' 'unsafe-inline'" : "script-src 'self'";
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
@@ -43,6 +46,7 @@ function installContentSecurityPolicy(devServerUrl) {
   });
 }
 
+/** @param {keyof typeof EXTERNAL_URLS} id */
 async function openApprovedExternal(id) {
   const url = EXTERNAL_URLS[id];
   if (!url) throw new Error("Unknown external URL identifier");

@@ -1,9 +1,12 @@
 import { Menu, app } from "electron";
 
-const item = (label, command, accelerator, extra = {}) => ({ label, accelerator, click: () => extra.dispatch(command), ...extra });
+/** @param {string} label @param {string} command @param {string | undefined} accelerator @param {{dispatch: (command: string) => void}} extra @returns {import("electron").MenuItemConstructorOptions} */
+const item = (label, command, accelerator, extra) => ({ label, accelerator, click: () => extra.dispatch(command), ...extra });
 
+/** @param {import("electron").BrowserWindow} window @param {(command: string) => void} dispatch */
 function installNativeMenu(window, dispatch) {
   const options = { dispatch };
+  /** @type {import("electron").MenuItemConstructorOptions[]} */
   const template = [
     { label: "File", submenu: [
       item("New Workflow", "workflow:new", "CmdOrCtrl+N", options), item("Open Workflow…", "workflow:open", "CmdOrCtrl+O", options),
@@ -20,7 +23,7 @@ function installNativeMenu(window, dispatch) {
     { label: "View", submenu: [
       item("Zoom In", "view:zoom-in", "CmdOrCtrl+=", options), item("Zoom Out", "view:zoom-out", "CmdOrCtrl+-", options), item("Actual Size", "view:actual-size", "CmdOrCtrl+0", options), item("Fit Workflow", "view:fit", "F", options), item("Center Selection", "view:center-selection", "Shift+F", options),
       { type: "separator" }, item("Toggle Node Library", "view:library", undefined, options), item("Toggle Minimap", "view:minimap", undefined, options), item("Toggle Logs", "view:logs", undefined, options), item("Toggle Downloads", "view:downloads", undefined, options), item("Reset Layout", "view:reset-layout", undefined, options),
-      { role: "togglefullscreen", accelerator: "F11" }, ...(process.env.NODE_ENV === "development" ? [{ role: "toggleDevTools" }] : []),
+      { role: "togglefullscreen", accelerator: "F11" }, ...(process.env.NODE_ENV === "development" ? [/** @type {import("electron").MenuItemConstructorOptions} */({ role: "toggleDevTools" })] : []),
     ]},
     { label: "Workflow", submenu: [
       item("Validate", "run:validate", undefined, options), item("Run", "run:start", "CmdOrCtrl+Enter", options), item("Run Selected", "run:selected", undefined, options), item("Run From Selected", "run:from-selected", undefined, options),

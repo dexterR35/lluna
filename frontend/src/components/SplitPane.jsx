@@ -1,1 +1,61 @@
-import { useState } from "react"; import { cn } from "./utils"; export function SplitPane({first,second,initial=280,min=180,max=520,direction="horizontal",onResize}){const[size,setSize]=useState(initial);function down(event){event.currentTarget.setPointerCapture(event.pointerId);const start=direction==="horizontal"?event.clientX:event.clientY,startSize=size;function move(moveEvent){const delta=(direction==="horizontal"?moveEvent.clientX:moveEvent.clientY)-start;const next=Math.max(min,Math.min(max,startSize+delta));setSize(next);onResize?.(next);}function up(){window.removeEventListener("pointermove",move);window.removeEventListener("pointerup",up);}window.addEventListener("pointermove",move);window.addEventListener("pointerup",up);}const horizontal=direction==="horizontal";return <div className={cn("flex min-h-0 min-w-0 flex-1",horizontal?"flex-row":"flex-col")}><div className="min-h-0 min-w-0 shrink-0" style={horizontal?{width:size}:{height:size}}>{first}</div><div role="separator" aria-orientation={horizontal?"vertical":"horizontal"} onPointerDown={down} className={cn("shrink-0 bg-mg-border transition hover:bg-mg-accent",horizontal?"w-1 cursor-col-resize":"h-1 cursor-row-resize")}/><div className="min-h-0 min-w-0 flex-1">{second}</div></div>}
+import { useState } from "react";
+import { cn } from "./utils";
+/** @param {{first: import("react").ReactNode, second: import("react").ReactNode, initial?: number, min?: number, max?: number, direction?: "horizontal"|"vertical", onResize?: (size: number) => void}} props */
+export function SplitPane({
+  first,
+  second,
+  initial = 280,
+  min = 180,
+  max = 520,
+  direction = "horizontal",
+  onResize,
+}) {
+  const [size, setSize] = useState(initial);
+  function down(
+    /** @type {import("react").PointerEvent<HTMLDivElement>} */ event,
+  ) {
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const start = direction === "horizontal" ? event.clientX : event.clientY,
+      startSize = size;
+    function move(/** @type {PointerEvent} */ moveEvent) {
+      const delta =
+        (direction === "horizontal" ? moveEvent.clientX : moveEvent.clientY) -
+        start;
+      const next = Math.max(min, Math.min(max, startSize + delta));
+      setSize(next);
+      onResize?.(next);
+    }
+    function up() {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    }
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }
+  const horizontal = direction === "horizontal";
+  return (
+    <div
+      className={cn(
+        "flex min-h-0 min-w-0 flex-1",
+        horizontal ? "flex-row" : "flex-col",
+      )}
+    >
+      <div
+        className="min-h-0 min-w-0 shrink-0"
+        style={horizontal ? { width: size } : { height: size }}
+      >
+        {first}
+      </div>
+      <div
+        role="separator"
+        aria-orientation={horizontal ? "vertical" : "horizontal"}
+        onPointerDown={down}
+        className={cn(
+          "shrink-0 bg-mg-border transition hover:bg-mg-accent",
+          horizontal ? "w-1 cursor-col-resize" : "h-1 cursor-row-resize",
+        )}
+      />
+      <div className="min-h-0 min-w-0 flex-1">{second}</div>
+    </div>
+  );
+}

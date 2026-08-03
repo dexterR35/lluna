@@ -7,6 +7,7 @@ export const IMAGE_EFFECT_OPTIONS = [
   { value: "mono", label: "Monochrome" },
 ];
 
+/** @type {Record<string, string>} */
 export const IMAGE_EFFECTS = {
   none: "none",
   vivid: "saturate(1.35) contrast(1.08)",

@@ -1,9 +1,11 @@
 import { BaseEdge, EdgeLabelRenderer, getBezierPath } from "@xyflow/react";
 import { X } from "lucide-react";
 import { useEditorStore } from "../state/editorStore";
+/** @param {import("@xyflow/react").EdgeProps} props */
 export function MidgardEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, selected, markerEnd, style }) {
   const [path, x, y] = getBezierPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition });
   const remove = useEditorStore(store => store.removeEdge);
+  /** @param {import("react").MouseEvent<HTMLButtonElement>} event */
   function unlink(event) {
     event.preventDefault();
     event.stopPropagation();

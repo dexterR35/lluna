@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { screen } from "electron";
 
+/** @param {string} dataDir */
 function createWindowStateStore(dataDir) {
   const file = path.join(dataDir, "window-state.json");
   function load() {
@@ -14,6 +15,7 @@ function createWindowStateStore(dataDir) {
       return { width: 1440, height: 900 };
     }
   }
+  /** @param {import("electron").BrowserWindow} window */
   function save(window) {
     if (window.isDestroyed()) return;
     const bounds = window.getBounds();
