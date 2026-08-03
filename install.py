@@ -761,8 +761,6 @@ checks = [
     ("torch", "import torch", True),
     ("cv2", "import cv2", True),
     ("PIL", "from PIL import Image", True),
-    ("PySide6", "import PySide6", True),
-    ("qfluentwidgets", "import qfluentwidgets", True),
     ("paddle", "import paddle", True),
     ("transformers", "import transformers", False),
     ("huggingface_hub", "import huggingface_hub", False),
@@ -855,152 +853,16 @@ def verify_models() -> None:
     log("Model check complete.")
 
 
-# Category defaults only on first install (must match BgRemoveMode / MODEL_CATALOG is_default).
-# Optional models (BiRefNet Massive, BRIA, Lite, …) download from Settings → Remove BG Models.
-REMBG_PREFETCH_MODELS = [
-    "birefnet-general",  # General - app default
-    "u2net_human_seg",  # People
-    "isnet-anime",  # Anime
-    "u2net_cloth_seg",  # Clothes
-]
-
-
-def prefetch_rembg_models(py: Path) -> None:
-    """Download default Remove BG ONNX weights (optional models install from Settings)."""
-    log("\nPrefetching default Remove BG models…")
-    # JSON list avoids quoting issues across shells
-    models_json = json.dumps(REMBG_PREFETCH_MODELS)
-    script = r"""
-import json, sys
-models = json.loads(sys.argv[1])
-from rembg.sessions import sessions_class
-
-by_name = {}
-for cls in sessions_class:
-    try:
-        n = cls.name() if callable(getattr(cls, "name", None)) else None
-    except Exception:
-        n = None
-    if n:
-        by_name[n] = cls
-
-ok = fail = skip = 0
-for name in models:
-    cls = by_name.get(name)
-    if cls is None:
-        print(f"  SKIP {name} (not in rembg)")
-        skip += 1
-        continue
-    try:
-        print(f"  Downloading {name} …")
-        path = cls.download_models()
-        print(f"  OK {name} -> {path}")
-        ok += 1
-    except Exception as e:
-        print(f"  WARN {name}: {e}")
-        fail += 1
-print(f"Remove BG models: ok={ok} warn={fail} skip={skip}")
-"""
-    run([str(py), "-c", script, models_json])
-
-
-def prefetch_enhance_x2(py: Path) -> None:
-    """Mandatory first-install: Real-ESRGAN ×2 (app default). ×4 stays Settings-only."""
-    log("\nInstalling default Enhance model (Real-ESRGAN ×2)…")
-    script = r"""
-import sys
-sys.path.insert(0, sys.argv[1])
-from backend.tools.constant import EnhanceMode
-from backend.tools.enhance_models import (
-    ensure_model_installed,
-    is_model_installed,
-    model_file_path,
-)
-
-mode = EnhanceMode.X2PLUS
-path = model_file_path(mode)
-if is_model_installed(mode):
-    print(f"  OK already present: {path}")
-else:
-    print("  Downloading RealESRGAN_x2plus …")
-    path = ensure_model_installed(mode)
-    print(f"  OK {path}")
-"""
-    run([str(py), "-c", script, str(ROOT)])
-
-
-def prefetch_low_light_mirnet(py: Path) -> None:
-    """Mandatory first-install: MIRNet LOL (Low Light page default). Leaves Settings On."""
-    log("\nInstalling default Low Light model (MIRNet LOL)…")
-    script = r"""
-import sys
-sys.path.insert(0, sys.argv[1])
-from backend.config import config
-from backend.tools.constant import LowLightMode
-from backend.tools.low_light_models import (
-    ensure_model_installed,
-    is_model_installed,
-    model_file_path,
-    set_model_enabled,
-)
-
-mode = LowLightMode.MIRNET_LOL
-path = model_file_path(mode)
-if is_model_installed(mode):
-    print(f"  OK already present: {path}")
-else:
-    print("  Downloading MIRNet_LOL …")
-    path = ensure_model_installed(mode)
-    print(f"  OK {path}")
-# Default On after install (same as Settings Install button)
-set_model_enabled(mode, True)
-config.set(config.lowLightMode, mode)
-print("  Enabled: On (default)")
-"""
-    run([str(py), "-c", script, str(ROOT)])
-
-
-def prefetch_select_object_defaults(py: Path) -> None:
-    """Install missing Select Object defaults only; skip models already on disk."""
-    log("\nSelect Object models (install missing only)…")
-    script = r"""
-import sys
-sys.path.insert(0, sys.argv[1])
-from backend.tools.select_object_models import (
-    PAIR_CATALOG,
-    PAIR_MEMBERS,
-    SelectObjectPairId,
-    is_pair_installed,
-    model_dir,
-    prefetch_on_install,
-)
-
-for info in PAIR_CATALOG:
-    pid = info.pair_id
-    if is_pair_installed(pid):
-        sam2, dino = PAIR_MEMBERS[pid]
-        print(f"  OK already present: {model_dir(sam2)} + {model_dir(dino)}")
-
-if not is_pair_installed(SelectObjectPairId.FAST):
-    print("  Downloading standard pair (SAM2 Tiny + DINO Tiny) …")
-prefetch_on_install()
-if is_pair_installed(SelectObjectPairId.FAST):
-    sam2, dino = PAIR_MEMBERS[SelectObjectPairId.FAST]
-    print(f"  OK {model_dir(sam2)} + {model_dir(dino)}")
-"""
-    run([str(py), "-c", script, str(ROOT)])
-
-
 def seed_default_model_downloads(py: Path, *, skip_rembg: bool = False) -> None:
-    """Schedule default models for the GUI download queue (one at a time on first open)."""
-    log("\nScheduling default model downloads for first GUI open…")
+    """Schedule default models for the Electron model queue on first launch."""
+    log("\nScheduling default model downloads for first Electron launch…")
     script = r"""
 import sys
 sys.path.insert(0, sys.argv[1])
 from backend.tools.first_run_downloads import seed_first_run_downloads
 
 n = seed_first_run_downloads(skip_rembg=sys.argv[2] == "1")
-print(f"  Scheduled {n} default model(s) for the Settings download queue.")
+print(f"  Scheduled {n} default model(s) for the model download queue.")
 """
     run([str(py), "-c", script, str(ROOT), "1" if skip_rembg else "0"])
 
@@ -1021,38 +883,12 @@ def write_runtime(
     log(f"Wrote {RUNTIME_FILE.name}")
 
 
-def write_launchers(venv_dir: Path) -> None:
-    if platform.system() == "Windows":
-        bat = ROOT / "run_gui.bat"
-        bat.write_text(
-            f"@echo off\r\n"
-            f"setlocal\r\n"
-            f'cd /d "%~dp0"\r\n'
-            f'if not exist "midgardEnv\\Scripts\\python.exe" (\r\n'
-            f"  echo Midgard environment is missing. Run install.bat first.\r\n"
-            f"  exit /b 2\r\n"
-            f")\r\n"
-            f'"midgardEnv\\Scripts\\python.exe" gui.py %*\r\n'
-            f"exit /b %errorlevel%\r\n",
-            encoding="utf-8",
-        )
-        log(f"Wrote {bat.name}")
-    else:
-        sh = ROOT / "run_gui.sh"
-        sh.write_text(
-            "#!/usr/bin/env bash\n"
-            "set -euo pipefail\n"
-            'script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"\n'
-            'cd "$script_dir"\n'
-            'if [[ ! -x "$script_dir/midgardEnv/bin/python" ]]; then\n'
-            '  echo "Midgard environment is missing. Run ./install.sh first." >&2\n'
-            "  exit 2\n"
-            "fi\n"
-            'exec "$script_dir/midgardEnv/bin/python" gui.py "$@"\n',
-            encoding="utf-8",
-        )
-        sh.chmod(sh.stat().st_mode | 0o111)
-        log(f"Wrote {sh.name}")
+def install_desktop_dependencies() -> None:
+    """Install the Electron renderer and packaging dependencies."""
+    npm = shutil.which("npm")
+    if not npm:
+        raise SystemExit("Node.js 22+ and npm are required for source development.")
+    run([npm, "install", "--allow-git=all"])
 
 
 def parse_args() -> argparse.Namespace:
@@ -1150,15 +986,12 @@ def main() -> int:
         compute_cap=getattr(cuda, "compute_cap", "") or "",
         total_vram_mb=float(getattr(cuda, "total_vram_mb", 0) or 0),
     )
-    write_launchers(venv_dir)
+    install_desktop_dependencies()
 
     log("\n" + "=" * 60)
     log("  Midgard install complete.")
     log("=" * 60)
-    if platform.system() == "Windows":
-        log("  GUI:  run_gui.bat")
-    else:
-        log("  GUI:  ./run_gui.sh")
+    log("  Desktop: npm run dev")
     log("")
     return 0
 

@@ -106,21 +106,21 @@ def serialize_enabled_values(values: Iterable[str]) -> str:
 
 
 def get_enabled_values() -> Set[str]:
-    from backend.config import config
+    from backend.configuration.service import get_settings
 
-    return parse_enabled_values(config.bgRemoveEnabledModels.value)
+    return parse_enabled_values(get_settings().background_removal.enabled_models)
 
 
 def set_model_enabled(mode: BgRemoveMode, enabled: bool) -> None:
     """Turn a model On/Off for the Run dropdown (any installed model, including defaults)."""
-    from backend.config import config
+    from backend.configuration.service import update_settings
 
     values = get_enabled_values()
     if enabled:
         values.add(mode.value)
     else:
         values.discard(mode.value)
-    config.set(config.bgRemoveEnabledModels, serialize_enabled_values(values))
+    update_settings({"background_removal": {"enabled_models": serialize_enabled_values(values)}})
 
 
 def selectable_modes() -> List[BgRemoveMode]:
@@ -140,17 +140,17 @@ def apply_default_bg_model() -> BgRemoveMode:
 
 def ensure_selected_mode_valid() -> BgRemoveMode:
     """If current config mode is missing/off, fall back to BiRefNet or first selectable."""
-    from backend.config import config
+    from backend.configuration.service import get_settings, update_settings
 
-    current = config.bgRemoveMode.value
+    current = BgRemoveMode(get_settings().background_removal.mode)
     available = selectable_modes()
     if current in available:
         return current
     if BgRemoveMode.BIREFNET in available:
-        config.set(config.bgRemoveMode, BgRemoveMode.BIREFNET)
+        update_settings({"background_removal": {"mode": BgRemoveMode.BIREFNET.value}})
         return BgRemoveMode.BIREFNET
     if available:
-        config.set(config.bgRemoveMode, available[0])
+        update_settings({"background_removal": {"mode": available[0].value}})
         return available[0]
     return current
 

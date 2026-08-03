@@ -62,30 +62,22 @@ def detect_vram_and_cap() -> Tuple[float, Optional[str]]:
 
 
 def apply_soft_defaults_if_needed() -> bool:
-    """
-    Apply VRAM-based soft defaults once when config still at factory values.
-    Inpaint mode stays STTN Smart Inpainting (sttn-auto) - only batch sizes nudge.
-    Returns True if defaults were applied.
-    """
-    from backend.config import config
-    from backend.tools.constant import InpaintMode
+    """Apply VRAM-based defaults once without mutating a GUI configuration."""
+    from backend.configuration.service import get_settings, update_settings
 
-    if bool(config.softDefaultsApplied.value):
+    settings = get_settings()
+    if settings.runtime.soft_defaults_applied:
         return False
 
     total_mb, compute_cap = detect_vram_and_cap()
-    # Only nudge if user has not customized key items much - check factory-ish values.
-    sttn_default = 50
-    prop_default = 70
-    mode_default = InpaintMode.STTN_AUTO
-
+    subtitle = settings.subtitle
     customized = (
-        config.sttnMaxLoadNum.value != sttn_default
-        or config.propainterMaxLoadNum.value != prop_default
-        or config.inpaintMode.value != mode_default
+        subtitle.sttn_max_load_num != 50
+        or subtitle.propainter_max_load_num != 70
+        or subtitle.inpaint_mode != "sttn-auto"
     )
     if customized:
-        config.set(config.softDefaultsApplied, True)
+        update_settings({"runtime": {"soft_defaults_applied": True}})
         return False
 
     gb = total_mb / 1024.0 if total_mb else 0.0
@@ -94,25 +86,28 @@ def apply_soft_defaults_if_needed() -> bool:
     except ValueError:
         cap_f = 0.0
 
-    # Always keep STTN Smart Inpainting as the default model on first run
-    config.set(config.inpaintMode, InpaintMode.STTN_AUTO)
-
+    sttn_max, propainter_max = 50, 70
     if gb <= 0 or gb < 4:
-        config.set(config.sttnMaxLoadNum, 20)
-        config.set(config.propainterMaxLoadNum, 20)
+        sttn_max, propainter_max = 20, 20
     elif gb < 8:
-        config.set(config.sttnMaxLoadNum, 30)
-        config.set(config.propainterMaxLoadNum, 30)
+        sttn_max, propainter_max = 30, 30
     elif gb < 12:
-        config.set(config.sttnMaxLoadNum, 40)
-        config.set(config.propainterMaxLoadNum, 50)
-    # else: keep factory load nums
-
-    # Very old GPUs: smaller STTN batches only (do not switch away from STTN Smart)
+        sttn_max, propainter_max = 40, 50
     if 0 < cap_f < 6.0:
-        config.set(config.sttnMaxLoadNum, min(int(config.sttnMaxLoadNum.value), 20))
-        config.set(config.propainterMaxLoadNum, min(int(config.propainterMaxLoadNum.value), 20))
+        sttn_max = min(sttn_max, 20)
+        propainter_max = min(propainter_max, 20)
 
-    config.set(config.softDefaultsApplied, True)
-    write_runtime_patch({"soft_defaults_applied": True, "total_vram_mb": total_mb, "compute_cap": compute_cap})
+    update_settings({
+        "runtime": {"soft_defaults_applied": True},
+        "subtitle": {
+            "inpaint_mode": "sttn-auto",
+            "sttn_max_load_num": sttn_max,
+            "propainter_max_load_num": propainter_max,
+        },
+    })
+    write_runtime_patch({
+        "soft_defaults_applied": True,
+        "total_vram_mb": total_mb,
+        "compute_cap": compute_cap,
+    })
     return True

@@ -69,10 +69,10 @@ def _report_hardware() -> None:
     except Exception as e:
         diag.warn(f"hardware check failed  {e}")
     try:
-        from backend.config import config
+        from backend.configuration.service import get_settings
 
         diag.model(
-            f"{'hardwareAcceleration':<28}  {bool(config.hardwareAcceleration.value)}"
+            f"{'hardwareAcceleration':<28}  {bool(get_settings().subtitle.hardware_acceleration)}"
         )
     except Exception:
         pass
@@ -81,11 +81,14 @@ def _report_hardware() -> None:
 def _report_bg_remove_models() -> None:
     diag.start("── models: background remove ──")
     try:
-        from backend.config import config, tr
+        from backend.configuration.service import get_settings
+        from backend.i18n.translations import get_translations
         from backend.tools import bg_remove_models as bgm
 
-        enabled = bgm.parse_enabled_values(config.bgRemoveEnabledModels.value)
-        selected = getattr(config.bgRemoveMode.value, "value", config.bgRemoveMode.value)
+        settings = get_settings().background_removal
+        tr = get_translations()
+        enabled = bgm.parse_enabled_values(settings.enabled_models)
+        selected = settings.mode
         ok_n = miss_n = 0
         for info in bgm.MODEL_CATALOG:
             mode = info.mode
@@ -118,11 +121,14 @@ def _report_bg_remove_models() -> None:
 def _report_enhance_models() -> None:
     diag.start("── models: enhance (Real-ESRGAN) ──")
     try:
-        from backend.config import config, tr
+        from backend.configuration.service import get_settings
+        from backend.i18n.translations import get_translations
         from backend.tools import enhance_models as em
 
-        enabled = em.parse_enabled_values(config.enhanceEnabledModels.value)
-        selected = getattr(config.enhanceMode.value, "value", config.enhanceMode.value)
+        settings = get_settings().enhancement
+        tr = get_translations()
+        enabled = em.parse_enabled_values(settings.enabled_models)
+        selected = settings.mode
         ok_n = miss_n = 0
         for info in em.MODEL_CATALOG:
             mode = info.mode
@@ -153,13 +159,15 @@ def _report_enhance_models() -> None:
 def _report_video_models() -> None:
     diag.start("── models: video / retouch / detect ──")
     try:
-        from backend.config import BASE_DIR, config
+        from backend.configuration.service import get_settings
+        from backend.core.paths import PATHS
 
+        base_dir = PATHS.project_root / "backend"
         checks = [
-            ("LAMA (retouch/inpaint)", Path(BASE_DIR) / "models" / "big-lama" / "big-lama.pt"),
-            ("STTN auto", Path(BASE_DIR) / "models" / "sttn-auto" / "infer_model.pth"),
-            ("STTN det", Path(BASE_DIR) / "models" / "sttn-det" / "sttn.pth"),
-            ("ProPainter", Path(BASE_DIR) / "models" / "propainter" / "ProPainter.pth"),
+            ("LAMA (retouch/inpaint)", base_dir / "models" / "big-lama" / "big-lama.pt"),
+            ("STTN auto", base_dir / "models" / "sttn-auto" / "infer_model.pth"),
+            ("STTN det", base_dir / "models" / "sttn-det" / "sttn.pth"),
+            ("ProPainter", base_dir / "models" / "propainter" / "ProPainter.pth"),
         ]
         for label, path in checks:
             _line(label, "OK" if _file_ok(path) else "MISSING", str(path.name))
@@ -169,14 +177,13 @@ def _report_video_models() -> None:
             ("PP-OCRv5 mobile det", Path("models") / "V5" / "ch_det_fast"),
             ("PP-OCRv5 server det", Path("models") / "V5" / "ch_det"),
         ):
-            path = Path(BASE_DIR) / rel
+            path = base_dir / rel
             _line(label, "OK" if _dir_has_weights(path) else "MISSING", str(rel))
 
         try:
-            inpaint = getattr(config.inpaintMode.value, "value", config.inpaintMode.value)
-            detect = getattr(
-                config.subtitleDetectMode.value, "value", config.subtitleDetectMode.value
-            )
+            settings = get_settings().subtitle
+            inpaint = settings.inpaint_mode
+            detect = settings.subtitle_detect_mode
             diag.model(f"{'selected inpaintMode':<28}  {inpaint}")
             diag.model(f"{'selected subtitleDetect':<28}  {detect}")
         except Exception:
@@ -268,9 +275,11 @@ def _check_transformers_stack() -> None:
 def _report_select_object_models() -> None:
     diag.start("── models: select object (SAM2 + DINO) ──")
     try:
-        from backend.config import config, tr
+        from backend.configuration.service import get_settings
+        from backend.i18n.translations import get_translations
         from backend.tools import select_object_models as som
 
+        tr = get_translations()
         ok_n = miss_n = 0
         for info in som.PAIR_CATALOG:
             installed = som.is_pair_installed(info.pair_id)
@@ -293,7 +302,7 @@ def _report_select_object_models() -> None:
             )
         diag.model(f"{'select-object summary':<28}  {ok_n} OK / {miss_n} MISSING")
         try:
-            more_complex = bool(config.selectObjectMoreComplex.value)
+            more_complex = bool(get_settings().object_selection.more_complex)
             diag.model(f"{'selectObjectMoreComplex':<28}  {more_complex}")
         except Exception:
             pass

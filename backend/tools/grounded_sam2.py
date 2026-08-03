@@ -27,11 +27,11 @@ _loaded_dino_id: Optional[SelectObjectModelId] = None
 def _device():
     import torch
 
-    from backend.config import config
+    from backend.configuration.service import get_settings
     from backend.tools.hardware_accelerator import HardwareAccelerator
 
     hw = HardwareAccelerator.instance()
-    hw.set_enabled(bool(config.hardwareAcceleration.value))
+    hw.set_enabled(bool(get_settings().subtitle.hardware_acceleration))
     dev = hw.device
     if dev.type == "cuda" and not torch.cuda.is_available():
         return torch.device("cpu")

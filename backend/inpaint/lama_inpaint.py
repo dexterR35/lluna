@@ -5,7 +5,6 @@ import torch
 import numpy as np
 from PIL import Image
 from backend.inpaint.utils.lama_util import prepare_img_and_mask, get_image, pad_img_to_modulo
-from backend import config
 from backend.tools.inpaint_tools import get_inpaint_area_by_mask
 
 class LamaInpaint:

@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
-"""Midgard desktop entry point."""
+"""Midgard Python sidecar entry point."""
 
-from backend.application.bootstrap import launch_desktop
+import multiprocessing
+
+from backend.api.app import main
 
 
 if __name__ == "__main__":
-    raise SystemExit(launch_desktop())
+    multiprocessing.freeze_support()
+    raise SystemExit(main())

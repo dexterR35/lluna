@@ -2,15 +2,15 @@
 """CLI diagnostic / debug logger for Midgard Studio.
 
 Enable (default when stdout is a TTY):
-  MIDGARD_DIAG=1 ./run_gui.sh
-  ./run_gui.sh --diag
+  MIDGARD_DIAG=1 npm run dev
+  npm run dev --diag
 
 Disable:
-  MIDGARD_DIAG=0 ./run_gui.sh
-  ./run_gui.sh --no-diag
+  MIDGARD_DIAG=0 npm run dev
+  npm run dev --no-diag
 
 Optional noisy UI click log (off by default):
-  MIDGARD_DIAG_CLICKS=1 ./run_gui.sh
+  MIDGARD_DIAG_CLICKS=1 npm run dev
 """
 
 from __future__ import annotations

@@ -1,0 +1,53 @@
+{
+  "background_removal": {
+    "enabled_models": "birefnet-general,u2net_human_seg,isnet-anime,u2net_cloth_seg",
+    "mode": "birefnet-general"
+  },
+  "enhancement": {
+    "denoise_enabled": false,
+    "denoise_strength": "safe",
+    "enabled_models": "RealESRGAN_x2plus",
+    "max_long_edge": 5000,
+    "mode": "RealESRGAN_x2plus"
+  },
+  "generation": {
+    "enabled_models": "__none__",
+    "height": 768,
+    "mode": "FLUX.2-klein-base-4B",
+    "steps": 4,
+    "width": 768
+  },
+  "low_light": {
+    "enabled_models": "MIRNet_LOL",
+    "max_long_edge": 2048,
+    "mode": "MIRNet_LOL"
+  },
+  "object_selection": {
+    "more_complex": false
+  },
+  "runtime": {
+    "check_updates_on_startup": true,
+    "idle_release_seconds": 60.0,
+    "job_watchdog_seconds": 90.0,
+    "soft_defaults_applied": true
+  },
+  "save_directory": "",
+  "schema_version": 2,
+  "subtitle": {
+    "area_y_axis_difference_px": 20,
+    "box_tolerance_x_px": 20,
+    "box_tolerance_y_px": 20,
+    "hardware_acceleration": true,
+    "inpaint_mode": "sttn-auto",
+    "mask_expansion_px": 10,
+    "propainter_max_load_num": 20,
+    "selection_areas": "0.88,0.99,0.15,0.85",
+    "sttn_max_load_num": 20,
+    "sttn_neighbor_stride": 5,
+    "sttn_reference_length": 10,
+    "subtitle_detect_mode": "PP_OCRv5_SERVER",
+    "timeline_after_frames": 3,
+    "timeline_before_frames": 3,
+    "vertical_box_tolerance_px": 10
+  }
+}

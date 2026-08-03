@@ -9,7 +9,5 @@ je-showinfilemanager
 numpy
 opencv-python
 Pillow
-PySide6==6.11.1
-pyside6-fluent-widgets
 requests
 tqdm

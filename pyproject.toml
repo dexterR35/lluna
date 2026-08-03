@@ -15,7 +15,6 @@ testpaths = ["tests"]
 markers = [
     "unit: isolated deterministic unit tests",
     "integration: safe local integration tests",
-    "gui: headless PySide6 tests",
     "hardware: real hardware probe tests",
     "network: tests that explicitly require network access",
     "gpu: tests that require any GPU",

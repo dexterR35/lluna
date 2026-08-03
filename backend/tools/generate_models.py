@@ -279,20 +279,20 @@ def serialize_enabled_values(values: Iterable[str]) -> str:
 
 
 def get_enabled_values() -> Set[str]:
-    from backend.config import config
+    from backend.configuration.service import get_settings
 
-    return parse_enabled_values(config.generateEnabledModels.value)
+    return parse_enabled_values(get_settings().generation.enabled_models)
 
 
 def set_model_enabled(mode: GenerateMode, enabled: bool) -> None:
-    from backend.config import config
+    from backend.configuration.service import update_settings
 
     values = get_enabled_values()
     if enabled:
         values.add(mode.value)
     else:
         values.discard(mode.value)
-    config.set(config.generateEnabledModels, serialize_enabled_values(values))
+    update_settings({"generation": {"enabled_models": serialize_enabled_values(values)}})
 
 
 def selectable_modes() -> List[GenerateMode]:
@@ -306,17 +306,17 @@ def selectable_modes() -> List[GenerateMode]:
 
 
 def ensure_selected_mode_valid() -> GenerateMode:
-    from backend.config import config
+    from backend.configuration.service import get_settings, update_settings
 
-    current = config.generateMode.value
+    current = GenerateMode(get_settings().generation.mode)
     available = selectable_modes()
     if current in available:
         return current
     if GenerateMode.FLUX2_KLEIN_BASE_4B in available:
-        config.set(config.generateMode, GenerateMode.FLUX2_KLEIN_BASE_4B)
+        update_settings({"generation": {"mode": GenerateMode.FLUX2_KLEIN_BASE_4B.value}})
         return GenerateMode.FLUX2_KLEIN_BASE_4B
     if available:
-        config.set(config.generateMode, available[0])
+        update_settings({"generation": {"mode": available[0].value}})
         return available[0]
     return current
 
@@ -442,11 +442,11 @@ def cuda_ready_for_generate() -> tuple[bool, str]:
     if not torch.cuda.is_available():
         return False, "No NVIDIA CUDA GPU detected. Generate requires CUDA."
 
-    from backend.config import config
+    from backend.configuration.service import get_settings
     from backend.tools.hardware_accelerator import HardwareAccelerator
 
     hw = HardwareAccelerator.instance()
-    hw.set_enabled(bool(config.hardwareAcceleration.value))
+    hw.set_enabled(bool(get_settings().subtitle.hardware_acceleration))
     if not hw.has_cuda():
         return False, (
             "Hardware acceleration is off or CUDA is unavailable. "

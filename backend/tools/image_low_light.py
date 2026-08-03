@@ -75,21 +75,21 @@ def _clear_session_cache_unlocked() -> None:
 
 
 def _max_long_edge() -> int:
-    from backend.config import config
+    from backend.configuration.service import get_settings
 
     try:
-        raw = int(config.lowLightMaxLongEdge.value)
+        raw = int(get_settings().low_light.max_long_edge)
     except (TypeError, ValueError):
         raw = MAX_LONG_EDGE
     return max(MIN_LONG_EDGE, min(MAX_LONG_EDGE, raw))
 
 
 def _device() -> torch.device:
-    from backend.config import config
+    from backend.configuration.service import get_settings
     from backend.tools.hardware_accelerator import HardwareAccelerator
 
     hw = HardwareAccelerator.instance()
-    hw.set_enabled(bool(config.hardwareAcceleration.value))
+    hw.set_enabled(bool(get_settings().subtitle.hardware_acceleration))
     return hw.device
 
 

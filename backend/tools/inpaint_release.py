@@ -53,19 +53,19 @@ def _dispose_obj(obj) -> None:
 def get_retouch_lama(model_path: Optional[str] = None):
     """Cached LamaInpaint for retouch Fill (worker process)."""
     global _retouch_lama, _retouch_lama_path, _retouch_lama_device
-    from backend.config import config
+    from backend.configuration.service import get_settings
     from backend.inpaint.lama_inpaint import LamaInpaint
     from backend.tools.hardware_accelerator import HardwareAccelerator
 
     hw = HardwareAccelerator.instance()
-    hw.set_enabled(bool(config.hardwareAcceleration.value))
+    hw.set_enabled(bool(get_settings().subtitle.hardware_acceleration))
     device = hw.device
     path = model_path
     if not path:
         import os
-        from backend.config import BASE_DIR
+        from backend.core.paths import PATHS
 
-        path = os.path.join(BASE_DIR, "models", "big-lama.pt")
+        path = os.path.join(PATHS.project_root, "backend", "models", "big-lama.pt")
 
     with _lock:
         if (

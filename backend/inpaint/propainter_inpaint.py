@@ -10,7 +10,6 @@ from typing import List
 import torch
 import torchvision
 
-from backend import config
 from backend.inpaint.video.model.modules.flow_comp_raft import RAFT_bi
 from backend.inpaint.video.model.recurrent_flow_completion import RecurrentFlowCompleteNet
 from backend.inpaint.video.model.propainter import InpaintGenerator

@@ -61,10 +61,9 @@ class SubtitleRemover:
         cancellation_token: CancellationToken | None = None,
     ):
         if settings is None:
-            from backend.config import config
-            from backend.configuration.legacy import snapshot_qt_configuration
+            from backend.configuration.service import get_settings
 
-            settings = snapshot_qt_configuration(config).subtitle
+            settings = get_settings().subtitle
         self.settings = settings
         self.tr = get_translations()
         self.cancellation_token = cancellation_token or CancellationToken()

@@ -139,9 +139,9 @@ class InferClient:
 
     def _watchdog_sec(self) -> float:
         try:
-            from backend.config import config
+            from backend.configuration.service import get_settings
 
-            return float(config.jobWatchdogSec.value)
+            return float(get_settings().runtime.job_watchdog_seconds)
         except Exception:
             return 90.0
 
@@ -151,9 +151,9 @@ class InferClient:
 
     def _desired_hw(self) -> bool:
         try:
-            from backend.config import config
+            from backend.configuration.service import get_settings
 
-            return bool(config.hardwareAcceleration.value)
+            return bool(get_settings().subtitle.hardware_acceleration)
         except Exception:
             return True
 

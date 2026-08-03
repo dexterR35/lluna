@@ -228,10 +228,10 @@ def uninstall_pair(pair_id: SelectObjectPairId) -> None:
     for mid in members:
         uninstall_model(mid)
     if pair_id == SelectObjectPairId.COMPLEX:
-        from backend.config import config
+        from backend.configuration.service import get_settings, update_settings
 
-        if config.selectObjectMoreComplex.value:
-            config.set(config.selectObjectMoreComplex, False)
+        if get_settings().object_selection.more_complex:
+            update_settings({"object_selection": {"more_complex": False}})
 
 
 def is_fast_pair_installed() -> bool:
@@ -267,9 +267,9 @@ def is_active_pair_ready(more_complex: bool | None = None) -> bool:
 def resolve_pair(more_complex: bool | None = None) -> Tuple[SelectObjectModelId, SelectObjectModelId]:
     """More complex ON + both optional weights → large+base; else tiny+tiny."""
     if more_complex is None:
-        from backend.config import config
+        from backend.configuration.service import get_settings
 
-        more_complex = bool(config.selectObjectMoreComplex.value)
+        more_complex = bool(get_settings().object_selection.more_complex)
     if more_complex and is_complex_pair_installed():
         return SelectObjectModelId.SAM2_LARGE, SelectObjectModelId.DINO_BASE
     return SelectObjectModelId.SAM2_TINY, SelectObjectModelId.DINO_TINY
@@ -328,9 +328,9 @@ def install_pair(pair_id: SelectObjectPairId, *, skip_if_complete: bool = False)
 def ensure_active_pair_installed(more_complex: bool | None = None) -> None:
     """Install only the pair Select Object will use; never both pairs at once."""
     if more_complex is None:
-        from backend.config import config
+        from backend.configuration.service import get_settings
 
-        more_complex = bool(config.selectObjectMoreComplex.value)
+        more_complex = bool(get_settings().object_selection.more_complex)
     if more_complex:
         if is_complex_pair_installed():
             return

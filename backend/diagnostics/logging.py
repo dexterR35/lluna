@@ -1,4 +1,4 @@
-"""Standard logging bootstrap used before Qt is created."""
+"""Standard logging bootstrap used before the control plane starts."""
 
 from __future__ import annotations
 

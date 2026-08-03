@@ -18,10 +18,11 @@ class EnhanceOptions:
 
     @classmethod
     def from_config(cls) -> "EnhanceOptions":
-        from backend.config import config
+        from backend.configuration.service import get_settings
 
-        enabled = bool(config.enhanceDenoiseEnabled.value)
-        raw = config.enhanceDenoiseStrength.value
+        settings = get_settings().enhancement
+        enabled = bool(settings.denoise_enabled)
+        raw = settings.denoise_strength
         try:
             strength = (
                 raw
@@ -31,7 +32,7 @@ class EnhanceOptions:
         except (TypeError, ValueError):
             strength = DenoiseStrength.SAFE
         try:
-            max_long_edge = int(config.enhanceMaxLongEdge.value)
+            max_long_edge = int(settings.max_long_edge)
         except (TypeError, ValueError):
             max_long_edge = 0
         return cls(

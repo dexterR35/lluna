@@ -1,2 +1,4 @@
 # Minimal dependency set for tests that do not need optional pytest plugins.
 pytest==9.0.3
+
+httpx==0.28.1

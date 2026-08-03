@@ -52,10 +52,10 @@ class BackgroundRemover:
     def _resolve_providers(self) -> List[str]:
         if self._providers is not None:
             return list(self._providers)
-        from backend.config import config
+        from backend.configuration.service import get_settings
 
         hw = HardwareAccelerator.instance()
-        hw.set_enabled(bool(config.hardwareAcceleration.value))
+        hw.set_enabled(bool(get_settings().subtitle.hardware_acceleration))
         return hw.get_onnx_execution_providers()
 
     def _ensure_session(self):
@@ -312,13 +312,14 @@ def release_bg_sessions() -> None:
 
 def get_bg_remover(mode: Optional[BgRemoveMode] = None) -> BackgroundRemover:
     """Reuse sessions per model + provider set."""
-    from backend.config import config
+    from backend.configuration.service import get_settings
 
+    settings = get_settings()
     if mode is None:
-        mode = config.bgRemoveMode.value
+        mode = BgRemoveMode(settings.background_removal.mode)
 
     hw = HardwareAccelerator.instance()
-    hw.set_enabled(bool(config.hardwareAcceleration.value))
+    hw.set_enabled(bool(settings.subtitle.hardware_acceleration))
     providers = hw.get_onnx_execution_providers()
     key = f"{mode.value}|{','.join(providers)}"
 

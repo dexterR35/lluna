@@ -137,21 +137,21 @@ def serialize_enabled_values(values: Iterable[str]) -> str:
 
 
 def get_enabled_values() -> Set[str]:
-    from backend.config import config
+    from backend.configuration.service import get_settings
 
-    return parse_enabled_values(config.enhanceEnabledModels.value)
+    return parse_enabled_values(get_settings().enhancement.enabled_models)
 
 
 def set_model_enabled(mode: EnhanceMode, enabled: bool) -> None:
     """Turn a model On/Off for the Enhance dropdown (including the default)."""
-    from backend.config import config
+    from backend.configuration.service import update_settings
 
     values = get_enabled_values()
     if enabled:
         values.add(mode.value)
     else:
         values.discard(mode.value)
-    config.set(config.enhanceEnabledModels, serialize_enabled_values(values))
+    update_settings({"enhancement": {"enabled_models": serialize_enabled_values(values)}})
 
 
 def selectable_modes() -> List[EnhanceMode]:
@@ -166,17 +166,17 @@ def selectable_modes() -> List[EnhanceMode]:
 
 
 def ensure_selected_mode_valid() -> EnhanceMode:
-    from backend.config import config
+    from backend.configuration.service import get_settings, update_settings
 
-    current = config.enhanceMode.value
+    current = EnhanceMode(get_settings().enhancement.mode)
     available = selectable_modes()
     if current in available:
         return current
     if EnhanceMode.X2PLUS in available:
-        config.set(config.enhanceMode, EnhanceMode.X2PLUS)
+        update_settings({"enhancement": {"mode": EnhanceMode.X2PLUS.value}})
         return EnhanceMode.X2PLUS
     if available:
-        config.set(config.enhanceMode, available[0])
+        update_settings({"enhancement": {"mode": available[0].value}})
         return available[0]
     return current
 

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
@@ -48,6 +50,7 @@ class LoadedConfiguration:
     provenance: tuple[str, ...]
     warnings: tuple[str, ...] = ()
     recovered_files: tuple[Path, ...] = ()
+    migrated_files: tuple[Path, ...] = ()
 
 
 def _merge(base: dict[str, Any], overlay: Mapping[str, Any]) -> dict[str, Any]:
@@ -86,6 +89,8 @@ class ConfigurationLoader:
         provenance = ["compiled defaults"]
         warnings: list[str] = []
         recovered: list[Path] = []
+        migrated: list[Path] = []
+        migrated_legacy: Path | None = None
         shipped = Path(shipped_file or self._paths.shipped_config_file)
         user = Path(user_file or self._paths.runtime_config_file)
         legacy = Path(legacy_file or self._paths.config_file)
@@ -106,6 +111,7 @@ class ConfigurationLoader:
             if legacy_data is not None:
                 merged = _merge(merged, migrate_mapping(legacy_data))
                 provenance.append(f"legacy:{legacy}")
+                migrated_legacy = legacy
 
         environment_overlay = self._environment_overlay(environ or os.environ)
         if environment_overlay:
@@ -119,11 +125,24 @@ class ConfigurationLoader:
             value = ApplicationConfiguration.from_mapping(merged)
         except (TypeError, ValueError) as exc:
             raise ConfigurationError(f"Invalid configuration: {exc}") from exc
+        if migrated_legacy is not None:
+            backup = migrated_legacy.with_name(
+                f"{migrated_legacy.name}.legacy-v1-{int(time.time())}.bak"
+            )
+            try:
+                backup.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(migrated_legacy, backup)
+                self.save(value, path=user)
+                migrated.extend((backup, user))
+            except OSError as exc:
+                warnings.append(f"Could not persist settings migration: {exc}")
+
         return LoadedConfiguration(
             value=value,
             provenance=tuple(provenance),
             warnings=tuple(warnings),
             recovered_files=tuple(recovered),
+            migrated_files=tuple(migrated),
         )
 
     def save(

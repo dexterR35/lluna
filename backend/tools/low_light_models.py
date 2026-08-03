@@ -90,20 +90,20 @@ def serialize_enabled_values(values: Iterable[str]) -> str:
 
 
 def get_enabled_values() -> Set[str]:
-    from backend.config import config
+    from backend.configuration.service import get_settings
 
-    return parse_enabled_values(config.lowLightEnabledModels.value)
+    return parse_enabled_values(get_settings().low_light.enabled_models)
 
 
 def set_model_enabled(mode: LowLightMode, enabled: bool) -> None:
-    from backend.config import config
+    from backend.configuration.service import update_settings
 
     values = get_enabled_values()
     if enabled:
         values.add(mode.value)
     else:
         values.discard(mode.value)
-    config.set(config.lowLightEnabledModels, serialize_enabled_values(values))
+    update_settings({"low_light": {"enabled_models": serialize_enabled_values(values)}})
 
 
 def selectable_modes() -> List[LowLightMode]:
@@ -117,17 +117,17 @@ def selectable_modes() -> List[LowLightMode]:
 
 
 def ensure_selected_mode_valid() -> LowLightMode:
-    from backend.config import config
+    from backend.configuration.service import get_settings, update_settings
 
-    current = config.lowLightMode.value
+    current = LowLightMode(get_settings().low_light.mode)
     available = selectable_modes()
     if current in available:
         return current
     if LowLightMode.MIRNET_LOL in available:
-        config.set(config.lowLightMode, LowLightMode.MIRNET_LOL)
+        update_settings({"low_light": {"mode": LowLightMode.MIRNET_LOL.value}})
         return LowLightMode.MIRNET_LOL
     if available:
-        config.set(config.lowLightMode, available[0])
+        update_settings({"low_light": {"mode": available[0].value}})
         return available[0]
     return current
 

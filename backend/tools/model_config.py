@@ -3,10 +3,9 @@
 class ModelConfig:
     def __init__(self, settings=None):
         if settings is None:
-            from backend.config import config
-            from backend.configuration.legacy import snapshot_qt_configuration
+            from backend.configuration.service import get_settings
 
-            settings = snapshot_qt_configuration(config).subtitle
+            settings = get_settings().subtitle
         from backend.models.paths import (
             SubtitleModelPaths,
             prepare_bundled_subtitle_models,

@@ -1,6 +1,6 @@
 """Worker-safe immutable configuration snapshots.
 
-Qt-backed settings are copied in the GUI process. Worker processes validate the
+Typed settings are copied in the control-plane process. Worker processes validate the
 plain payload and never mutate the GUI configuration file.
 """
 
@@ -12,19 +12,18 @@ from backend.configuration.models import SubtitleSettings
 
 
 def snapshot_hardware() -> Dict[str, Any]:
-    from backend.config import config
+    from backend.configuration.service import get_settings
 
     return {
-        "hardware_acceleration": bool(config.hardwareAcceleration.value),
+        "hardware_acceleration": bool(get_settings().subtitle.hardware_acceleration),
     }
 
 
 def snapshot_subtitle_config() -> Dict[str, Any]:
     """Serialize current subtitle-removal settings for a SUBTITLE job payload."""
-    from backend.config import config
-    from backend.configuration.legacy import snapshot_qt_configuration
+    from backend.configuration.service import get_settings
 
-    return snapshot_qt_configuration(config).subtitle.to_payload()
+    return get_settings().subtitle.to_payload()
 
 
 def apply_hardware_from_payload(payload: Dict[str, Any]) -> None:

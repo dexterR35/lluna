@@ -1,0 +1,2 @@
+import { forwardRef } from "react"; import { cn, focusRing } from "./utils";
+export const IconButton=forwardRef(function IconButton({label,children,className="",...props},ref){return <button ref={ref} type="button" aria-label={label} title={label} className={cn("grid size-9 shrink-0 place-items-center rounded-md text-mg-secondary transition hover:bg-mg-selected hover:text-mg-primary disabled:opacity-40",focusRing,className)} {...props}>{children}</button>});

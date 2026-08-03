@@ -1,0 +1,1110 @@
+[
+  {
+    "adapter": "load_image",
+    "available": true,
+    "cachePolicy": "content-addressed",
+    "capabilities": [],
+    "category": "Input/Media",
+    "description": "Loads an image through a desktop file grant.",
+    "icon": "image",
+    "inputs": [],
+    "kind": "input",
+    "name": "Load Image",
+    "outputs": [
+      {
+        "description": "",
+        "id": "image",
+        "label": "Image",
+        "multiple": false,
+        "required": false,
+        "type": "IMAGE"
+      }
+    ],
+    "parameters": [
+      {
+        "default": null,
+        "description": "",
+        "id": "pathGrantId",
+        "label": "Image file",
+        "maximum": null,
+        "minimum": null,
+        "options": [],
+        "required": true,
+        "step": null,
+        "type": "file"
+      }
+    ],
+    "requiredModels": [],
+    "schemaId": "midgard.input.image",
+    "schemaVersion": 1,
+    "sideEffects": false,
+    "supportsCancel": true,
+    "supportsPause": false,
+    "supportsPreview": false,
+    "unavailableReason": "",
+    "version": 1
+  },
+  {
+    "adapter": "load_video",
+    "available": true,
+    "cachePolicy": "content-addressed",
+    "capabilities": [],
+    "category": "Input/Media",
+    "description": "Loads a video through a desktop file grant.",
+    "icon": "film",
+    "inputs": [],
+    "kind": "input",
+    "name": "Load Video",
+    "outputs": [
+      {
+        "description": "",
+        "id": "video",
+        "label": "Video",
+        "multiple": false,
+        "required": false,
+        "type": "VIDEO"
+      }
+    ],
+    "parameters": [
+      {
+        "default": null,
+        "description": "",
+        "id": "pathGrantId",
+        "label": "Video file",
+        "maximum": null,
+        "minimum": null,
+        "options": [],
+        "required": true,
+        "step": null,
+        "type": "file"
+      }
+    ],
+    "requiredModels": [],
+    "schemaId": "midgard.input.video",
+    "schemaVersion": 1,
+    "sideEffects": false,
+    "supportsCancel": true,
+    "supportsPause": false,
+    "supportsPreview": false,
+    "unavailableReason": "",
+    "version": 1
+  },
+  {
+    "adapter": "load_mask",
+    "available": true,
+    "cachePolicy": "content-addressed",
+    "capabilities": [],
+    "category": "Input/Media",
+    "description": "Loads a grayscale mask.",
+    "icon": "scan",
+    "inputs": [],
+    "kind": "input",
+    "name": "Load Mask",
+    "outputs": [
+      {
+        "description": "",
+        "id": "mask",
+        "label": "Mask",
+        "multiple": false,
+        "required": false,
+        "type": "MASK"
+      }
+    ],
+    "parameters": [
+      {
+        "default": null,
+        "description": "",
+        "id": "pathGrantId",
+        "label": "Mask file",
+        "maximum": null,
+        "minimum": null,
+        "options": [],
+        "required": true,
+        "step": null,
+        "type": "file"
+      }
+    ],
+    "requiredModels": [],
+    "schemaId": "midgard.input.mask",
+    "schemaVersion": 1,
+    "sideEffects": false,
+    "supportsCancel": true,
+    "supportsPause": false,
+    "supportsPreview": false,
+    "unavailableReason": "",
+    "version": 1
+  },
+  {
+    "adapter": "literal",
+    "available": true,
+    "cachePolicy": "content-addressed",
+    "capabilities": [],
+    "category": "Input/Values",
+    "description": "Provides a text-to-image prompt.",
+    "icon": "text-cursor-input",
+    "inputs": [],
+    "kind": "input",
+    "name": "Prompt",
+    "outputs": [
+      {
+        "description": "",
+        "id": "prompt",
+        "label": "Prompt",
+        "multiple": false,
+        "required": false,
+        "type": "PROMPT"
+      }
+    ],
+    "parameters": [
+      {
+        "default": "",
+        "description": "",
+        "id": "value",
+        "label": "Prompt",
+        "maximum": null,
+        "minimum": null,
+        "options": [],
+        "required": false,
+        "step": null,
+        "type": "textarea"
+      }
+    ],
+    "requiredModels": [],
+    "schemaId": "midgard.input.prompt",
+    "schemaVersion": 1,
+    "sideEffects": false,
+    "supportsCancel": true,
+    "supportsPause": false,
+    "supportsPreview": false,
+    "unavailableReason": "",
+    "version": 1
+  },
+  {
+    "adapter": "literal",
+    "available": true,
+    "cachePolicy": "content-addressed",
+    "capabilities": [],
+    "category": "Input/Values",
+    "description": "Provides a numeric value.",
+    "icon": "box",
+    "inputs": [],
+    "kind": "input",
+    "name": "Number",
+    "outputs": [
+      {
+        "description": "",
+        "id": "value",
+        "label": "Number",
+        "multiple": false,
+        "required": false,
+        "type": "NUMBER"
+      }
+    ],
+    "parameters": [
+      {
+        "default": 0,
+        "description": "",
+        "id": "value",
+        "label": "Value",
+        "maximum": null,
+        "minimum": null,
+        "options": [],
+        "required": false,
+        "step": null,
+        "type": "number"
+      }
+    ],
+    "requiredModels": [],
+    "schemaId": "midgard.input.number",
+    "schemaVersion": 1,
+    "sideEffects": false,
+    "supportsCancel": true,
+    "supportsPause": false,
+    "supportsPreview": false,
+    "unavailableReason": "",
+    "version": 1
+  },
+  {
+    "adapter": "literal",
+    "available": true,
+    "cachePolicy": "content-addressed",
+    "capabilities": [],
+    "category": "Input/Values",
+    "description": "Provides an integer value.",
+    "icon": "box",
+    "inputs": [],
+    "kind": "input",
+    "name": "Integer",
+    "outputs": [
+      {
+        "description": "",
+        "id": "value",
+        "label": "Integer",
+        "multiple": false,
+        "required": false,
+        "type": "INTEGER"
+      }
+    ],
+    "parameters": [
+      {
+        "default": 0,
+        "description": "",
+        "id": "value",
+        "label": "Value",
+        "maximum": null,
+        "minimum": null,
+        "options": [],
+        "required": false,
+        "step": null,
+        "type": "integer"
+      }
+    ],
+    "requiredModels": [],
+    "schemaId": "midgard.input.integer",
+    "schemaVersion": 1,
+    "sideEffects": false,
+    "supportsCancel": true,
+    "supportsPause": false,
+    "supportsPreview": false,
+    "unavailableReason": "",
+    "version": 1
+  },
+  {
+    "adapter": "literal",
+    "available": true,
+    "cachePolicy": "content-addressed",
+    "capabilities": [],
+    "category": "Input/Values",
+    "description": "Provides a boolean value.",
+    "icon": "box",
+    "inputs": [],
+    "kind": "input",
+    "name": "Boolean",
+    "outputs": [
+      {
+        "description": "",
+        "id": "value",
+        "label": "Boolean",
+        "multiple": false,
+        "required": false,
+        "type": "BOOLEAN"
+      }
+    ],
+    "parameters": [
+      {
+        "default": false,
+        "description": "",
+        "id": "value",
+        "label": "Value",
+        "maximum": null,
+        "minimum": null,
+        "options": [],
+        "required": false,
+        "step": null,
+        "type": "boolean"
+      }
+    ],
+    "requiredModels": [],
+    "schemaId": "midgard.input.boolean",
+    "schemaVersion": 1,
+    "sideEffects": false,
+    "supportsCancel": true,
+    "supportsPause": false,
+    "supportsPreview": false,
+    "unavailableReason": "",
+    "version": 1
+  },
+  {
+    "adapter": "generate",
+    "available": true,
+    "cachePolicy": "content-addressed",
+    "capabilities": [
+      "diffusers"
+    ],
+    "category": "Image/Generate",
+    "description": "Generates an image locally with an installed Diffusers model.",
+    "icon": "sparkles",
+    "inputs": [
+      {
+        "description": "",
+        "id": "prompt",
+        "label": "Prompt",
+        "multiple": false,
+        "required": true,
+        "type": "PROMPT"
+      }
+    ],
+    "kind": "processor",
+    "name": "Generate Image",
+    "outputs": [
+      {
+        "description": "",
+        "id": "image",
+        "label": "Image",
+        "multiple": false,
+        "required": false,
+        "type": "IMAGE"
+      }
+    ],
+    "parameters": [
+      {
+        "default": "",
+        "description": "",
+        "id": "model",
+        "label": "Model",
+        "maximum": null,
+        "minimum": null,
+        "options": [],
+        "required": false,
+        "step": null,
+        "type": "model"
+      },
+      {
+        "default": 768,
+        "description": "",
+        "id": "width",
+        "label": "Width",
+        "maximum": 8192.0,
+        "minimum": 64.0,
+        "options": [],
+        "required": false,
+        "step": null,
+        "type": "integer"
+      },
+      {
+        "default": 768,
+        "description": "",
+        "id": "height",
+        "label": "Height",
+        "maximum": 8192.0,
+        "minimum": 64.0,
+        "options": [],
+        "required": false,
+        "step": null,
+        "type": "integer"
+      },
+      {
+        "default": 4,
+        "description": "",
+        "id": "steps",
+        "label": "Steps",
+        "maximum": 250.0,
+        "minimum": 1.0,
+        "options": [],
+        "required": false,
+        "step": null,
+        "type": "integer"
+      },
+      {
+        "default": -1,
+        "description": "",
+        "id": "seed",
+        "label": "Seed",
+        "maximum": null,
+        "minimum": null,
+        "options": [],
+        "required": false,
+        "step": null,
+        "type": "integer"
+      }
+    ],
+    "requiredModels": [
+      "flux"
+    ],
+    "schemaId": "midgard.generate.image",
+    "schemaVersion": 1,
+    "sideEffects": false,
+    "supportsCancel": true,
+    "supportsPause": false,
+    "supportsPreview": true,
+    "unavailableReason": "",
+    "version": 1
+  },
+  {
+    "adapter": "enhance",
+    "available": true,
+    "cachePolicy": "content-addressed",
+    "capabilities": [
+      "pytorch"
+    ],
+    "category": "Image/Enhance",
+    "description": "Upscales an image with Real-ESRGAN.",
+    "icon": "zoom-in",
+    "inputs": [
+      {
+        "description": "",
+        "id": "image",
+        "label": "Image",
+        "multiple": false,
+        "required": true,
+        "type": "IMAGE"
+      }
+    ],
+    "kind": "processor",
+    "name": "Upscale Image",
+    "outputs": [
+      {
+        "description": "",
+        "id": "image",
+        "label": "Image",
+        "multiple": false,
+        "required": false,
+        "type": "IMAGE"
+      }
+    ],
+    "parameters": [
+      {
+        "default": "",
+        "description": "",
+        "id": "model",
+        "label": "Model",
+        "maximum": null,
+        "minimum": null,
+        "options": [],
+        "required": false,
+        "step": null,
+        "type": "model"
+      },
+      {
+        "default": false,
+        "description": "",
+        "id": "denoise",
+        "label": "Denoise",
+        "maximum": null,
+        "minimum": null,
+        "options": [],
+        "required": false,
+        "step": null,
+        "type": "boolean"
+      }
+    ],
+    "requiredModels": [
+      "realesrgan-x2"
+    ],
+    "schemaId": "midgard.image.upscale",
+    "schemaVersion": 1,
+    "sideEffects": false,
+    "supportsCancel": true,
+    "supportsPause": false,
+    "supportsPreview": true,
+    "unavailableReason": "",
+    "version": 1
+  },
+  {
+    "adapter": "bg_remove",
+    "available": true,
+    "cachePolicy": "content-addressed",
+    "capabilities": [
+      "onnx"
+    ],
+    "category": "Image/Remove",
+    "description": "Produces a transparent cutout using a local rembg model.",
+    "icon": "scissors",
+    "inputs": [
+      {
+        "description": "",
+        "id": "image",
+        "label": "Image",
+        "multiple": false,
+        "required": true,
+        "type": "IMAGE"
+      },
+      {
+        "description": "",
+        "id": "protectMask",
+        "label": "Protect Mask",
+        "multiple": false,
+        "required": false,
+        "type": "MASK"
+      }
+    ],
+    "kind": "processor",
+    "name": "Remove Background",
+    "outputs": [
+      {
+        "description": "",
+        "id": "image",
+        "label": "Cutout",
+        "multiple": false,
+        "required": false,
+        "type": "IMAGE"
+      },
+      {
+        "description": "",
+        "id": "alpha",
+        "label": "Alpha",
+        "multiple": false,
+        "required": false,
+        "type": "ALPHA"
+      }
+    ],
+    "parameters": [
+      {
+        "default": "",
+        "description": "",
+        "id": "model",
+        "label": "Model",
+        "maximum": null,
+        "minimum": null,
+        "options": [],
+        "required": false,
+        "step": null,
+        "type": "model"
+      }
+    ],
+    "requiredModels": [
+      "rembg"
+    ],
+    "schemaId": "midgard.image.remove_background",
+    "schemaVersion": 1,
+    "sideEffects": false,
+    "supportsCancel": true,
+    "supportsPause": false,
+    "supportsPreview": true,
+    "unavailableReason": "",
+    "version": 1
+  },
+  {
+    "adapter": "low_light",
+    "available": true,
+    "cachePolicy": "content-addressed",
+    "capabilities": [],
+    "category": "Image/Enhance",
+    "description": "Restores a dark image with MIRNet.",
+    "icon": "sun",
+    "inputs": [
+      {
+        "description": "",
+        "id": "image",
+        "label": "Image",
+        "multiple": false,
+        "required": true,
+        "type": "IMAGE"
+      }
+    ],
+    "kind": "processor",
+    "name": "Fix Low Light",
+    "outputs": [
+      {
+        "description": "",
+        "id": "image",
+        "label": "Image",
+        "multiple": false,
+        "required": false,
+        "type": "IMAGE"
+      }
+    ],
+    "parameters": [
+      {
+        "default": "",
+        "description": "",
+        "id": "model",
+        "label": "Model",
+        "maximum": null,
+        "minimum": null,
+        "options": [],
+        "required": false,
+        "step": null,
+        "type": "model"
+      }
+    ],
+    "requiredModels": [
+      "mirnet"
+    ],
+    "schemaId": "midgard.image.low_light",
+    "schemaVersion": 1,
+    "sideEffects": false,
+    "supportsCancel": true,
+    "supportsPause": false,
+    "supportsPreview": true,
+    "unavailableReason": "",
+    "version": 1
+  },
+  {
+    "adapter": "select_subject",
+    "available": true,
+    "cachePolicy": "content-addressed",
+    "capabilities": [],
+    "category": "Mask/Selection",
+    "description": "Creates a mask from clicks or a text description.",
+    "icon": "mouse-pointer-2",
+    "inputs": [
+      {
+        "description": "",
+        "id": "image",
+        "label": "Image",
+        "multiple": false,
+        "required": true,
+        "type": "IMAGE"
+      }
+    ],
+    "kind": "processor",
+    "name": "Select Object",
+    "outputs": [
+      {
+        "description": "",
+        "id": "mask",
+        "label": "Mask",
+        "multiple": false,
+        "required": false,
+        "type": "MASK"
+      }
+    ],
+    "parameters": [
+      {
+        "default": "",
+        "description": "",
+        "id": "text",
+        "label": "Object name",
+        "maximum": null,
+        "minimum": null,
+        "options": [],
+        "required": false,
+        "step": null,
+        "type": "text"
+      },
+      {
+        "default": [],
+        "description": "",
+        "id": "points",
+        "label": "Points",
+        "maximum": null,
+        "minimum": null,
+        "options": [],
+        "required": false,
+        "step": null,
+        "type": "json"
+      },
+      {
+        "default": false,
+        "description": "",
+        "id": "moreComplex",
+        "label": "High quality",
+        "maximum": null,
+        "minimum": null,
+        "options": [],
+        "required": false,
+        "step": null,
+        "type": "boolean"
+      }
+    ],
+    "requiredModels": [
+      "sam2",
+      "grounding-dino"
+    ],
+    "schemaId": "midgard.mask.select_object",
+    "schemaVersion": 1,
+    "sideEffects": false,
+    "supportsCancel": true,
+    "supportsPause": false,
+    "supportsPreview": true,
+    "unavailableReason": "",
+    "version": 1
+  },
+  {
+    "adapter": "lama_retouch",
+    "available": true,
+    "cachePolicy": "content-addressed",
+    "capabilities": [],
+    "category": "Image/Retouch",
+    "description": "Fills a masked region using the bundled LaMa model.",
+    "icon": "paintbrush",
+    "inputs": [
+      {
+        "description": "",
+        "id": "image",
+        "label": "Image",
+        "multiple": false,
+        "required": true,
+        "type": "IMAGE"
+      },
+      {
+        "description": "",
+        "id": "mask",
+        "label": "Mask",
+        "multiple": false,
+        "required": true,
+        "type": "MASK"
+      }
+    ],
+    "kind": "processor",
+    "name": "LaMa Retouch",
+    "outputs": [
+      {
+        "description": "",
+        "id": "image",
+        "label": "Image",
+        "multiple": false,
+        "required": false,
+        "type": "IMAGE"
+      }
+    ],
+    "parameters": [],
+    "requiredModels": [
+      "lama"
+    ],
+    "schemaId": "midgard.image.lama_retouch",
+    "schemaVersion": 1,
+    "sideEffects": false,
+    "supportsCancel": true,
+    "supportsPause": false,
+    "supportsPreview": true,
+    "unavailableReason": "",
+    "version": 1
+  },
+  {
+    "adapter": "subtitle",
+    "available": true,
+    "cachePolicy": "content-addressed",
+    "capabilities": [],
+    "category": "Image/Remove",
+    "description": "Detects and removes text from an image.",
+    "icon": "box",
+    "inputs": [
+      {
+        "description": "",
+        "id": "image",
+        "label": "Image",
+        "multiple": false,
+        "required": true,
+        "type": "IMAGE"
+      }
+    ],
+    "kind": "processor",
+    "name": "Remove Text from Image",
+    "outputs": [
+      {
+        "description": "",
+        "id": "image",
+        "label": "Image",
+        "multiple": false,
+        "required": false,
+        "type": "IMAGE"
+      }
+    ],
+    "parameters": [],
+    "requiredModels": [
+      "paddleocr-server",
+      "lama"
+    ],
+    "schemaId": "midgard.image.remove_text",
+    "schemaVersion": 1,
+    "sideEffects": false,
+    "supportsCancel": true,
+    "supportsPause": false,
+    "supportsPreview": true,
+    "unavailableReason": "",
+    "version": 1
+  },
+  {
+    "adapter": "subtitle",
+    "available": true,
+    "cachePolicy": "content-addressed",
+    "capabilities": [],
+    "category": "Video/Remove",
+    "description": "Removes subtitles or text while preserving source timing and audio.",
+    "icon": "captions-off",
+    "inputs": [
+      {
+        "description": "",
+        "id": "video",
+        "label": "Video",
+        "multiple": false,
+        "required": true,
+        "type": "VIDEO"
+      }
+    ],
+    "kind": "processor",
+    "name": "Remove Text from Video",
+    "outputs": [
+      {
+        "description": "",
+        "id": "video",
+        "label": "Video",
+        "multiple": false,
+        "required": false,
+        "type": "VIDEO"
+      }
+    ],
+    "parameters": [],
+    "requiredModels": [
+      "paddleocr-server",
+      "sttn-auto"
+    ],
+    "schemaId": "midgard.video.remove_text",
+    "schemaVersion": 1,
+    "sideEffects": false,
+    "supportsCancel": true,
+    "supportsPause": false,
+    "supportsPreview": true,
+    "unavailableReason": "",
+    "version": 1
+  },
+  {
+    "adapter": "passthrough",
+    "available": true,
+    "cachePolicy": "content-addressed",
+    "capabilities": [],
+    "category": "Output/Preview",
+    "description": "Shows an image artifact in the inspector.",
+    "icon": "eye",
+    "inputs": [
+      {
+        "description": "",
+        "id": "image",
+        "label": "Image",
+        "multiple": false,
+        "required": true,
+        "type": "IMAGE"
+      }
+    ],
+    "kind": "output",
+    "name": "Preview Image",
+    "outputs": [
+      {
+        "description": "",
+        "id": "image",
+        "label": "Image",
+        "multiple": false,
+        "required": false,
+        "type": "IMAGE"
+      }
+    ],
+    "parameters": [],
+    "requiredModels": [],
+    "schemaId": "midgard.output.preview_image",
+    "schemaVersion": 1,
+    "sideEffects": false,
+    "supportsCancel": true,
+    "supportsPause": false,
+    "supportsPreview": true,
+    "unavailableReason": "",
+    "version": 1
+  },
+  {
+    "adapter": "passthrough",
+    "available": true,
+    "cachePolicy": "content-addressed",
+    "capabilities": [],
+    "category": "Output/Preview",
+    "description": "Shows a proxy video preview.",
+    "icon": "play",
+    "inputs": [
+      {
+        "description": "",
+        "id": "video",
+        "label": "Video",
+        "multiple": false,
+        "required": true,
+        "type": "VIDEO"
+      }
+    ],
+    "kind": "output",
+    "name": "Preview Video",
+    "outputs": [
+      {
+        "description": "",
+        "id": "video",
+        "label": "Video",
+        "multiple": false,
+        "required": false,
+        "type": "VIDEO"
+      }
+    ],
+    "parameters": [],
+    "requiredModels": [],
+    "schemaId": "midgard.output.preview_video",
+    "schemaVersion": 1,
+    "sideEffects": false,
+    "supportsCancel": true,
+    "supportsPause": false,
+    "supportsPreview": true,
+    "unavailableReason": "",
+    "version": 1
+  },
+  {
+    "adapter": "save",
+    "available": true,
+    "cachePolicy": "none",
+    "capabilities": [],
+    "category": "Output/Save",
+    "description": "Copies an image artifact to a user-selected destination.",
+    "icon": "save",
+    "inputs": [
+      {
+        "description": "",
+        "id": "image",
+        "label": "Image",
+        "multiple": false,
+        "required": true,
+        "type": "IMAGE"
+      }
+    ],
+    "kind": "output",
+    "name": "Save Image",
+    "outputs": [
+      {
+        "description": "",
+        "id": "image",
+        "label": "Saved Image",
+        "multiple": false,
+        "required": false,
+        "type": "IMAGE"
+      }
+    ],
+    "parameters": [
+      {
+        "default": "",
+        "description": "",
+        "id": "destinationGrantId",
+        "label": "Destination",
+        "maximum": null,
+        "minimum": null,
+        "options": [],
+        "required": false,
+        "step": null,
+        "type": "saveFile"
+      }
+    ],
+    "requiredModels": [],
+    "schemaId": "midgard.output.save_image",
+    "schemaVersion": 1,
+    "sideEffects": true,
+    "supportsCancel": true,
+    "supportsPause": false,
+    "supportsPreview": false,
+    "unavailableReason": "",
+    "version": 1
+  },
+  {
+    "adapter": "save",
+    "available": true,
+    "cachePolicy": "none",
+    "capabilities": [],
+    "category": "Output/Save",
+    "description": "Copies a video artifact to a user-selected destination.",
+    "icon": "save",
+    "inputs": [
+      {
+        "description": "",
+        "id": "video",
+        "label": "Video",
+        "multiple": false,
+        "required": true,
+        "type": "VIDEO"
+      }
+    ],
+    "kind": "output",
+    "name": "Save Video",
+    "outputs": [
+      {
+        "description": "",
+        "id": "video",
+        "label": "Saved Video",
+        "multiple": false,
+        "required": false,
+        "type": "VIDEO"
+      }
+    ],
+    "parameters": [
+      {
+        "default": "",
+        "description": "",
+        "id": "destinationGrantId",
+        "label": "Destination",
+        "maximum": null,
+        "minimum": null,
+        "options": [],
+        "required": false,
+        "step": null,
+        "type": "saveFile"
+      }
+    ],
+    "requiredModels": [],
+    "schemaId": "midgard.output.save_video",
+    "schemaVersion": 1,
+    "sideEffects": true,
+    "supportsCancel": true,
+    "supportsPause": false,
+    "supportsPreview": false,
+    "unavailableReason": "",
+    "version": 1
+  },
+  {
+    "adapter": "metadata",
+    "available": true,
+    "cachePolicy": "content-addressed",
+    "capabilities": [],
+    "category": "Utility",
+    "description": "Displays artifact metadata.",
+    "icon": "box",
+    "inputs": [
+      {
+        "description": "",
+        "id": "artifact",
+        "label": "Artifact",
+        "multiple": false,
+        "required": true,
+        "type": "ARTIFACT"
+      }
+    ],
+    "kind": "utility",
+    "name": "Show Metadata",
+    "outputs": [
+      {
+        "description": "",
+        "id": "metadata",
+        "label": "Metadata",
+        "multiple": false,
+        "required": false,
+        "type": "METADATA"
+      }
+    ],
+    "parameters": [],
+    "requiredModels": [],
+    "schemaId": "midgard.utility.metadata",
+    "schemaVersion": 1,
+    "sideEffects": false,
+    "supportsCancel": true,
+    "supportsPause": false,
+    "supportsPreview": false,
+    "unavailableReason": "",
+    "version": 1
+  },
+  {
+    "adapter": "noop",
+    "available": true,
+    "cachePolicy": "none",
+    "capabilities": [],
+    "category": "Utility",
+    "description": "Adds documentation to a workflow.",
+    "icon": "sticky-note",
+    "inputs": [],
+    "kind": "utility",
+    "name": "Workflow Note",
+    "outputs": [],
+    "parameters": [
+      {
+        "default": "",
+        "description": "",
+        "id": "text",
+        "label": "Note",
+        "maximum": null,
+        "minimum": null,
+        "options": [],
+        "required": false,
+        "step": null,
+        "type": "textarea"
+      }
+    ],
+    "requiredModels": [],
+    "schemaId": "midgard.utility.note",
+    "schemaVersion": 1,
+    "sideEffects": false,
+    "supportsCancel": true,
+    "supportsPause": false,
+    "supportsPreview": false,
+    "unavailableReason": "",
+    "version": 1
+  }
+]

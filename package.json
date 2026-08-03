@@ -1,0 +1,32 @@
+{
+  "name": "midgard-desktop",
+  "version": "1.4.0",
+  "private": true,
+  "workspaces": [
+    "frontend"
+  ],
+  "scripts": {
+    "dev": "npm --workspace frontend run dev",
+    "dev:frontend": "npm --workspace frontend run dev:renderer",
+    "dev:backend": "python3 -m backend.api.app --host 127.0.0.1 --port 8765 --token midgard-development-token-000000000000000000",
+    "lint": "npm --workspace frontend run lint",
+    "check": "npm --workspace frontend run check && python3 scripts/static_guards.py",
+    "test": "npm run test:frontend && npm run test:backend",
+    "test:frontend": "npm --workspace frontend run test",
+    "test:backend": "python3 -m pytest -q",
+    "test:e2e": "npm --workspace frontend run test:e2e",
+    "package": "npm --workspace frontend run package",
+    "make": "npm --workspace frontend run make",
+    "build": "npm --workspace frontend run build"
+  },
+  "engines": {
+    "node": ">=22",
+    "npm": ">=10"
+  },
+  "allowScripts": {
+    "electron@43.2.0": true,
+    "esbuild@0.25.12": true,
+    "esbuild@0.28.1": true,
+    "electron-winstaller@5.4.4": true
+  }
+}
