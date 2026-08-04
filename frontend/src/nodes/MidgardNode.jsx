@@ -5,7 +5,6 @@ import {
   Ban,
   Box,
   Check,
-  ChevronDown,
   Clock3,
   Eye,
   FileImage,
@@ -23,7 +22,7 @@ import {
   X,
   ZoomIn,
 } from "lucide-react";
-import { ProgressBar, Badge, IconTile } from "../components";
+import { ProgressBar, Badge, IconTile, Select } from "../components";
 import { ArtifactThumbGrid, ArtifactThumbnail } from "../preview/ArtifactPreview";
 import { useRunStore } from "../state/runStore";
 import { PORT_COLORS } from "./portTypes";
@@ -113,57 +112,6 @@ function PortCircle({ port, side, top, active }) {
     >
       <Icon aria-hidden className="midgard-port-glyph" style={{ color }} />
     </XYFlow.Handle>
-  );
-}
-
-/**
- * Compact select control styled as a Badge pill.
- * @param {{
- *   label: string,
- *   value: string,
- *   options: {value: string|number, label: string, disabled?: boolean}[],
- *   disabled?: boolean,
- *   onChange: (value: string) => void,
- *   wide?: boolean,
- * }} props
- */
-function BodySelect({ label, value, options, disabled, onChange, wide }) {
-  return (
-    <Badge
-      as="label"
-      size="md"
-      title={label}
-      className={`nodrag nowheel relative ${wide ? "max-w-[148px]" : ""} ${disabled ? "opacity-55" : ""}`}
-    >
-      <span className="sr-only">{label}</span>
-      <select
-        aria-label={label}
-        disabled={disabled}
-        value={value}
-        className="max-w-[132px] cursor-pointer appearance-none bg-transparent py-0 pr-4 pl-0 text-[10px] font-medium text-inherit outline-none disabled:cursor-not-allowed"
-        onPointerDown={(event) => event.stopPropagation()}
-        onClick={(event) => event.stopPropagation()}
-        onKeyDown={(event) => event.stopPropagation()}
-        onChange={(event) => {
-          event.stopPropagation();
-          onChange(event.target.value);
-        }}
-      >
-        {options.map((option) => (
-          <option
-            key={String(option.value)}
-            value={String(option.value)}
-            disabled={option.disabled}
-          >
-            {option.label}
-          </option>
-        ))}
-      </select>
-      <ChevronDown
-        aria-hidden
-        className="pointer-events-none absolute right-2 size-2.5 opacity-70"
-      />
-    </Badge>
   );
 }
 
@@ -391,16 +339,24 @@ function MidgardNodeComponent({ id, data, selected }) {
                 })),
               ];
               return (
-                <BodySelect
+                <Select
                   key={parameter.id}
-                  label={`Model for ${nodeLabel}`}
+                  bare
+                  controlSize="sm"
+                  aria-label={`Model for ${nodeLabel}`}
+                  title={`Model for ${nodeLabel}`}
                   value={String(modelValue ?? "")}
                   options={options}
-                  wide
                   disabled={data.disabled || busy || !modelOptions.length}
-                  onChange={(value) => {
+                  className="nodrag nowheel"
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={(event) => event.stopPropagation()}
+                  onKeyDown={(event) => event.stopPropagation()}
+                  onChange={(event) => {
+                    event.stopPropagation();
                     const option = modelOptions.find(
-                      (candidate) => String(candidate.value) === value,
+                      (candidate) =>
+                        String(candidate.value) === event.target.value,
                     );
                     if (option) actions.onModelChange?.(id, option.value);
                   }}
@@ -415,20 +371,29 @@ function MidgardNodeComponent({ id, data, selected }) {
             }));
             if (!options.length) return null;
             return (
-              <BodySelect
+              <Select
                 key={parameter.id}
-                label={parameter.label}
+                bare
+                controlSize="sm"
+                aria-label={parameter.label}
+                title={parameter.label}
                 value={String(raw ?? "")}
                 options={options}
                 disabled={data.disabled || busy}
-                onChange={(value) => {
+                className="nodrag nowheel"
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => event.stopPropagation()}
+                onKeyDown={(event) => event.stopPropagation()}
+                onChange={(event) => {
+                  event.stopPropagation();
                   const option = parameter.options?.find(
-                    (candidate) => String(candidate.value) === value,
+                    (candidate) =>
+                      String(candidate.value) === event.target.value,
                   );
                   actions.onParameterChange?.(
                     id,
                     parameter.id,
-                    option ? option.value : value,
+                    option ? option.value : event.target.value,
                   );
                 }}
               />
@@ -445,7 +410,7 @@ function MidgardNodeComponent({ id, data, selected }) {
               actions.onOpen?.(id);
             }}
           >
-            <Settings2 className="size-3.5" />
+            <Settings2 className="size-4.5" />
           </button>
         </div>
 
@@ -462,7 +427,7 @@ function MidgardNodeComponent({ id, data, selected }) {
                 actions.onPreview?.(id);
               }}
             >
-              <Eye className="ui-icon" />
+              <Eye className="size-4.5" />
             </button>
           )}
           <button
@@ -477,7 +442,7 @@ function MidgardNodeComponent({ id, data, selected }) {
               actions.onRun?.(id);
             }}
           >
-            <Play className="ui-icon fill-current" />
+            <Play className="size-4 fill-current" />
           </button>
         </div>
       </footer>

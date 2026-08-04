@@ -171,7 +171,7 @@ export function ArtifactThumbnail({
     size === "sm"
       ? "h-full min-h-0"
       : ratio === "square"
-        ? "min-h-[168px] flex-1"
+        ? "min-h-[196px] flex-1"
         : ratio === "cinema"
           ? "h-24"
           : "h-28";

@@ -1,17 +1,30 @@
-import { useState } from "react";
-import { Box, Clock3, Download, ListOrdered, Trash2 } from "lucide-react";
+import { useMemo, useState } from "react";
+import {
+  Box,
+  Clock3,
+  Download,
+  ExternalLink,
+  ListOrdered,
+  Plus,
+  RefreshCw,
+  Trash2,
+  Upload,
+} from "lucide-react";
 import { api } from "../api/client";
 import {
   Badge,
-  Button,
   CompactButton,
   EmptyState,
   ProgressBar,
   Switch,
+  Select,
   useToast,
 } from "../components";
 import { useServerStore } from "../state/serverStore";
 import { SettingsForm } from "./SettingsForm";
+import { AddModelDialog, HuggingFaceConnection } from "./AddModelDialog";
+import { capabilityIssues } from "../models/modelManifestCapabilities";
+import { CapabilityEditor } from "./CapabilityEditor";
 
 /** @param {number | null | undefined} bytes */
 function formatBytes(bytes) {
@@ -53,7 +66,7 @@ function formatTransfer(job) {
  * @param {string} modelId
  * @returns {{section: string, keys: string[]} | null}
  */
-export function optionsForModel(modelId) {
+function optionsForModel(modelId) {
   if (modelId.startsWith("bg-remove:")) {
     return { section: "background_removal", keys: ["mode"] };
   }
@@ -107,7 +120,85 @@ export function optionsForModel(modelId) {
   return null;
 }
 
-/** @param {import("../types").ModelInventory} model */
+/** @type {{id: string, label: string, match: (model: import("../types").ModelInventory) => boolean}[]} */
+const MODEL_SECTIONS = [
+  {
+    id: "background",
+    label: "Background removal",
+    match: (model) => model.id.startsWith("bg-remove:"),
+  },
+  {
+    id: "generation",
+    label: "Image generation",
+    match: (model) =>
+      model.id.startsWith("generate:") || model.task === "text-to-image",
+  },
+  {
+    id: "enhancement",
+    label: "Enhancement",
+    match: (model) =>
+      model.id.startsWith("realesrgan") || model.task === "image-upscaling",
+  },
+  {
+    id: "low_light",
+    label: "Low light",
+    match: (model) =>
+      model.id === "mirnet" || model.task === "image-restoration",
+  },
+  {
+    id: "object",
+    label: "Object selection",
+    match: (model) =>
+      model.id === "sam2" ||
+      model.id === "grounding-dino" ||
+      model.task === "object-detection",
+  },
+  {
+    id: "subtitle",
+    label: "Subtitle & text",
+    match: (model) =>
+      [
+        "sttn-auto",
+        "sttn-detection",
+        "lama",
+        "propainter",
+        "paddleocr-server",
+        "paddleocr-mobile",
+      ].includes(model.id) ||
+      model.task === "inpainting" ||
+      model.task === "text-recognition",
+  },
+  {
+    id: "custom",
+    label: "Custom",
+    match: (model) => Boolean(model.dynamic),
+  },
+  {
+    id: "other",
+    label: "Other",
+    match: () => true,
+  },
+];
+
+/** @param {import("../types").ModelInventory[]} models */
+function groupModels(models) {
+  /** @type {Map<string, import("../types").ModelInventory[]>} */
+  const buckets = new Map(MODEL_SECTIONS.map((section) => [section.id, []]));
+  for (const model of models) {
+    const section = model.dynamic
+      ? MODEL_SECTIONS.find((item) => item.id === "custom")
+      : MODEL_SECTIONS.find(
+          (item) => item.id !== "other" && item.id !== "custom" && item.match(model),
+        ) || MODEL_SECTIONS.at(-1);
+    buckets.get(section?.id || "other")?.push(model);
+  }
+  return MODEL_SECTIONS.map((section) => ({
+    ...section,
+    models: buckets.get(section.id) || [],
+  })).filter((section) => section.models.length > 0);
+}
+
+/** @param {import("../types").ModelInventory} model @param {import("../types").DownloadJob | undefined} job @param {boolean} requesting */
 function modelStatus(model, job, requesting) {
   if (job?.state === "active" || job?.state === "stopping") {
     return { tone: /** @type {const} */ ("running"), label: "Installing" };
@@ -119,7 +210,13 @@ function modelStatus(model, job, requesting) {
     };
   }
   if (requesting) {
-    return { tone: /** @type {const} */ ("accent"), label: "Adding to queue" };
+    return { tone: /** @type {const} */ ("accent"), label: "Adding…" };
+  }
+  if (model.state === "needs_configuration") {
+    return { tone: /** @type {const} */ ("warning"), label: "Needs setup" };
+  }
+  if (model.state === "incompatible") {
+    return { tone: /** @type {const} */ ("error"), label: "Incompatible" };
   }
   if (model.installed) {
     return model.enabled
@@ -127,6 +224,372 @@ function modelStatus(model, job, requesting) {
       : { tone: /** @type {const} */ ("warning"), label: "Disabled" };
   }
   return { tone: /** @type {const} */ ("neutral"), label: "Not installed" };
+}
+
+/** @param {{model: import("../types").ModelInventory}} props */
+function ModelCapabilitySummary({ model }) {
+  const caps = /** @type {Record<string, any>} */ (model.capabilities || {});
+  const variant = /** @type {Record<string, any>} */ (model.variant || {});
+  const controls = [
+    caps.negativePrompt === true && "negative prompt",
+    caps.guidance === true && "guidance",
+    caps.seed === true && "seed",
+    caps.loraStrength && "LoRA strength",
+    caps.controlStrength && "ControlNet",
+    caps.denoiseStrength && "denoise strength",
+    caps.tileSize && "tiling",
+  ].filter(Boolean);
+  const facts = [
+    ["Variant", [variant.kind, variant.quantization].filter(Boolean).join(" · ")],
+    ["Steps", caps.steps ? `${caps.steps.default} default · ${caps.steps.minimum}–${caps.steps.maximum}` : "Not used"],
+    ["Sizes", (caps.supportedWidths || []).length ? (caps.supportedWidths || []).join(", ") : caps.widthMultiple ? `multiples of ${caps.widthMultiple}` : "Task-specific"],
+    ["Dtypes", (caps.dtypes || []).join(", ") || "Runtime default"],
+    ["Inputs", (caps.inputs || []).join(", ") || "Unresolved"],
+    ["Outputs", (caps.outputs || []).join(", ") || "Unresolved"],
+  ];
+  return (
+    <div className="ui-stack-sm ui-rule mt-2.5 pt-2.5">
+      <div className="grid gap-2 md:grid-cols-3">
+        {facts.map(([label, value]) => (
+          <div key={label}>
+            <p className="ui-kicker-plain">{label}</p>
+            <p className="ui-copy-body mt-0.5">{value}</p>
+          </div>
+        ))}
+      </div>
+      <div className="ui-actions justify-start">
+        {controls.length ? controls.map((control) => <Badge key={String(control)} tone="accent">{control}</Badge>) : <Badge tone="neutral">No optional controls</Badge>}
+        <Badge tone={caps.complete ? "success" : "warning"}>{caps.provenance || "unknown"}</Badge>
+      </div>
+      {variant.baseModel && <p className="ui-help">Compatible base model: {variant.baseModel}</p>}
+    </div>
+  );
+}
+
+/** @param {{model: import("../types").ModelInventory, onSaved: () => void}} props */
+function DynamicModelConfiguration({ model, onSaved }) {
+  const toast = useToast();
+  const [manifest, setManifest] = useState(/** @type {Record<string, any>} */ ({
+    ...(model.manifest || {}),
+    task: String(model.task || model.manifest?.task || "custom"),
+    adapter: String(model.adapter || model.manifest?.adapter || "python-worker"),
+  }));
+  const [saving, setSaving] = useState(false);
+  const task = manifest.task;
+  const adapter = manifest.adapter;
+  const unresolved = capabilityIssues(manifest);
+  const runtime = /** @type {Record<string, string>} */ ({
+    diffusers: "diffusers-torch",
+    transformers: "transformers-torch",
+    onnx: "onnx-runtime",
+    paddle: "paddle",
+    "python-worker": "custom-python",
+  })[adapter];
+  async function save() {
+    setSaving(true);
+    try {
+      await api(`/api/models/${encodeURIComponent(model.id)}/manifest`, {
+        method: "PUT",
+        body: JSON.stringify({
+          ...manifest,
+          runtime: {
+            ...(manifest.runtime || {}),
+            profile: runtime,
+            isolated: runtime === "custom-python",
+          },
+          needsConfiguration: false,
+        }),
+      });
+      toast.push("Model configuration saved.", "success");
+      onSaved();
+    } catch (error) {
+      toast.push(
+        error instanceof Error ? error.message : String(error),
+        "error",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+  return (
+    <div className="ui-stack-sm">
+      <div className="grid gap-2 md:grid-cols-2">
+        <Select
+          label="Task"
+          value={task}
+          onChange={(event) => setManifest({ ...manifest, task: event.target.value, capabilities: { ...(manifest.capabilities || {}), tasks: [] } })}
+          options={[
+            "text-to-image", "image-to-image", "image-segmentation", "object-detection",
+            "image-upscaling", "image-restoration", "inpainting", "text-recognition",
+            "text-generation", "automatic-speech-recognition", "custom",
+          ].map((value) => ({ value, label: value.replaceAll("-", " ") }))}
+        />
+        <Select
+          label="Runtime"
+          value={adapter}
+          onChange={(event) => setManifest({ ...manifest, adapter: event.target.value })}
+          options={[
+            ["diffusers", "Diffusers + PyTorch"], ["transformers", "Transformers + PyTorch"],
+            ["onnx", "ONNX Runtime"], ["paddle", "Paddle"],
+            ["python-worker", "Isolated Python worker"],
+          ].map(([value, label]) => ({ value, label }))}
+        />
+      </div>
+      <CapabilityEditor manifest={manifest} onChange={setManifest} />
+      {unresolved.length > 0 && <p className="ui-help text-mg-warning">Still required: {unresolved.join(", ")}.</p>}
+      <CompactButton variant="secondary" disabled={saving || unresolved.length > 0} onClick={() => void save()}>
+        {saving ? "Saving…" : "Save reviewed manifest"}
+      </CompactButton>
+    </div>
+  );
+}
+
+/** @param {{model: import("../types").ModelInventory, onChanged: () => void}} props */
+function SupirSetup({ model, onChanged }) {
+  const toast = useToast();
+  const [importing, setImporting] = useState(/** @type {string | null} */ (null));
+  const setup = model.setup || {};
+
+  async function importFile(/** @type {"Q"|"F"|"sdxl"} */ kind) {
+    const desktop = window.midgardDesktop;
+    if (!desktop) return;
+    setImporting(kind);
+    try {
+      const grant = await desktop.selectModelFile();
+      if (!grant) return;
+      await api("/api/models/supir/checkpoint", {
+        method: "POST",
+        body: JSON.stringify({ grantId: grant.grantId, kind }),
+      });
+      await onChanged();
+      toast.push(`${kind === "sdxl" ? "SDXL base" : `SUPIR v0-${kind}`} imported.`, "success");
+    } catch (error) {
+      toast.push(error instanceof Error ? error.message : String(error), "error");
+    } finally {
+      setImporting(null);
+    }
+  }
+
+  return (
+    <div className="ui-stack-sm ui-rule mt-2.5 pt-2.5">
+      <div>
+        <p className="ui-copy-title">Official SUPIR setup</p>
+        <p className="ui-help">
+          Non-commercial use only. Midgard uses the pinned official runtime and verifies every
+          downloaded checkpoint before installation.
+        </p>
+      </div>
+      <div className="ui-actions justify-start">
+        <CompactButton variant="secondary" onClick={() => void window.midgardDesktop?.openExternal("supir-downloads")}>
+          <ExternalLink className="ui-icon-sm" /> Official weights
+        </CompactButton>
+        <CompactButton variant="secondary" onClick={() => void window.midgardDesktop?.openExternal("supir")}>
+          <ExternalLink className="ui-icon-sm" /> Source & license
+        </CompactButton>
+        <CompactButton variant="secondary" onClick={() => void window.midgardDesktop?.openExternal("supir-mirror")}>
+          <ExternalLink className="ui-icon-sm" /> HF weight mirror
+        </CompactButton>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-3">
+        {[
+          ["Q", "SUPIR v0-Q", true, setup.v0Q],
+          ["F", "SUPIR v0-F", false, setup.v0F],
+          ["sdxl", "SDXL 1.0 base", true, setup.sdxl],
+        ].map(([kind, label, required, ready]) => (
+          <CompactButton
+            key={String(kind)}
+            variant="secondary"
+            disabled={Boolean(importing)}
+            onClick={() => void importFile(/** @type {"Q"|"F"|"sdxl"} */ (kind))}
+          >
+            <Upload className="ui-icon-sm" />
+            {ready ? `${label} ready` : `${importing === kind ? "Importing…" : "Import"} ${label}`}
+            {required && !ready ? " *" : ""}
+          </CompactButton>
+        ))}
+      </div>
+      <p className="ui-help">
+        Install automatically downloads checksum-pinned SUPIR v0-Q from the XCogni community mirror,
+        official Stability AI SDXL, the pinned source, isolated runtime, text encoders, and LLaVA.
+        Manual import remains available above. Both v0-Q and v0-F are installed. Expect roughly 70 GB
+        of downloads and at least 80 GB free disk space.
+      </p>
+    </div>
+  );
+}
+
+/**
+ * @param {{
+ *   model: import("../types").ModelInventory,
+ *   job?: import("../types").DownloadJob,
+ *   recent?: import("../types").DownloadJob,
+ *   requesting: boolean,
+ *   settings: Record<string, any> | null | undefined,
+ *   expanded: boolean,
+ *   onToggleExpand: () => void,
+ *   onAction: (model: import("../types").ModelInventory, operation: "install"|"enable"|"disable"|"remove") => void,
+ *   onInstallRuntime: (model: import("../types").ModelInventory) => void,
+ *   onConfigured: () => void,
+ * }} props
+ */
+function ModelRow({
+  model,
+  job,
+  recent,
+  requesting,
+  settings,
+  expanded,
+  onToggleExpand,
+  onAction,
+  onInstallRuntime,
+  onConfigured,
+}) {
+  const installing = job?.state === "active" || job?.state === "stopping";
+  const queued = job?.state === "queued";
+  const status = modelStatus(model, job, requesting);
+  const optionSpec = optionsForModel(model.id);
+  const sectionValues =
+    optionSpec && settings?.[optionSpec.section]
+      ? /** @type {Record<string, any>} */ (settings[optionSpec.section])
+      : null;
+  const purpose =
+    String(model.purpose || model.manifest?.description || "").trim() ||
+    "Local inference";
+
+  return (
+    <article className="ui-list-item py-2.5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="ui-actions gap-1.5">
+            <h4 className="truncate text-[12px] font-semibold tracking-tight text-mg-primary">
+              {model.display_name || model.id}
+            </h4>
+            <Badge size="xs" tone={status.tone}>
+              {status.label}
+            </Badge>
+          </div>
+          <p className="ui-copy-muted mt-0.5 truncate">{purpose}</p>
+        </div>
+        <div className="ui-actions shrink-0 gap-1.5">
+          <Switch
+            label="Enabled"
+            checked={Boolean(model.installed && model.enabled)}
+            disabled={Boolean(job) || !model.installed || !model.can_toggle}
+            onChange={(enabled) =>
+              void onAction(model, enabled ? "enable" : "disable")
+            }
+          />
+          {!model.installed && model.can_install && !job && (
+            <CompactButton
+              variant="secondary"
+              onClick={() => void onAction(model, "install")}
+            >
+              {requesting ? (
+                "Adding…"
+              ) : (
+                <>
+                  <Download className="ui-icon-sm" /> Install
+                </>
+              )}
+            </CompactButton>
+          )}
+          {job && (
+            <CompactButton variant="secondary" disabled>
+              {queued && <Clock3 className="ui-icon-sm" />}
+              {installing ? "Installing…" : `Queued · ${job.position}`}
+            </CompactButton>
+          )}
+          {!model.installed && !model.can_install && (
+            <Badge size="xs" tone="neutral">
+              Bundled
+            </Badge>
+          )}
+          {model.installed && model.can_uninstall && !job && (
+            <CompactButton
+              variant="danger"
+              onClick={() => void onAction(model, "remove")}
+            >
+              <Trash2 className="ui-icon-sm" /> Uninstall
+            </CompactButton>
+          )}
+          {model.runtime?.isolated &&
+            !model.runtime?.installed &&
+            model.id !== "supir" &&
+            !job && (
+              <CompactButton
+                variant="secondary"
+                onClick={() => void onInstallRuntime(model)}
+              >
+                <Download className="ui-icon-sm" /> Runtime
+              </CompactButton>
+            )}
+          {((optionSpec && sectionValues) || model.capabilities || model.needs_configuration) && (
+            <CompactButton onClick={onToggleExpand}>
+              {expanded ? "Hide" : "Options"}
+            </CompactButton>
+          )}
+        </div>
+      </div>
+      {job && (
+        <div className="mt-2">
+          <ProgressBar
+            value={queued ? 0 : job.progress}
+            indeterminate={installing && job.progress == null}
+            label={
+              installing
+                ? job.detail || "Preparing download"
+                : job.position === 1
+                  ? "Next to install"
+                  : `${job.position} installs ahead`
+            }
+            showLabel
+          />
+          {installing && (
+            <p className="ui-help mt-1">{formatTransfer(job)}</p>
+          )}
+        </div>
+      )}
+      {!job && !requesting && !model.installed && recent && (
+        <p role="alert" className="ui-help mt-2 text-mg-error">
+          {recent.error ||
+            (recent.state === "cancelled"
+              ? "Installation was cancelled. Try Install again."
+              : "Installation failed. Try again or open Downloads for details.")}
+        </p>
+      )}
+      {expanded && optionSpec && sectionValues && (
+        <div className="ui-stack-sm ui-rule mt-2.5 pt-2.5">
+          <SettingsForm
+            section={optionSpec.section}
+            values={sectionValues}
+            keys={optionSpec.keys}
+          />
+        </div>
+      )}
+      {expanded && model.capabilities && <ModelCapabilitySummary model={model} />}
+      {expanded && model.id === "supir" && (
+        <SupirSetup model={model} onChanged={onConfigured} />
+      )}
+      {expanded && model.needs_configuration && (
+        <div className="ui-stack-sm ui-rule mt-2.5 pt-2.5">
+          <DynamicModelConfiguration model={model} onSaved={onConfigured} />
+        </div>
+      )}
+      {model.runtime &&
+      (model.runtime.reasons?.length || model.runtime.warnings?.length) ? (
+        <div className="mt-1.5">
+          {[
+            ...(model.runtime.reasons || []),
+            ...(model.runtime.warnings || []),
+          ].map((message) => (
+            <p key={message} className="ui-help text-mg-warning">
+              {message}
+            </p>
+          ))}
+        </div>
+      ) : null}
+    </article>
+  );
 }
 
 export function ModelsPanel() {
@@ -139,6 +602,50 @@ export function ModelsPanel() {
     (store) => store.setModelLifecycleState,
   );
   const [expanded, setExpanded] = useState(/** @type {string | null} */ (null));
+  const [addOpen, setAddOpen] = useState(false);
+  const [rescanning, setRescanning] = useState(false);
+  const updateSettings = useServerStore((store) => store.updateSettings);
+  const refreshModels = useServerStore((store) => store.refreshModels);
+  const sections = useMemo(() => groupModels(models), [models]);
+
+  async function rescan() {
+    setRescanning(true);
+    try {
+      const result = await api("/api/models/rescan", { method: "POST" });
+      useServerStore.setState({ models: result.models });
+      toast.push(
+        `Scanned · ${result.discovered} custom model${result.discovered === 1 ? "" : "s"}.`,
+        "success",
+      );
+    } catch (error) {
+      toast.push(
+        error instanceof Error ? error.message : String(error),
+        "error",
+      );
+    } finally {
+      setRescanning(false);
+    }
+  }
+
+  async function installRuntime(
+    /** @type {import("../types").ModelInventory} */ model,
+  ) {
+    const profile = model.runtime?.profile;
+    if (!profile) return;
+    try {
+      await api(`/api/model-runtimes/${encodeURIComponent(profile)}/install`, {
+        method: "POST",
+        body: JSON.stringify({ packages: model.runtime?.packages || [] }),
+      });
+      await refreshDownloads();
+      toast.push("Runtime added to the installation queue.", "success");
+    } catch (error) {
+      toast.push(
+        error instanceof Error ? error.message : String(error),
+        "error",
+      );
+    }
+  }
 
   async function confirmState(
     /** @type {string} */ modelId,
@@ -205,7 +712,10 @@ export function ModelsPanel() {
       if (operation === "install") {
         setLifecycleState(model.id, { state: "not_installed" });
       }
-      toast.push(error instanceof Error ? error.message : String(error), "error");
+      toast.push(
+        error instanceof Error ? error.message : String(error),
+        "error",
+      );
       return;
     }
     if (operation === "install") {
@@ -244,23 +754,69 @@ export function ModelsPanel() {
 
   return (
     <div className="ui-stack">
+      <HuggingFaceConnection />
+
+      <div className="ui-actions gap-1.5">
+        <CompactButton variant="secondary" onClick={() => void rescan()}>
+          <RefreshCw
+            className={`ui-icon-sm ${rescanning ? "animate-spin" : ""}`}
+          />
+          Rescan
+        </CompactButton>
+        <CompactButton variant="secondary" onClick={() => setAddOpen(true)}>
+          <Plus className="ui-icon-sm" /> Add model
+        </CompactButton>
+      </div>
+
+      {settings?.models && (
+        <div className="grid gap-2 sm:grid-cols-2">
+          <Switch
+            label="Watch model folder"
+            checked={Boolean(settings.models.auto_scan)}
+            onChange={(value) =>
+              void updateSettings({ models: { auto_scan: value } })
+            }
+          />
+          <Switch
+            label="Prefer SafeTensors"
+            checked={Boolean(settings.models.prefer_safetensors)}
+            onChange={(value) =>
+              void updateSettings({ models: { prefer_safetensors: value } })
+            }
+          />
+          <Switch
+            label="Isolate custom dependencies"
+            checked={Boolean(settings.models.isolate_custom_dependencies)}
+            onChange={(value) =>
+              void updateSettings({
+                models: { isolate_custom_dependencies: value },
+              })
+            }
+          />
+          <Switch
+            label="Allow legacy pickle weights"
+            checked={Boolean(settings.models.allow_pickle_weights)}
+            onChange={(value) =>
+              void updateSettings({ models: { allow_pickle_weights: value } })
+            }
+          />
+        </div>
+      )}
+
+      <AddModelDialog open={addOpen} onClose={() => setAddOpen(false)} />
+
       {(activeJob || downloads.pending.length > 0) && (
         <div className="ui-stack-sm">
           <div className="ui-action-row">
-            <div className="ui-inline min-w-0">
-              <ListOrdered className="ui-icon-lg text-mg-running" />
-              <div className="min-w-0">
-                <p className="ui-copy-title truncate text-xs">
-                  {activeJob
-                    ? `Installing ${activeModel?.display_name || activeJob.modelId || activeJob.key}`
-                    : "Model install queue"}
-                </p>
-                <p className="ui-copy-muted">
-                  One model installs at a time, in the order added.
-                </p>
-              </div>
+            <div className="ui-inline min-w-0 gap-2">
+              <ListOrdered className="size-3.5 shrink-0 text-mg-running" />
+              <p className="truncate text-[11px] font-medium text-mg-primary">
+                {activeJob
+                  ? `Installing ${activeModel?.display_name || activeJob.modelId || activeJob.key}`
+                  : "Install queue"}
+              </p>
             </div>
-            <Badge tone="running">
+            <Badge size="xs" tone="running">
               {downloads.pending.length
                 ? `${downloads.pending.length} waiting`
                 : "Active"}
@@ -277,145 +833,54 @@ export function ModelsPanel() {
         </div>
       )}
 
-      <div className="ui-list">
-        {models.length ? (
-          models.map((model) => {
-            const job = [...downloads.active, ...downloads.pending].find(
-              (item) => (item.modelId || item.key) === model.id,
-            );
-            const recent = (downloads.recent || []).find(
-              (item) =>
-                (item.modelId || item.key) === model.id &&
-                ["failed", "cancelled"].includes(item.state),
-            );
-            const installing =
-              job?.state === "active" || job?.state === "stopping";
-            const queued = job?.state === "queued";
-            const requesting = model.state === "requesting";
-            const status = modelStatus(model, job, requesting);
-            const optionSpec = optionsForModel(model.id);
-            const sectionValues =
-              optionSpec && settings?.[optionSpec.section]
-                ? /** @type {Record<string, any>} */ (
-                    settings[optionSpec.section]
-                  )
-                : null;
-            const isOpen = expanded === model.id;
-            return (
-              <article key={model.id} className="ui-list-item">
-                <div className="ui-inline">
-                  <div className="min-w-0 flex-1">
-                    <div className="ui-actions">
-                      <h3 className="ui-copy-title">
-                        {model.display_name || model.id}
-                      </h3>
-                      <Badge tone={status.tone}>{status.label}</Badge>
-                    </div>
-                    <p className="ui-copy-body mt-0.5">
-                      {model.purpose || "Local inference"} ·{" "}
-                      {model.license || "See upstream license"}
-                    </p>
-                  </div>
-                  <Switch
-                    label="Enabled"
-                    checked={Boolean(model.installed && model.enabled)}
-                    disabled={
-                      Boolean(job) || !model.installed || !model.can_toggle
-                    }
-                    onChange={(enabled) =>
-                      void action(model, enabled ? "enable" : "disable")
-                    }
-                  />
-                  <div className="ui-actions">
-                    {!model.installed && model.can_install && !job && (
-                      <Button
-                        loading={requesting}
-                        onClick={() => void action(model, "install")}
-                      >
-                        {!requesting && <Download className="ui-icon" />}
-                        {requesting ? "Adding…" : "Install"}
-                      </Button>
-                    )}
-                    {job && (
-                      <Button variant="secondary" loading={installing} disabled>
-                        {queued && <Clock3 className="ui-icon" />}
-                        {installing
-                          ? "Installing…"
-                          : `Queued · ${job.position}`}
-                      </Button>
-                    )}
-                    {!model.installed && !model.can_install && (
-                      <Badge tone="neutral">Bundled</Badge>
-                    )}
-                    {model.installed && model.can_uninstall && !job && (
-                      <Button
-                        variant="danger"
-                        onClick={() => void action(model, "remove")}
-                      >
-                        <Trash2 className="ui-icon" />
-                        Uninstall
-                      </Button>
-                    )}
-                    {optionSpec && sectionValues && (
-                      <CompactButton
-                        onClick={() =>
-                          setExpanded((value) =>
-                            value === model.id ? null : model.id,
-                          )
-                        }
-                      >
-                        {isOpen ? "Hide options" : "Options"}
-                      </CompactButton>
-                    )}
-                  </div>
-                </div>
-                {job && (
-                  <div className="mt-2">
-                    <ProgressBar
-                      value={queued ? 0 : job.progress}
-                      indeterminate={installing && job.progress == null}
-                      label={
-                        installing
-                          ? job.detail || "Preparing download"
-                          : job.position === 1
-                            ? "Next to install"
-                            : `${job.position} installs ahead`
+      {sections.length ? (
+        <div className="ui-stack gap-5">
+          {sections.map((section) => (
+            <section key={section.id} className="ui-stack-sm">
+              <p className="ui-kicker-plain">{section.label}</p>
+              <div className="ui-list">
+                {section.models.map((model) => {
+                  const job = [
+                    ...downloads.active,
+                    ...downloads.pending,
+                  ].find((item) => (item.modelId || item.key) === model.id);
+                  const recent = (downloads.recent || []).find(
+                    (item) =>
+                      (item.modelId || item.key) === model.id &&
+                      ["failed", "cancelled"].includes(item.state),
+                  );
+                  return (
+                    <ModelRow
+                      key={model.id}
+                      model={model}
+                      job={job}
+                      recent={recent}
+                      requesting={model.state === "requesting"}
+                      settings={settings}
+                      expanded={expanded === model.id}
+                      onToggleExpand={() =>
+                        setExpanded((value) =>
+                          value === model.id ? null : model.id,
+                        )
                       }
-                      showLabel
+                      onAction={action}
+                      onInstallRuntime={installRuntime}
+                      onConfigured={() => {
+                        void refreshModels();
+                      }}
                     />
-                    {installing && (
-                      <p className="ui-help mt-1">{formatTransfer(job)}</p>
-                    )}
-                  </div>
-                )}
-                {!job && !requesting && !model.installed && recent && (
-                  <p role="alert" className="ui-help mt-2 text-mg-error">
-                    {recent.error ||
-                      (recent.state === "cancelled"
-                        ? "Installation was cancelled. Try Install again."
-                        : "Installation failed. Try again or open Downloads for details.")}
-                  </p>
-                )}
-                {isOpen && optionSpec && sectionValues && (
-                  <div className="ui-stack-sm ui-rule mt-3 pt-3">
-                    <p className="ui-kicker-plain">Tuning options</p>
-                    <SettingsForm
-                      section={optionSpec.section}
-                      values={sectionValues}
-                      keys={optionSpec.keys}
-                    />
-                  </div>
-                )}
-              </article>
-            );
-          })
-        ) : (
-          <EmptyState
-            icon={<Box className="ui-icon-lg" />}
-            title="No model catalog available"
-          />
-        )}
-      </div>
+                  );
+                })}
+              </div>
+            </section>
+          ))}
+        </div>
+      ) : (
+        <EmptyState
+          icon={<Box className="ui-icon-lg" />}
+          title="No model catalog available"
+        />
+      )}
     </div>
   );
 }

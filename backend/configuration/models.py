@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any, Mapping
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 _INPAINT_MODES = {"sttn-auto", "sttn-det", "lama", "propainter", "opencv"}
 _DETECT_MODES = {"PP_OCRv5_MOBILE", "PP_OCRv5_SERVER"}
 _DENOISE_STRENGTHS = {"safe", "medium"}
@@ -168,6 +168,30 @@ class ObjectSelectionSettings:
 
 
 @dataclass(frozen=True)
+class ModelPlatformSettings:
+    auto_scan: bool = True
+    scan_interval_seconds: int = 2
+    prefer_safetensors: bool = True
+    allow_remote_code: bool = False
+    allow_pickle_weights: bool = False
+    isolate_custom_dependencies: bool = True
+    auto_enable_imports: bool = False
+
+    def __post_init__(self) -> None:
+        for name in (
+            "auto_scan",
+            "prefer_safetensors",
+            "allow_remote_code",
+            "allow_pickle_weights",
+            "isolate_custom_dependencies",
+            "auto_enable_imports",
+        ):
+            if not isinstance(getattr(self, name), bool):
+                raise TypeError(f"models.{name} must be a boolean")
+        _bounded("models.scan_interval_seconds", self.scan_interval_seconds, 1, 60)
+
+
+@dataclass(frozen=True)
 class ApplicationConfiguration:
     schema_version: int = SCHEMA_VERSION
     runtime: RuntimeSettings = field(default_factory=RuntimeSettings)
@@ -177,6 +201,7 @@ class ApplicationConfiguration:
     low_light: LowLightSettings = field(default_factory=LowLightSettings)
     generation: GenerationSettings = field(default_factory=GenerationSettings)
     object_selection: ObjectSelectionSettings = field(default_factory=ObjectSelectionSettings)
+    models: ModelPlatformSettings = field(default_factory=ModelPlatformSettings)
     save_directory: str = ""
 
     def __post_init__(self) -> None:
@@ -200,5 +225,6 @@ class ApplicationConfiguration:
             low_light=LowLightSettings(**dict(values.get("low_light", {}))),
             generation=GenerationSettings(**dict(values.get("generation", {}))),
             object_selection=ObjectSelectionSettings(**dict(values.get("object_selection", {}))),
+            models=ModelPlatformSettings(**dict(values.get("models", {}))),
             save_directory=str(values.get("save_directory", "")),
         )

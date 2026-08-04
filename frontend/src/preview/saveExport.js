@@ -2,14 +2,25 @@ import { api, artifactObjectUrl, saveArtifact } from "../api/client";
 
 /** @type {Record<string, string>} */
 const SCHEMA_SUFFIXES = {
-  "midgard.image.remove_background": "_no_bg",
-  "midgard.image.remove_text": "_no_sub",
-  "midgard.video.remove_text": "_no_sub",
+  "midgard.image.remove_background": "_nobg",
+  "midgard.image.remove_text": "_nosub",
+  "midgard.video.remove_text": "_nosub",
+  "midgard.image.upscale": "_upscale",
+  "midgard.image.low_light": "_lowlight",
 };
 
 /** @param {string | undefined} schemaId */
 export function exportSuffixForSchema(schemaId) {
   return (schemaId && SCHEMA_SUFFIXES[schemaId]) || "";
+}
+
+/** @param {string[]} schemaIds */
+export function exportSuffixForSchemas(schemaIds) {
+  const seen = new Set();
+  return schemaIds
+    .map(exportSuffixForSchema)
+    .filter((suffix) => suffix && !seen.has(suffix) && seen.add(suffix))
+    .join("");
 }
 
 /** @param {string | undefined} mediaType @param {string | undefined} sourceName */
@@ -38,6 +49,8 @@ export function fileStem(value) {
     .pop();
   if (!base) return "midgard-output";
   const stem = base.replace(/\.[^.]+$/, "");
+  // Windows filenames forbid ASCII control characters; the range is intentional.
+  // eslint-disable-next-line no-control-regex
   const cleaned = stem.replace(/[<>:"|?*\u0000-\u001f]/g, "_").trim();
   return cleaned || "midgard-output";
 }
@@ -76,30 +89,52 @@ export function buildExportFileName({
 
 /** @param {Record<string, any> | null | undefined} metadata */
 export async function resolveLinkedSourceName(metadata) {
+  return (await resolveLinkedExportInfo(metadata)).sourceName;
+}
+
+/**
+ * Resolve the original input name and every known transformation in source order.
+ * @param {Record<string, any> | null | undefined} metadata
+ * @param {string | undefined} fallbackSchemaId
+ */
+export async function resolveLinkedExportInfo(
+  metadata,
+  fallbackSchemaId = undefined,
+) {
   /** @type {string[]} */
-  const queue = Array.isArray(metadata?.inputArtifactIds)
-    ? [...metadata.inputArtifactIds]
-    : [];
-  const seen = new Set(queue);
-  while (queue.length) {
-    const inputId = queue.shift();
-    if (!inputId) continue;
-    try {
-      const input = await api(`/api/artifacts/${inputId}/metadata`);
-      if (input?.originalSourcePath) {
-        return String(input.originalSourcePath).split(/[/\\]/).pop() || null;
-      }
-      for (const nestedId of input?.inputArtifactIds || []) {
-        if (typeof nestedId === "string" && !seen.has(nestedId)) {
-          seen.add(nestedId);
-          queue.push(nestedId);
-        }
-      }
-    } catch {
-      // Keep walking linked inputs when one metadata lookup fails.
+  const reversedSchemas = [];
+  const seenArtifacts = new Set();
+  let sourceName = metadata?.originalSourcePath
+    ? String(metadata.originalSourcePath).split(/[/\\]/).pop() || null
+    : null;
+
+  /** @param {Record<string, any> | null | undefined} record @param {boolean} root */
+  async function walk(record, root = false) {
+    const schemaId = record?.creatingSchemaId || (root ? fallbackSchemaId : "");
+    if (schemaId) reversedSchemas.push(String(schemaId));
+    if (record?.originalSourcePath) {
+      sourceName =
+        String(record.originalSourcePath).split(/[/\\]/).pop() || sourceName;
+      return true;
     }
+    for (const inputId of record?.inputArtifactIds || []) {
+      if (typeof inputId !== "string" || seenArtifacts.has(inputId)) continue;
+      seenArtifacts.add(inputId);
+      try {
+        const input = await api(`/api/artifacts/${inputId}/metadata`);
+        if (await walk(input)) return true;
+      } catch {
+        // Try the next linked input when one artifact is unavailable.
+      }
+    }
+    return false;
   }
-  return null;
+
+  await walk(metadata, true);
+  return {
+    sourceName,
+    suffix: exportSuffixForSchemas(reversedSchemas.reverse()),
+  };
 }
 
 /**
@@ -115,7 +150,6 @@ export async function saveArtifactsExport(artifactIds, options = {}) {
   const ids = [...new Set(artifactIds.filter(Boolean))];
   if (!ids.length) return [];
 
-  const suffix = exportSuffixForSchema(options.schemaId);
   const desktop = window.midgardDesktop;
   const usedNames = new Set();
 
@@ -123,11 +157,11 @@ export async function saveArtifactsExport(artifactIds, options = {}) {
   const plans = [];
   for (const artifactId of ids) {
     const metadata = await api(`/api/artifacts/${artifactId}/metadata`);
-    const sourceName =
-      (await resolveLinkedSourceName(metadata)) || "midgard-output";
+    const linked = await resolveLinkedExportInfo(metadata, options.schemaId);
+    const sourceName = linked.sourceName || "midgard-output";
     const fileName = buildExportFileName({
       sourceName,
-      suffix,
+      suffix: linked.suffix,
       mediaType: metadata?.mediaType,
       usedNames,
     });
@@ -149,13 +183,18 @@ export async function saveArtifactsExport(artifactIds, options = {}) {
   const directory = await desktop.selectDirectory();
   if (!directory) return null;
 
+  const preparedGrants = await desktop.prepareDirectoryWrites(
+    directory.grantId,
+    plans.map((plan) => plan.fileName),
+  );
+  if (!preparedGrants) return null;
+
   /** @type {string[]} */
   const saved = [];
-  for (const plan of plans) {
-    const grant = await desktop.writeGrantInDirectory(
-      directory.grantId,
-      plan.fileName,
-    );
+  for (const [index, plan] of plans.entries()) {
+    const grant =
+      preparedGrants?.[index] ||
+      (await desktop.writeGrantInDirectory(directory.grantId, plan.fileName));
     const result = await saveArtifact(plan.artifactId, grant.grantId);
     saved.push(result.name || plan.fileName);
   }

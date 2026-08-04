@@ -5,6 +5,8 @@
 /config/runtime.json
 /config/pending_model_downloads.json
 /config/model_download_cancel.flag
+/config/model-lifecycle.json
+/model-runtimes/
 /midgard_out/
 /output/
 /local_test/
@@ -28,6 +30,7 @@ backend/models/realesrgan/
 backend/models/select_object/
 backend/models/generate/
 backend/models/mirnet/
+backend/models/supir/
 backend/models/**/*.ckpt
 backend/models/**/*.onnx
 backend/models/**/*.safetensors

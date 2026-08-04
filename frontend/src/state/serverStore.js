@@ -28,6 +28,11 @@ const createServerState = (set, get) => ({
     set({ models });
     return models;
   },
+  async refreshNodes() {
+    const nodes = await api("/api/nodes");
+    set({ nodes });
+    return nodes;
+  },
   async refreshDownloads() {
     const downloads = await api("/api/downloads");
     set({ downloads });
@@ -65,6 +70,9 @@ const createServerState = (set, get) => ({
       ].includes(event.type)
     ) {
       void get().refreshModels();
+      if (event.type === "model.changed" || event.type === "download.completed") {
+        void get().refreshNodes();
+      }
       void get().refreshDownloads();
     }
   },

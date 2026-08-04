@@ -205,6 +205,59 @@ test("known image queues connect only to batch-capable inputs", () => {
   expect(invalid.valid).toBe(false);
   expect(invalid.reason).toContain("accepts one item");
 });
+test("creating a flow with overlap expands the existing flow instead of nesting", () => {
+  const first = addNode("test.number", { x: 10, y: 20 });
+  const second = addNode("test.number", { x: 320, y: 20 });
+  const third = addNode("test.number", { x: 630, y: 20 });
+  useEditorStore.setState((state) => ({
+    nodes: state.nodes.map((node) => ({
+      ...node,
+      selected: node.id === first,
+    })),
+    edges: [edge("one", first, second)],
+  }));
+  const groupId = useEditorStore.getState().createFlowFromSelected();
+  expect(useEditorStore.getState().groups).toHaveLength(1);
+  useEditorStore.setState((state) => ({
+    nodes: state.nodes.map((node) => ({
+      ...node,
+      selected: [first, second, third].includes(node.id),
+    })),
+  }));
+  const sameId = useEditorStore.getState().createFlowFromSelected();
+  const state = useEditorStore.getState();
+  expect(sameId).toBe(groupId);
+  expect(state.groups).toHaveLength(1);
+  expect(required(state.groups[0]).nodeIds).toEqual(
+    expect.arrayContaining([first, second, third]),
+  );
+  expect(required(state.groups[0]).startNodeIds).toEqual(
+    expect.arrayContaining([first, third]),
+  );
+});
+test("dropping a node into a flow adds it to that flow", () => {
+  const first = addNode("test.number", { x: 100, y: 100 });
+  const second = addNode("test.number", { x: 400, y: 100 });
+  useEditorStore.setState((state) => ({
+    nodes: state.nodes.map((node) => ({
+      ...node,
+      selected: node.id === first,
+    })),
+    edges: [edge("one", first, second)],
+  }));
+  const groupId = required(
+    useEditorStore.getState().createFlowFromSelected(),
+  );
+  const third = useEditorStore
+    .getState()
+    .addNode("test.number", { x: 200, y: 120 }, { flowId: groupId });
+  expect(third).toBeTruthy();
+  const group = required(
+    useEditorStore.getState().groups.find((item) => item.id === groupId),
+  );
+  expect(group.nodeIds).toEqual(expect.arrayContaining([first, second, third]));
+  expect(group.startNodeIds).toEqual(expect.arrayContaining([first, third]));
+});
 test("unlinking a connection removes only that edge and refreshes its parent flow", () => {
   const first = addNode();
   const second = addNode();

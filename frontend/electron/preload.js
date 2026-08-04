@@ -19,14 +19,21 @@ contextBridge.exposeInMainWorld("midgardDesktop", Object.freeze({
   registerDroppedFiles: (/** @type {File[]} */ files) => ipcRenderer.invoke("files:dropped", files.map(file => webUtils.getPathForFile(file))),
   selectVideoFiles: () => ipcRenderer.invoke("files:videos"),
   selectMaskFile: () => ipcRenderer.invoke("files:mask"),
+  selectModelFile: () => ipcRenderer.invoke("models:file"),
+  selectModelFolder: () => ipcRenderer.invoke("models:folder"),
   selectDirectory: () => ipcRenderer.invoke("files:directory"),
   selectSaveFile: (/** @type {"image" | "video"} */ kind) => ipcRenderer.invoke("files:save", kind),
   writeGrantInDirectory: (
     /** @type {string} */ directoryGrantId,
     /** @type {string} */ fileName,
   ) => ipcRenderer.invoke("files:write-in-directory", directoryGrantId, fileName),
+  prepareDirectoryWrites: (
+    /** @type {string} */ directoryGrantId,
+    /** @type {string[]} */ fileNames,
+  ) => ipcRenderer.invoke("files:prepare-directory-writes", directoryGrantId, fileNames),
   revealPath: (/** @type {string} */ grantId) => ipcRenderer.invoke("native:reveal", grantId),
   openExternal: (/** @type {string} */ urlId) => ipcRenderer.invoke("native:external", urlId),
+  openHuggingFace: (/** @type {string} */ url) => ipcRenderer.invoke("native:huggingface", url),
   getPlatformInfo: () => ipcRenderer.invoke("native:platform"),
   setRunProgress: (/** @type {number} */ progress) => ipcRenderer.send("run:progress", progress),
   onMenuCommand: (/** @type {(command: string) => void} */ callback) => {

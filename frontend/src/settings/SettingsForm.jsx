@@ -33,7 +33,7 @@ export function SettingsForm({ section, values, keys }) {
   }, [entries]);
 
   async function commit(/** @type {string} */ key, /** @type {unknown} */ value) {
-    setDraft((current) => ({ ...current, [key]: value }));
+    setDraft((/** @type {Record<string, any>} */ current) => ({ ...current, [key]: value }));
     await update({ [section]: { ...values, ...draft, [key]: value } });
   }
 
@@ -49,7 +49,7 @@ export function SettingsForm({ section, values, keys }) {
             value={draft[key]}
             choices={meta?.choices}
             onDraft={(value) =>
-              setDraft((current) => ({ ...current, [key]: value }))
+              setDraft((/** @type {Record<string, any>} */ current) => ({ ...current, [key]: value }))
             }
             onCommit={(value) => void commit(key, value)}
           />

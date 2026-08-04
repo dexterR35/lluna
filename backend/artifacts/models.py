@@ -32,6 +32,7 @@ class ArtifactRecord(BaseModel):
     color_metadata: dict[str, Any] = Field(default_factory=dict)
     creating_run_id: str | None = None
     creating_node_id: str | None = None
+    creating_schema_id: str = ""
     input_artifact_ids: list[str] = Field(default_factory=list)
     model_revision: str = ""
     parameters_hash: str = ""

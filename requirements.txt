@@ -13,6 +13,7 @@ cryptography>=50.0.0
 rembg>=2.0.75
 transformers>=5.5.0
 huggingface_hub>=1.5.0
+keyring>=25.7.0
 diffusers>=0.38.0
 accelerate>=1.0.0
 # Torch, Paddle, and ONNX variants are selected by install.py/backend group files.

@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from collections import Counter, defaultdict, deque
 
-from backend.graph.registry import NODE_REGISTRY
+from backend.graph.registry import NODE_REGISTRY, get_node
 from backend.graph.schema import ValidationIssue, ValidationResult, WorkflowDocument
 from backend.graph.types import PortType, ports_compatible
 
@@ -247,6 +247,36 @@ def validate_workflow(
             )
         if node.disabled:
             continue
+        effective_definition = get_node(node.schema_id)
+        model_parameter = next(
+            (item for item in effective_definition.parameters if item.type == "model" or item.id == "model"),
+            None,
+        )
+        if model_parameter:
+            selected_value = node.parameters.get(model_parameter.id, model_parameter.default)
+            selected_option = next(
+                (item for item in model_parameter.options if item.get("value") == selected_value),
+                None,
+            )
+            capabilities = selected_option.get("capabilities") if selected_option else None
+            if node.schema_id == "midgard.generate.image":
+                from backend.models.capability_validation import validate_generation_inputs
+
+                capability_issues = (
+                    validate_generation_inputs(capabilities, node.parameters)
+                    if isinstance(capabilities, dict)
+                    else ("The selected model has no reviewed capability contract.",)
+                )
+                for message in capability_issues:
+                    issues.append(
+                        ValidationIssue(
+                            severity="error",
+                            code="MODEL_CAPABILITY",
+                            message=message,
+                            node_id=node.id,
+                            action="Choose supported values or review the model manifest.",
+                        )
+                    )
         for parameter in definition.parameters:
             if parameter.required and not node.parameters.get(parameter.id):
                 issues.append(
@@ -287,7 +317,7 @@ def validate_workflow(
             model_parameter = next(
                 (
                     item
-                    for item in definition.parameters
+                    for item in effective_definition.parameters
                     if item.type == "model" or item.id == "model"
                 ),
                 None,

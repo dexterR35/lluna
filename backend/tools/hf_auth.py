@@ -11,6 +11,8 @@ from typing import Optional
 from backend.core.atomic import atomic_write_text
 
 _ENV_KEYS = ("HF_TOKEN", "HUGGING_FACE_HUB_TOKEN")
+_KEYRING_SERVICE = "Midgard"
+_KEYRING_USER = "huggingface-token"
 logger = logging.getLogger(__name__)
 
 
@@ -26,6 +28,16 @@ def resolve_hf_token() -> Optional[str]:
         val = (os.environ.get(key) or "").strip()
         if val:
             return val
+    try:
+        import keyring
+
+        saved = (keyring.get_password(_KEYRING_SERVICE, _KEYRING_USER) or "").strip()
+        if saved:
+            return saved
+    except Exception:
+        # Linux desktops without a Secret Service backend use the restricted
+        # fallback file below. Authentication must still work offline.
+        pass
     path = token_file_path()
     try:
         if path.is_file():
@@ -48,18 +60,32 @@ def apply_hf_token_to_env() -> Optional[str]:
 
 
 def save_hf_token(token: str) -> Path:
-    """Persist a read token locally and apply to env."""
+    """Persist a token in the OS credential store, with a 0600 file fallback."""
     text = (token or "").strip()
     if not text:
         raise ValueError("HF token is empty.")
     path = token_file_path()
+    def apply_saved() -> None:
+        for key in _ENV_KEYS:
+            os.environ[key] = text
+
+    try:
+        import keyring
+
+        keyring.set_password(_KEYRING_SERVICE, _KEYRING_USER, text)
+        if path.is_file():
+            path.unlink()
+        apply_saved()
+        return path
+    except Exception as exc:
+        logger.info("OS credential storage unavailable; using restricted token file: %s", type(exc).__name__)
     path.parent.mkdir(parents=True, exist_ok=True)
     atomic_write_text(path, text + "\n")
     try:
         path.chmod(0o600)
     except OSError as exc:
         logger.warning("Could not restrict token-file permissions: %s", type(exc).__name__)
-    apply_hf_token_to_env()
+    apply_saved()
     return path
 
 
@@ -70,12 +96,43 @@ def clear_hf_token() -> None:
             path.unlink()
     except OSError as exc:
         logger.warning("Could not remove token file: %s", type(exc).__name__)
+    try:
+        import keyring
+
+        keyring.delete_password(_KEYRING_SERVICE, _KEYRING_USER)
+    except Exception:
+        pass
     for key in _ENV_KEYS:
         os.environ.pop(key, None)
 
 
 def has_hf_token() -> bool:
     return bool(resolve_hf_token())
+
+
+def validate_hf_token(token: str | None = None) -> dict:
+    """Validate a personal access token without returning or logging the secret."""
+    from huggingface_hub import HfApi
+
+    candidate = (token or resolve_hf_token() or "").strip()
+    if not candidate:
+        raise ValueError("Enter a Hugging Face access token.")
+    identity = HfApi(token=candidate).whoami(token=candidate)
+    name = str(identity.get("name") or identity.get("fullname") or "Connected user")
+    auth = identity.get("auth") if isinstance(identity, dict) else None
+    access = auth.get("accessToken", {}) if isinstance(auth, dict) else {}
+    role = str(access.get("role") or "read") if isinstance(access, dict) else "read"
+    return {"connected": True, "account": name, "role": role}
+
+
+def hf_auth_status(*, verify: bool = False) -> dict:
+    token = resolve_hf_token()
+    if not token:
+        return {"connected": False, "account": "", "role": "", "storage": "none"}
+    storage = "restricted-file" if token_file_path().is_file() else "os-keychain-or-environment"
+    if not verify:
+        return {"connected": True, "account": "", "role": "", "storage": storage}
+    return {**validate_hf_token(token), "storage": storage}
 
 
 def hf_download_cache_dir() -> Path:
@@ -166,6 +223,8 @@ def snapshot_download_with_progress(
     repo_id: str,
     local_dir: str,
     allow_patterns: list[str],
+    revision: str | None = None,
+    ignore_patterns: list[str] | None = None,
 ) -> str:
     """Download an HF snapshot and report aggregate byte progress to the queue."""
     from huggingface_hub import snapshot_download
@@ -176,19 +235,22 @@ def snapshot_download_with_progress(
     )
 
     kwargs = snapshot_download_kwargs()
+    download_args = {
+        "repo_id": repo_id,
+        "local_dir": local_dir,
+        "allow_patterns": allow_patterns,
+        **({"revision": revision} if revision else {}),
+        **({"ignore_patterns": ignore_patterns} if ignore_patterns else {}),
+    }
     files = snapshot_download(
-        repo_id=repo_id,
-        local_dir=local_dir,
-        allow_patterns=allow_patterns,
+        **download_args,
         dry_run=True,
         **kwargs,
     )
     total_bytes = sum(int(item.file_size) for item in files)
     with huggingface_download_total(total_bytes):
         return snapshot_download(
-            repo_id=repo_id,
-            local_dir=local_dir,
-            allow_patterns=allow_patterns,
+            **download_args,
             tqdm_class=huggingface_progress_tqdm(),
             **kwargs,
         )

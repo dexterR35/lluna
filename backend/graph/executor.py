@@ -24,7 +24,7 @@ from backend.artifacts.store import ArtifactStore, DesktopGrantStore
 from backend.configuration.service import get_settings
 from backend.graph.cache import build_cache_key
 from backend.graph.compiler import compile_workflow
-from backend.graph.registry import NODE_REGISTRY
+from backend.graph.registry import NODE_REGISTRY, get_node
 from backend.graph.schema import WorkflowDocument, WorkflowNode
 from backend.tools.infer_protocol import JobType
 
@@ -633,7 +633,7 @@ class RunManager:
         elif definition.adapter == "passthrough":
             result = next(iter(inputs.values()))
         elif definition.adapter == "save":
-            result = self._save_output(node, next(iter(inputs.values())))
+            result = self._save_output(control, node, next(iter(inputs.values())))
         elif any(isinstance(value, (list, tuple)) for value in inputs.values()):
             result = self._run_batch_node(control, node, inputs)
         elif definition.adapter == "composite":
@@ -845,19 +845,149 @@ class RunManager:
             return persisted
         raise ExecutionFailure("EMPTY_BATCH", "Choose one or more local images.")
 
-    def _save_output(self, node: WorkflowNode, value: Any) -> ArtifactRecord:
-        if not isinstance(value, ArtifactRecord):
-            raise ExecutionFailure("MISSING_INPUT", "Save node needs an artifact.")
-        destination = self._resolve_grant(
-            str(node.parameters.get("destinationGrantId") or ""),
-            mode="write",
-            empty_message="Choose a destination file for Save Image.",
+    @staticmethod
+    def _safe_file_stem(value: str) -> str:
+        stem = Path(value).stem.strip()
+        cleaned = "".join(
+            "_" if character in '<>:"/\\|?*' or ord(character) < 32 else character
+            for character in stem
         )
-        source = Path(value.path)
-        temporary = destination.with_suffix(destination.suffix + ".tmp")
-        shutil.copy2(source, temporary)
-        temporary.replace(destination)
-        return self._artifacts.register_source(destination, media_type=value.media_type)
+        return cleaned.strip(" .") or "midgard-output"
+
+    @staticmethod
+    def _operation_suffix(schema_id: str) -> str:
+        return {
+            "midgard.image.remove_background": "nobg",
+            "midgard.image.remove_text": "nosub",
+            "midgard.video.remove_text": "nosub",
+            "midgard.image.upscale": "upscale",
+            "midgard.image.low_light": "lowlight",
+        }.get(schema_id, "")
+
+    def _lineage_file_name(
+        self,
+        control: _RunControl,
+        artifact: ArtifactRecord,
+        used_names: set[str],
+    ) -> str:
+        schemas_by_node = {item.id: item.schema_id for item in control.workflow.nodes}
+        suffixes: list[str] = []
+        source_name = Path(artifact.path).name
+        current = artifact
+        seen_artifacts: set[str] = set()
+        while current.artifact_id not in seen_artifacts:
+            seen_artifacts.add(current.artifact_id)
+            schema_id = current.creating_schema_id or schemas_by_node.get(
+                current.creating_node_id or "", ""
+            )
+            suffix = self._operation_suffix(schema_id)
+            if suffix and suffix not in suffixes:
+                suffixes.append(suffix)
+            if current.original_source_path:
+                source_name = Path(current.original_source_path).name
+                break
+            next_artifact = None
+            for input_id in current.input_artifact_ids:
+                try:
+                    candidate = self._artifacts.get(input_id)
+                except (KeyError, FileNotFoundError):
+                    continue
+                if candidate.original_source_path or candidate.input_artifact_ids:
+                    next_artifact = candidate
+                    break
+            if next_artifact is None:
+                break
+            current = next_artifact
+
+        ordered_suffix = "".join(f"_{item}" for item in reversed(suffixes))
+        extension = Path(artifact.path).suffix.lower() or Path(source_name).suffix.lower() or ".png"
+        stem = self._safe_file_stem(source_name)
+        candidate = f"{stem}{ordered_suffix}{extension}"
+        number = 1
+        while candidate.casefold() in used_names:
+            candidate = f"{stem}{ordered_suffix}-{number}{extension}"
+            number += 1
+        used_names.add(candidate.casefold())
+        return candidate
+
+    @staticmethod
+    def _available_destination(destination: Path, reserved: set[Path]) -> Path:
+        if not destination.exists() and destination not in reserved:
+            return destination
+        for number in range(1, 10_000):
+            alternate = destination.with_name(f"{destination.stem}-{number}{destination.suffix}")
+            if not alternate.exists() and alternate not in reserved:
+                return alternate
+        raise ExecutionFailure(
+            "OUTPUT_NAME_UNAVAILABLE",
+            f"No available name remains for {destination.name}.",
+        )
+
+    def _save_output(
+        self,
+        control: _RunControl,
+        node: WorkflowNode,
+        value: Any,
+    ) -> ArtifactRecord | list[ArtifactRecord]:
+        artifacts = _artifact_values(value)
+        if not artifacts:
+            raise ExecutionFailure("MISSING_INPUT", "Save node needs an artifact.")
+
+        grant_id = str(node.parameters.get("destinationGrantId") or "")
+        if node.schema_id == "midgard.output.save_video":
+            if len(artifacts) != 1:
+                raise ExecutionFailure("INVALID_BATCH", "Save Video accepts one video.")
+            destination = self._resolve_grant(
+                grant_id,
+                mode="write",
+                empty_message="Choose a destination file for Save Video.",
+            )
+            source = Path(artifacts[0].path)
+            temporary = destination.with_suffix(destination.suffix + ".tmp")
+            shutil.copy2(source, temporary)
+            temporary.replace(destination)
+            return self._artifacts.register_source(destination, media_type=artifacts[0].media_type)
+
+        directory = self._resolve_grant(
+            grant_id,
+            mode="directory",
+            empty_message="Choose a destination folder for Save Image.",
+        )
+        policy = str(node.parameters.get("conflictPolicy") or "ask")
+        if policy not in {"ask", "replace", "keep-both"}:
+            raise ExecutionFailure("INVALID_PARAMETER", "Choose a valid file conflict policy.")
+
+        used_names: set[str] = set()
+        targets = [
+            directory / self._lineage_file_name(control, item, used_names) for item in artifacts
+        ]
+        existing = [target for target in targets if target.exists()]
+        if existing and policy == "ask":
+            preview = ", ".join(item.name for item in existing[:3])
+            remainder = len(existing) - 3
+            if remainder > 0:
+                preview += f" and {remainder} more"
+            raise ExecutionFailure(
+                "OUTPUT_EXISTS",
+                f"{len(existing)} output file(s) already exist: {preview}. Choose Replace existing or Keep both on the Save Image node, then run again.",
+            )
+        if policy == "keep-both":
+            reserved: set[Path] = set()
+            targets = [self._available_destination(target, reserved) for target in targets]
+            reserved.update(targets)
+
+        saved: list[ArtifactRecord] = []
+        for artifact, destination in zip(artifacts, targets, strict=True):
+            temporary = destination.with_suffix(destination.suffix + f".{uuid4().hex}.tmp")
+            try:
+                shutil.copy2(Path(artifact.path), temporary)
+                temporary.replace(destination)
+            finally:
+                temporary.unlink(missing_ok=True)
+            saved.append(
+                self._artifacts.register_source(destination, media_type=artifact.media_type)
+            )
+        return saved
 
     def _composite_images(
         self,
@@ -926,6 +1056,7 @@ class RunManager:
             output_raw,
             run_id=control.snapshot.run_id,
             node_id=node.id,
+            schema_id=node.schema_id,
             inputs=input_artifacts,
             parameters_hash=cache_key,
         )
@@ -1014,32 +1145,115 @@ class RunManager:
             "output_path": output_raw,
         }
         if adapter == "enhance":
-            payload.update(
-                input_path=artifact_path("image"),
-                mode=params.get("model") or settings.enhancement.mode,
-                denoise=bool(params.get("denoise", settings.enhancement.denoise_enabled)),
-                denoise_strength=params.get("denoiseStrength")
-                or settings.enhancement.denoise_strength,
-                effective_settings={
-                    "max_long_edge": int(
-                        params.get("maxLongEdge") or settings.enhancement.max_long_edge
-                    )
-                },
-            )
+            model_value = params.get("model") or settings.enhancement.mode
+            if model_value == "SUPIR":
+                job_type = JobType.SUPIR
+                preset = str(params.get("supirPreset") or "quality")
+                preset_values = {
+                    "quality": {
+                        "s_cfg": 6.0,
+                        "spt_linear_cfg": 3.0,
+                        "s_noise": 1.02,
+                        "s_stage2": 0.93,
+                    },
+                    "fidelity": {
+                        "s_cfg": 4.0,
+                        "spt_linear_cfg": 1.0,
+                        "s_noise": 1.01,
+                        "s_stage2": 1.0,
+                    },
+                }.get(preset, {})
+                payload.update(
+                    input_path=artifact_path("image"),
+                    variant=params.get("supirVariant") or "Q",
+                    upscale=int(params.get("upscale", 2)),
+                    min_size=int(params.get("minSize", 1024)),
+                    edm_steps=int(params.get("edmSteps", 50)),
+                    s_stage1=float(params.get("sStage1", -1.0)),
+                    s_stage2=float(preset_values.get("s_stage2", params.get("sStage2", 1.0))),
+                    s_cfg=float(preset_values.get("s_cfg", params.get("sCfg", 4.0))),
+                    seed=int(params.get("seed", 1234)),
+                    s_churn=float(params.get("sChurn", 5)),
+                    s_noise=float(preset_values.get("s_noise", params.get("sNoise", 1.01))),
+                    prompt=params.get("prompt") or "",
+                    positive_prompt=params.get("positivePrompt") or "",
+                    negative_prompt=params.get("negativePrompt") or "",
+                    color_fix_type=params.get("colorFixType") or "Wavelet",
+                    linear_cfg=bool(params.get("linearCfg", True)),
+                    linear_s_stage2=bool(params.get("linearStage2", False)),
+                    spt_linear_cfg=float(
+                        preset_values.get("spt_linear_cfg", params.get("cfgStart", 1.0))
+                    ),
+                    spt_linear_s_stage2=float(params.get("stage2Start", 0.0)),
+                    gamma_correction=float(params.get("gammaCorrection", 1.0)),
+                    diff_dtype=params.get("diffDtype") or "fp16",
+                    ae_dtype=params.get("aeDtype") or "bf16",
+                    use_llava=bool(params.get("useLlava", True)),
+                    llava_temperature=float(params.get("llavaTemperature", 0.2)),
+                    llava_top_p=float(params.get("llavaTopP", 0.7)),
+                    llava_question=params.get("llavaQuestion") or "",
+                    load_8bit_llava=bool(params.get("load8BitLlava", False)),
+                    loading_half_params=bool(params.get("loadingHalfParams", False)),
+                    use_tile_vae=bool(params.get("useTileVae", False)),
+                    encoder_tile_size=int(params.get("encoderTileSize", 512)),
+                    decoder_tile_size=int(params.get("decoderTileSize", 64)),
+                )
+            else:
+                payload.update(
+                    input_path=artifact_path("image"),
+                    mode=model_value,
+                    denoise=bool(params.get("denoise", settings.enhancement.denoise_enabled)),
+                    denoise_strength=params.get("denoiseStrength")
+                    or settings.enhancement.denoise_strength,
+                    effective_settings={
+                        "max_long_edge": int(
+                            params.get("maxLongEdge") or settings.enhancement.max_long_edge
+                        )
+                    },
+                )
         elif adapter == "low_light":
             payload.update(
                 input_path=artifact_path("image"),
                 mode=params.get("model") or settings.low_light.mode,
             )
         elif adapter == "generate":
+            model_value = params.get("model") or settings.generation.mode
+            model_parameter = next(
+                item for item in get_node(node.schema_id).parameters if item.id == "model"
+            )
+            selected_option = next(
+                (item for item in model_parameter.options if item.get("value") == model_value),
+                None,
+            )
+            capabilities = selected_option.get("capabilities", {}) if selected_option else {}
+            step_contract = capabilities.get("steps") or {}
             payload.update(
                 prompt=inputs.get("prompt") or params.get("prompt") or "",
-                mode=params.get("model") or settings.generation.mode,
-                width=int(params.get("width") or settings.generation.width),
-                height=int(params.get("height") or settings.generation.height),
-                steps=int(params.get("steps") or settings.generation.steps),
+                mode=model_value,
+                width=int(
+                    params.get("width")
+                    or (capabilities.get("supportedWidths") or [settings.generation.width])[0]
+                ),
+                height=int(
+                    params.get("height")
+                    or (capabilities.get("supportedHeights") or [settings.generation.height])[0]
+                ),
+                steps=int(
+                    params.get("steps") or step_contract.get("default") or settings.generation.steps
+                ),
             )
-            if int(params.get("seed", -1)) >= 0:
+            if capabilities.get("guidance") is True:
+                payload["guidance"] = float(
+                    params.get(
+                        "guidance", (capabilities.get("guidanceScale") or {}).get("default", 1.0)
+                    )
+                )
+            if (
+                capabilities.get("negativePrompt") is True
+                and str(params.get("negativePrompt") or "").strip()
+            ):
+                payload["negative_prompt"] = str(params["negativePrompt"]).strip()
+            if capabilities.get("seed") is True and int(params.get("seed", -1)) >= 0:
                 payload["seed"] = int(params["seed"])
         elif adapter == "bg_remove":
             payload.update(
@@ -1184,6 +1398,7 @@ class RunManager:
             final_path,
             run_id=run_id,
             node_id=node.id,
+            schema_id=node.schema_id,
             inputs=input_artifacts,
             parameters_hash=cache_key,
         )
@@ -1251,6 +1466,7 @@ class RunManager:
             raw,
             run_id=control.snapshot.run_id,
             node_id=node.id,
+            schema_id=node.schema_id,
             inputs=inputs,
             parameters_hash=cache_key,
         )

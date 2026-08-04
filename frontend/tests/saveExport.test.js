@@ -2,16 +2,24 @@ import { expect, test } from "vitest";
 import {
   buildExportFileName,
   exportSuffixForSchema,
+  exportSuffixForSchemas,
   extensionForExport,
   fileStem,
 } from "../src/preview/saveExport";
 
 test("export suffixes follow remove-background and remove-text schemas", () => {
   expect(exportSuffixForSchema("midgard.image.remove_background")).toBe(
-    "_no_bg",
+    "_nobg",
   );
-  expect(exportSuffixForSchema("midgard.image.remove_text")).toBe("_no_sub");
-  expect(exportSuffixForSchema("midgard.video.remove_text")).toBe("_no_sub");
+  expect(exportSuffixForSchema("midgard.image.remove_text")).toBe("_nosub");
+  expect(exportSuffixForSchema("midgard.video.remove_text")).toBe("_nosub");
+  expect(exportSuffixForSchema("midgard.image.upscale")).toBe("_upscale");
+  expect(
+    exportSuffixForSchemas([
+      "midgard.image.remove_background",
+      "midgard.image.upscale",
+    ]),
+  ).toBe("_nobg_upscale");
   expect(exportSuffixForSchema("midgard.generate.image")).toBe("");
 });
 
@@ -19,17 +27,17 @@ test("export file names reuse the linked input stem with effect tags", () => {
   expect(
     buildExportFileName({
       sourceName: "/photos/clip.mp4",
-      suffix: "_no_sub",
+      suffix: "_nosub",
       mediaType: "video/mp4",
     }),
-  ).toBe("clip_no_sub.mp4");
+  ).toBe("clip_nosub.mp4");
   expect(
     buildExportFileName({
       sourceName: "portrait.JPG",
-      suffix: "_no_bg",
+      suffix: "_nobg",
       mediaType: "image/png",
     }),
-  ).toBe("portrait_no_bg.png");
+  ).toBe("portrait_nobg.png");
 });
 
 test("export file names avoid collisions inside one batch", () => {
@@ -37,19 +45,19 @@ test("export file names avoid collisions inside one batch", () => {
   expect(
     buildExportFileName({
       sourceName: "shot.png",
-      suffix: "_no_bg",
+      suffix: "_nobg",
       mediaType: "image/png",
       usedNames,
     }),
-  ).toBe("shot_no_bg.png");
+  ).toBe("shot_nobg.png");
   expect(
     buildExportFileName({
       sourceName: "shot.png",
-      suffix: "_no_bg",
+      suffix: "_nobg",
       mediaType: "image/png",
       usedNames,
     }),
-  ).toBe("shot_no_bg-1.png");
+  ).toBe("shot_nobg-1.png");
 });
 
 test("file stem and extension helpers stay conservative", () => {

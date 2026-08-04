@@ -28,14 +28,23 @@ export function ActionRow({ title, description, action, className = "" }) {
  *   children: import("react").ReactNode,
  *   onClick?: () => void,
  *   variant?: import("react").ComponentProps<typeof Button>["variant"],
+ *   className?: string,
+ *   disabled?: boolean,
  * }} props
  */
-export function CompactButton({ children, onClick, variant = "ghost" }) {
+export function CompactButton({
+  children,
+  onClick,
+  variant = "ghost",
+  className = "",
+  disabled = false,
+}) {
   return (
     <Button
       variant={variant}
-      className="min-h-7 shrink-0 px-2.5 text-[10px]"
+      className={cn("min-h-7 shrink-0 px-2.5 text-[10px]", className)}
       onClick={onClick}
+      disabled={disabled}
     >
       {children}
     </Button>

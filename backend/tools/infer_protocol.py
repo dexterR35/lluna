@@ -12,6 +12,7 @@ from backend.application.jobs import JobPhase
 @unique
 class JobType(str, Enum):
     ENHANCE = "enhance"
+    SUPIR = "supir"
     LOW_LIGHT = "low_light"
     GENERATE = "generate"
     BG_REMOVE = "bg_remove"

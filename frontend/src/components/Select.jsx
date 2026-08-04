@@ -2,36 +2,68 @@ import { forwardRef } from "react";
 import { cn } from "./utils";
 
 /** @typedef {{value: string|number, label: string, disabled?: boolean}} SelectOption */
-/** @typedef {import("react").SelectHTMLAttributes<HTMLSelectElement> & {label?: import("react").ReactNode, options?: SelectOption[], error?: import("react").ReactNode, hint?: import("react").ReactNode}} SelectProps */
+/**
+ * @typedef {import("react").SelectHTMLAttributes<HTMLSelectElement> & {
+ *   label?: import("react").ReactNode,
+ *   options?: SelectOption[],
+ *   error?: import("react").ReactNode,
+ *   hint?: import("react").ReactNode,
+ *   bare?: boolean,
+ *   controlSize?: "md" | "sm",
+ * }} SelectProps
+ */
 
 /** @param {SelectProps} props @param {import("react").ForwardedRef<HTMLSelectElement>} ref */
 function SelectComponent(
-  { label, options = [], error, hint, className = "", ...props },
+  {
+    label,
+    options = [],
+    error,
+    hint,
+    bare = false,
+    controlSize = "md",
+    className = "",
+    ...props
+  },
   ref,
 ) {
+  const id =
+    props.id ||
+    (label
+      ? `select-${String(label)
+          .toLowerCase()
+          .replaceAll(" ", "-")}`
+      : undefined);
+  const control = (
+    <select
+      ref={ref}
+      id={id}
+      aria-invalid={Boolean(error)}
+      className={cn(
+        "ui-control",
+        controlSize === "sm" && "ui-control-sm",
+        bare && controlSize !== "sm" && "ui-control-inline",
+        Boolean(error) && "border-mg-error",
+        className,
+      )}
+      {...props}
+    >
+      {options.map((option) => (
+        <option
+          key={String(option.value)}
+          value={option.value}
+          disabled={option.disabled}
+        >
+          {option.label}
+        </option>
+      ))}
+    </select>
+  );
+  if (bare && !label) return control;
   return (
-    <label className="ui-field-label">
+    <label className="ui-field-label" htmlFor={id}>
       {label && <span>{label}</span>}
-      <select
-        ref={ref}
-        aria-invalid={Boolean(error)}
-        className={cn(
-          "ui-control",
-          Boolean(error) && "border-mg-error",
-          className,
-        )}
-        {...props}
-      >
-        {options.map((option) => (
-          <option
-            key={String(option.value)}
-            value={option.value}
-            disabled={option.disabled}
-          >
-            {option.label}
-          </option>
-        ))}
-      </select>
+      {control}
       {error && (
         <span role="alert" className="ui-help text-mg-error">
           {error}

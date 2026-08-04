@@ -14,7 +14,7 @@ import { Check, Layers3, Play, X } from "lucide-react";
 import "@xyflow/react/dist/style.css";
 import { Badge, ContextMenu } from "../components";
 import { useDesktopStore } from "../state/desktopStore";
-import { boundsForNodes, useEditorStore } from "../state/editorStore";
+import { boundsForNodes, findFlowContainingPoint, useEditorStore } from "../state/editorStore";
 import { useRunStore } from "../state/runStore";
 import { useServerStore } from "../state/serverStore";
 import { useToast } from "../components/ToastContext";
@@ -249,9 +249,17 @@ function CanvasBody({
         x: event.clientX,
         y: event.clientY,
       });
+      const editor = useEditorStore.getState();
+      const targetFlow = findFlowContainingPoint(
+        editor.groups,
+        editor.nodes,
+        position,
+        editor.selectedGroupId,
+      );
+      const flowOptions = targetFlow ? { flowId: targetFlow.id } : undefined;
       const schemaId = event.dataTransfer.getData("application/x-midgard-node");
       if (schemaId) {
-        addNode(schemaId, position);
+        addNode(schemaId, position, flowOptions);
         return;
       }
       const files = [...event.dataTransfer.files];
@@ -273,6 +281,7 @@ function CanvasBody({
             const id = addNode(
               batch ? "midgard.input.images" : "midgard.input.image",
               { x: position.x, y: position.y },
+              flowOptions,
             );
             if (id) {
               useRunStore.getState().clearNodeResult(id);
@@ -299,10 +308,14 @@ function CanvasBody({
             offset += 1;
           }
           videoGrants.forEach((grant, index) => {
-            const id = addNode("midgard.input.video", {
-              x: position.x + (offset + index) * 28,
-              y: position.y + (offset + index) * 28,
-            });
+            const id = addNode(
+              "midgard.input.video",
+              {
+                x: position.x + (offset + index) * 28,
+                y: position.y + (offset + index) * 28,
+              },
+              flowOptions,
+            );
             if (!id) return;
             useRunStore.getState().clearNodeResult(id);
             useEditorStore.getState().updateNode(id, {
@@ -363,6 +376,29 @@ function CanvasBody({
         onDragOver={(event) => {
           event.preventDefault();
           event.dataTransfer.dropEffect = "copy";
+        }}
+        onNodeDragStop={(_, node) => {
+          const editor = useEditorStore.getState();
+          const alreadyInFlow = editor.groups.some(
+            (group) =>
+              group.kind === "flow" && group.nodeIds.includes(node.id),
+          );
+          if (alreadyInFlow) return;
+          const center = {
+            x:
+              node.position.x +
+              (node.measured?.width || node.width || 256) / 2,
+            y:
+              node.position.y +
+              (node.measured?.height || node.height || 190) / 2,
+          };
+          const targetFlow = findFlowContainingPoint(
+            editor.groups,
+            editor.nodes,
+            center,
+            editor.selectedGroupId,
+          );
+          if (targetFlow) editor.addNodesToFlow(targetFlow.id, [node.id]);
         }}
         onMove={(_, viewport) => onViewportChange?.(viewport)}
         onMoveEnd={(_, viewport) => {

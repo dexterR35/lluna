@@ -24,7 +24,7 @@ module.exports = {
     electronZipDir: process.env.MIDGARD_ELECTRON_ZIP_DIR || undefined,
     extraResource: [
       path.resolve(__dirname, "..", "build", "backend-sidecar", "midgard-backend"),
-      { from: path.resolve(__dirname, "assets", "app-icon"), to: "app-icon" },
+      path.resolve(__dirname, "assets", "app-icon"),
     ],
     afterCopyExtraResources: [
       (/** @type {string} */ buildPath, /** @type {string} */ _electronVersion, /** @type {string} */ _platform, /** @type {string} */ _arch, /** @type {(error?: unknown) => void} */ done) => {

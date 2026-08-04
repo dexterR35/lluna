@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useId, useRef } from "react";
 import { X } from "lucide-react";
 import { IconButton } from "./IconButton";
 
@@ -16,6 +16,9 @@ export function Dialog({
 }) {
   const panel = useRef(/** @type {HTMLElement | null} */ (null));
   const previous = useRef(/** @type {HTMLElement | null} */ (null));
+  const reactId = useId();
+  const titleId = `dialog-title-${reactId}`;
+  const descriptionId = `dialog-description-${reactId}`;
   useEffect(() => {
     if (!open) return;
     previous.current =
@@ -30,6 +33,8 @@ export function Dialog({
     );
     if (firstControl instanceof HTMLElement) firstControl.focus();
     function key(/** @type {KeyboardEvent} */ event) {
+      const dialogs = [...document.querySelectorAll("[role='dialog']")];
+      if (dialogs.at(-1) !== node) return;
       if (event.key === "Escape") {
         event.preventDefault();
         onClose();
@@ -72,21 +77,21 @@ export function Dialog({
         ref={panel}
         role="dialog"
         aria-modal="true"
-        aria-labelledby="dialog-title"
-        aria-describedby={description ? "dialog-description" : undefined}
+        aria-labelledby={titleId}
+        aria-describedby={description ? descriptionId : undefined}
         className={`max-h-[86vh] w-full ${wide ? "max-w-5xl" : "max-w-xl"} overflow-hidden rounded-mg-lg border border-mg-border bg-mg-panel shadow-soft ${className}`}
       >
         <header className="ui-preview-bar is-header h-auto items-start justify-between gap-3 px-4 py-3.5">
           <div className="min-w-0">
             <h2
-              id="dialog-title"
+              id={titleId}
               className="ui-copy-title"
             >
               {title}
             </h2>
             {description && (
               <p
-                id="dialog-description"
+                id={descriptionId}
                 className="ui-copy-body mt-1 leading-5"
               >
                 {description}

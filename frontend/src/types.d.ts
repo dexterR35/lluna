@@ -18,6 +18,8 @@ export interface ParameterOption {
   description?: string;
   disabled?: boolean;
   modelId?: string;
+  variant?: Record<string, any>;
+  capabilities?: Record<string, any>;
 }
 
 export interface ParameterDefinition {
@@ -31,6 +33,8 @@ export interface ParameterDefinition {
   step?: number;
   options?: ParameterOption[];
   description?: string;
+  capability?: string;
+  visibleForModels?: string[];
 }
 
 export interface ModelInventory extends Record<string, unknown> {
@@ -46,6 +50,25 @@ export interface ModelInventory extends Record<string, unknown> {
   can_install: boolean;
   can_uninstall: boolean;
   can_toggle: boolean;
+  dynamic?: boolean;
+  discovered?: boolean;
+  needs_configuration?: boolean;
+  task?: string;
+  adapter?: string;
+  variant?: Record<string, any>;
+  capabilities?: Record<string, any>;
+  manifest?: Record<string, any>;
+  runtime?: {
+    profile?: string;
+    backend?: string;
+    installed?: boolean;
+    compatible?: boolean;
+    reasons?: string[];
+    warnings?: string[];
+    packages?: string[];
+    isolated?: boolean;
+  };
+  setup?: Record<string, boolean>;
 }
 
 export interface DownloadJob {
@@ -109,6 +132,7 @@ export interface ArtifactMetadata {
   originalSourcePath?: string | null;
   creatingRunId?: string | null;
   creatingNodeId?: string | null;
+  creatingSchemaId?: string;
   inputArtifactIds?: string[];
 }
 
@@ -198,11 +222,18 @@ export interface MidgardDesktopApi {
   registerDroppedFiles(files: File[]): Promise<DesktopGrant[]>;
   selectVideoFiles(): Promise<DesktopGrant[]>;
   selectMaskFile(): Promise<DesktopGrant | null>;
+  selectModelFile(): Promise<DesktopGrant | null>;
+  selectModelFolder(): Promise<DesktopGrant | null>;
   selectDirectory(): Promise<DesktopGrant | null>;
   selectSaveFile(kind: "image" | "video"): Promise<DesktopGrant | null>;
   writeGrantInDirectory(directoryGrantId: string, fileName: string): Promise<DesktopGrant>;
+  prepareDirectoryWrites(
+    directoryGrantId: string,
+    fileNames: string[],
+  ): Promise<DesktopGrant[] | null>;
   revealPath(grantId: string): Promise<boolean>;
   openExternal(urlId: string): Promise<void>;
+  openHuggingFace(url: string): Promise<void>;
   getPlatformInfo(): Promise<Record<string, unknown>>;
   setRunProgress(progress: number): void;
   onMenuCommand(callback: (command: string) => void): () => void;
@@ -261,7 +292,8 @@ export interface EditorState extends EditorSnapshot {
   project: EditorProject;
   definitions: NodeDefinition[];
   setDefinitions(definitions: NodeDefinition[]): void;
-  addNode(schemaId: string, position?: {x: number; y: number}): string | null;
+  addNode(schemaId: string, position?: {x: number; y: number}, options?: {flowId?: string}): string | null;
+  addNodesToFlow(flowId: string, nodeIds: string[]): string | null;
   onNodesChange(changes: import("@xyflow/react").NodeChange<EditorNode>[]): void;
   onEdgesChange(changes: import("@xyflow/react").EdgeChange<EditorEdge>[]): void;
   canConnect(connection: import("@xyflow/react").Connection | EditorEdge): ConnectionResult;
@@ -374,6 +406,7 @@ export interface ServerState {
   error: string | null;
   bootstrap(): Promise<void>;
   refreshModels(): Promise<ModelInventory[]>;
+  refreshNodes(): Promise<NodeDefinition[]>;
   refreshDownloads(): Promise<DownloadQueueState>;
   setModelLifecycleState(id: string, patch: Partial<ModelInventory>): void;
   updateSettings(patch: Record<string, any>): Promise<void>;

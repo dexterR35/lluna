@@ -82,6 +82,8 @@ function FileField({
   async function choose() {
     const desktop = window.midgardDesktop;
     if (!desktop) return;
+    if (definition.type === "directory")
+      return selectGrant(() => desktop.selectDirectory());
     if (definition.type === "saveFile")
       return selectGrant(() =>
         desktop.selectSaveFile(kind === "video" ? "video" : "image"),
@@ -128,13 +130,20 @@ function FileField({
     );
   }
 
-  if (definition.type === "saveFile")
+  if (["directory", "saveFile"].includes(definition.type))
     return (
       <div className="ui-field-label">
         <span>{definition.label}</span>
         <Button variant="secondary" onClick={choose} disabled={loading}>
           {loading && <LoaderCircle className="ui-icon-sm animate-spin" />}
-          {value ? "Change save location" : "Choose save location"}
+          {value
+            ? selectedName ||
+              (definition.type === "directory"
+                ? "Change destination folder"
+                : "Change save location")
+            : definition.type === "directory"
+              ? "Choose destination folder"
+              : "Choose save location"}
         </Button>
       </div>
     );
@@ -247,6 +256,21 @@ export function NodeParameterField({
         onChange={onChange}
       />
     );
+  if (definition.options?.length)
+    return (
+      <Select
+        label={definition.label}
+        hint={definition.description}
+        value={String(value ?? definition.default ?? "")}
+        options={definition.options}
+        onChange={(event) => {
+          const selected = definition.options?.find(
+            (option) => String(option.value) === event.target.value,
+          );
+          onChange(selected?.value ?? event.target.value);
+        }}
+      />
+    );
   if (["number", "integer"].includes(definition.type))
     return (
       <NumberField
@@ -270,17 +294,7 @@ export function NodeParameterField({
         onChange={(event) => onChange(event.target.value)}
       />
     );
-  if (definition.options?.length)
-    return (
-      <Select
-        label={definition.label}
-        hint={definition.description}
-        value={String(value ?? "")}
-        options={definition.options}
-        onChange={(event) => onChange(event.target.value)}
-      />
-    );
-  if (["file", "files", "saveFile"].includes(definition.type))
+  if (["file", "files", "directory", "saveFile"].includes(definition.type))
     return (
       <FileField
         definition={definition}

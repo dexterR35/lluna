@@ -1,7 +1,5 @@
 import {
   Box,
-  Check,
-  Cpu,
   Database,
   Image as ImageIcon,
   Settings2,
@@ -15,58 +13,19 @@ import {
   Dialog,
   EmptyState,
   IconTile,
+  Select,
   TextField,
 } from "../components";
 import { useEditorStore } from "../state/editorStore";
 import { useRunStore } from "../state/runStore";
 import { useServerStore } from "../state/serverStore";
 import { NodeParameterField } from "./NodeParameterField";
-import { enabledModelOptions, inventoryForOption } from "../models/modelAvailability";
-
-/** @param {{option: import("../types").ParameterOption, selected: boolean, inventory?: Record<string, any>, onSelect: () => void}} props */
-function ModelRow({ option, selected, inventory, onSelect }) {
-  const installed = inventory?.installed;
-  return (
-    <button
-      type="button"
-      aria-pressed={selected}
-      onClick={onSelect}
-      className={`ui-nav-item h-auto items-start py-2 ${selected ? "is-active" : ""}`}
-    >
-      <span
-        className={`mt-0.5 grid size-4 shrink-0 place-items-center rounded-full border ${selected ? "border-mg-accent bg-mg-accent text-white" : "border-mg-border text-transparent"}`}
-      >
-        <Check className="ui-icon-xs" />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="ui-actions">
-          <strong className="ui-copy-title truncate text-[12px]">
-            {option.label}
-          </strong>
-          {installed !== undefined && (
-            <Badge size="xs" tone={installed ? "success" : "neutral"}>
-              {installed ? "Installed" : "On demand"}
-            </Badge>
-          )}
-        </span>
-        {option.description && (
-          <span className="ui-copy-muted mt-0.5 block leading-4">
-            {option.description}
-          </span>
-        )}
-        {inventory && (
-          <span className="ui-copy-muted mt-1 ui-inline gap-1">
-            <Cpu className="ui-icon-xs" />
-            {inventory.framework || inventory.capability || "Local model"}
-            {inventory.minimum_vram_mb
-              ? ` · ${Math.round(inventory.minimum_vram_mb / 1024)} GB VRAM`
-              : ""}
-          </span>
-        )}
-      </span>
-    </button>
-  );
-}
+import { enabledModelOptions } from "../models/modelAvailability";
+import {
+  applyCapabilityDefaults,
+  capabilityContract,
+  parametersForCapabilities,
+} from "../models/modelCapabilities";
 
 /** @param {{ids?: string[], models: Record<string, any>[]}} props */
 function RequiredModels({ ids, models }) {
@@ -120,11 +79,14 @@ export function NodeEditorDialog({ nodeId, onClose, onManageModels }) {
   const selectedOption = modelOptions.find(
     (option) => option.value === currentModel,
   );
+  const selectedCapabilities = capabilityContract(selectedOption);
   const effectiveRequiredModels = selectedOption?.modelId
     ? [selectedOption.modelId]
     : definition?.requiredModels || [];
-  const operationParameters = parameters.filter(
-    (parameter) => parameter.id !== "model",
+  const operationParameters = parametersForCapabilities(
+    parameters.filter((parameter) => parameter.id !== "model"),
+    selectedCapabilities,
+    String(currentModel),
   );
   const persistedResult = node.data.result;
   const artifactIds = liveRun?.artifactIds?.length
@@ -139,9 +101,13 @@ export function NodeEditorDialog({ nodeId, onClose, onManageModels }) {
     /** @type {import("../types").DesktopGrant | import("../types").DesktopGrant[] | undefined} */ selection = undefined,
   ) {
     if (!parameter) return;
+    const nextParameters = {
+      ...activeNode.data.parameters,
+      [parameter.id]: value,
+    };
     /** @type {Partial<import("../types").WorkflowNodeData>} */
     const changes = {
-      parameters: { ...activeNode.data.parameters, [parameter.id]: value },
+      parameters: nextParameters,
     };
     const selections = Array.isArray(selection)
       ? selection
@@ -151,6 +117,12 @@ export function NodeEditorDialog({ nodeId, onClose, onManageModels }) {
     const artifactIds = selections.flatMap((item) =>
       item.artifactId ? [item.artifactId] : [],
     );
+    if (selections.length && !artifactIds.length) {
+      nextParameters[`${parameter.id}Name`] =
+        selections.length === 1
+          ? selections[0].name
+          : `${selections.length} selections`;
+    }
     if (artifactIds.length) {
       useRunStore.getState().clearNodeResult(activeNode.id);
       changes.result = {
@@ -164,6 +136,15 @@ export function NodeEditorDialog({ nodeId, onClose, onManageModels }) {
       };
     }
     update(activeNode.id, changes);
+  }
+
+  function selectModel(/** @type {import("../types").ParameterOption} */ option) {
+    const capabilities = capabilityContract(option);
+    update(activeNode.id, {
+      parameters: capabilities?.complete
+        ? applyCapabilityDefaults(activeNode.data.parameters || {}, capabilities, option.value)
+        : { ...activeNode.data.parameters, model: option.value },
+    });
   }
 
   return (
@@ -191,33 +172,57 @@ export function NodeEditorDialog({ nodeId, onClose, onManageModels }) {
               <p className="ui-copy-muted">Stored with this node</p>
             </div>
           </div>
-          {modelOptions.length ? (
-            <div className="ui-stack-xs">
-              {modelOptions.map((option) => (
-                <ModelRow
-                  key={option.value}
-                  option={option}
-                  selected={option.value === currentModel}
-                  inventory={inventoryForOption(option, models)}
-                  onSelect={() => setParameter(modelParameter, option.value)}
-                />
-              ))}
-            </div>
+          {modelParameter ? (
+            modelOptions.length ? (
+              <Select
+                label="Model"
+                value={String(currentModel ?? "")}
+                options={modelOptions.map((option) => ({
+                  value: String(option.value),
+                  label: option.label,
+                  disabled: option.disabled,
+                }))}
+                hint={selectedOption?.description}
+                onChange={(event) => {
+                  const option = modelOptions.find(
+                    (candidate) =>
+                      String(candidate.value) === event.target.value,
+                  );
+                  if (option) selectModel(option);
+                }}
+              />
+            ) : (
+              <EmptyState
+                icon={<Box className="ui-icon-lg" />}
+                title="No enabled model"
+                description="Install and enable a compatible model in Model settings."
+                compact
+              />
+            )
           ) : (
             <EmptyState
               icon={<Box className="ui-icon-lg" />}
-              title={modelParameter ? "No enabled model" : "No model choice"}
+              title="No model choice"
               description={
-                modelParameter
-                  ? "Install and enable a compatible model in Model settings."
-                  : definition?.requiredModels?.length
-                    ? "This operation uses its required bundled model."
-                    : "This node does not run an AI model."
+                definition?.requiredModels?.length
+                  ? "This operation uses its required bundled model."
+                  : "This node does not run an AI model."
               }
               compact
             />
           )}
           <div className="mt-3">
+            {selectedOption?.variant && (
+              <div className="ui-actions mb-2 justify-start">
+                <Badge tone="accent">{selectedOption.variant.kind}</Badge>
+                {selectedOption.variant.quantization && (
+                  <Badge tone="neutral">{selectedOption.variant.quantization}</Badge>
+                )}
+                <Badge tone={selectedCapabilities?.complete ? "success" : "warning"}>
+                  {selectedCapabilities?.complete ? "Reviewed settings" : "Needs configuration"}
+                </Badge>
+              </div>
+            )}
             <RequiredModels ids={effectiveRequiredModels} models={models} />
           </div>
           {effectiveRequiredModels?.length > 0 && (
@@ -266,14 +271,6 @@ export function NodeEditorDialog({ nodeId, onClose, onManageModels }) {
                 update(node.id, { label: event.target.value })
               }
             />
-            {selectedOption && (
-              <p className="ui-copy-muted">
-                Selected model{" "}
-                <span className="font-medium text-mg-primary">
-                  {selectedOption.label}
-                </span>
-              </p>
-            )}
             {operationParameters.length ? (
               <div className="grid grid-cols-2 gap-3">
                 {operationParameters.map((parameter) => (
@@ -284,6 +281,7 @@ export function NodeEditorDialog({ nodeId, onClose, onManageModels }) {
                       parameter.type === "json" ||
                       parameter.type === "file" ||
                       parameter.type === "files" ||
+                      parameter.type === "directory" ||
                       parameter.type === "saveFile"
                         ? "col-span-2"
                         : ""
@@ -296,7 +294,10 @@ export function NodeEditorDialog({ nodeId, onClose, onManageModels }) {
                       selectedName={
                         ["file", "files"].includes(parameter.type)
                           ? node.data.result?.sourceName
-                          : undefined
+                          : String(
+                              node.data.parameters?.[`${parameter.id}Name`] ||
+                                "",
+                            ) || undefined
                       }
                       onChange={(value, selection) =>
                         setParameter(parameter, value, selection)

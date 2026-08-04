@@ -144,6 +144,7 @@ class ArtifactStore:
         run_id: str,
         node_id: str,
         inputs: list[ArtifactRecord],
+        schema_id: str = "",
         media_type: str | None = None,
         parameters_hash: str = "",
     ) -> ArtifactRecord:
@@ -170,6 +171,7 @@ class ArtifactStore:
             alpha=alpha,
             creating_run_id=run_id,
             creating_node_id=node_id,
+            creating_schema_id=schema_id,
             input_artifact_ids=[item.artifact_id for item in inputs],
             parameters_hash=parameters_hash,
         )

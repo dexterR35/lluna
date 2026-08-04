@@ -6,7 +6,7 @@ import { app, BrowserWindow, dialog, ipcMain, powerSaveBlocker, shell } from "el
 
 import { installNativeMenu } from "./native-menu.js";
 import { startPythonControlPlane } from "./python-process.js";
-import { installContentSecurityPolicy, installWindowSecurity, openApprovedExternal } from "./security.js";
+import { installContentSecurityPolicy, installWindowSecurity, openApprovedExternal, openApprovedHuggingFace } from "./security.js";
 import { createWindowStateStore } from "./window-state.js";
 
 /** @typedef {Awaited<ReturnType<typeof startPythonControlPlane>>} BackendProcess */
@@ -40,6 +40,28 @@ async function registerPathGrant(filePath, mode) {
   const grant = await response.json();
   grants.set(grant.grantId, filePath);
   return grant;
+}
+
+/** @param {unknown} fileName */
+function safeExportName(fileName) {
+  const safeName = path.basename(String(fileName || "").trim());
+  if (!safeName || safeName === "." || safeName === "..") {
+    throw new Error("Invalid export file name");
+  }
+  return safeName;
+}
+
+/** @param {string} directoryPath @param {string} fileName @param {Set<string>} reserved */
+function availableExportPath(directoryPath, fileName, reserved = new Set()) {
+  const safeName = safeExportName(fileName);
+  const parsed = path.parse(safeName);
+  let candidate = path.join(directoryPath, safeName);
+  if (!fs.existsSync(candidate) && !reserved.has(candidate)) return candidate;
+  for (let number = 1; number < 10_000; number += 1) {
+    candidate = path.join(directoryPath, `${parsed.name}-${number}${parsed.ext}`);
+    if (!fs.existsSync(candidate) && !reserved.has(candidate)) return candidate;
+  }
+  throw new Error("No available export file name in that folder");
 }
 
 /** @param {string} filePath @param {Record<string, any>} document */
@@ -99,6 +121,12 @@ function installIpc() {
   ipcMain.handle("files:dropped", async (_event, /** @type {string[]} */ paths) => Promise.all(paths.map(async (filePath) => ({ ...(await registerPathGrant(filePath, "read")), name: path.basename(filePath) }))));
   ipcMain.handle("files:videos", () => chooseFiles("Videos", ["mp4", "mov", "mkv", "webm", "avi"]));
   ipcMain.handle("files:mask", async () => (await chooseFiles("Mask", ["png", "jpg", "jpeg", "webp"])).at(0) || null);
+  ipcMain.handle("models:file", async () => (await chooseFiles("Model", ["safetensors", "onnx", "pth", "pt", "ckpt", "bin"])).at(0) || null);
+  ipcMain.handle("models:folder", async () => {
+    if (!mainWindow) throw new Error("Main window is unavailable");
+    const result = await dialog.showOpenDialog(mainWindow, { title: "Select model folder", properties: ["openDirectory"] });
+    return result.canceled ? null : registerPathGrant(result.filePaths[0], "directory");
+  });
   ipcMain.handle("files:directory", async () => {
     if (!mainWindow) throw new Error("Main window is unavailable");
     const result = await dialog.showOpenDialog(mainWindow, { properties: ["openDirectory", "createDirectory"] });
@@ -113,23 +141,41 @@ function installIpc() {
   ipcMain.handle("files:write-in-directory", async (_event, directoryGrantId, fileName) => {
     const directoryPath = grants.get(directoryGrantId);
     if (!directoryPath) throw new Error("Unknown directory grant");
-    const safeName = path.basename(String(fileName || "").trim());
-    if (!safeName || safeName === "." || safeName === "..") {
-      throw new Error("Invalid export file name");
-    }
-    const parsed = path.parse(safeName);
-    let candidate = path.join(directoryPath, safeName);
-    if (fs.existsSync(candidate)) {
-      for (let number = 1; number < 10_000; number += 1) {
-        const alternate = path.join(directoryPath, `${parsed.name}-${number}${parsed.ext}`);
-        if (!fs.existsSync(alternate)) {
-          candidate = alternate;
-          break;
-        }
-      }
-      if (fs.existsSync(candidate)) throw new Error("No available export file name in that folder");
-    }
+    const candidate = availableExportPath(directoryPath, fileName);
     return registerPathGrant(candidate, "write");
+  });
+  ipcMain.handle("files:prepare-directory-writes", async (_event, directoryGrantId, fileNames) => {
+    if (!mainWindow) throw new Error("Main window is unavailable");
+    const directoryPath = grants.get(directoryGrantId);
+    if (!directoryPath) throw new Error("Unknown directory grant");
+    if (!Array.isArray(fileNames) || !fileNames.length) return [];
+    const safeNames = fileNames.map(safeExportName);
+    let destinations = safeNames.map(fileName => path.join(directoryPath, fileName));
+    const existing = destinations.filter(candidate => fs.existsSync(candidate));
+    if (existing.length) {
+      const sample = existing.slice(0, 3).map(candidate => path.basename(candidate)).join(", ");
+      const remainder = existing.length > 3 ? ` and ${existing.length - 3} more` : "";
+      const choice = await dialog.showMessageBox(mainWindow, {
+        type: "warning",
+        title: "Files already exist",
+        message: `${existing.length} file${existing.length === 1 ? "" : "s"} already exist in this folder.`,
+        detail: `${sample}${remainder}\n\nDo you want to replace them or keep both versions?`,
+        buttons: ["Replace existing", "Keep both", "Cancel"],
+        defaultId: 2,
+        cancelId: 2,
+        noLink: true,
+      });
+      if (choice.response === 2) return null;
+      if (choice.response === 1) {
+        const reserved = new Set();
+        destinations = safeNames.map(fileName => {
+          const destination = availableExportPath(directoryPath, fileName, reserved);
+          reserved.add(destination);
+          return destination;
+        });
+      }
+    }
+    return Promise.all(destinations.map(destination => registerPathGrant(destination, "write")));
   });
   ipcMain.handle("native:reveal", async (_event, grantId) => {
     const filePath = grants.get(grantId);
@@ -138,6 +184,7 @@ function installIpc() {
     return true;
   });
   ipcMain.handle("native:external", (_event, id) => openApprovedExternal(id));
+  ipcMain.handle("native:huggingface", (_event, url) => openApprovedHuggingFace(String(url)));
   ipcMain.handle("native:platform", () => ({ platform: process.platform, arch: process.arch, version: app.getVersion(), packaged: app.isPackaged }));
   ipcMain.on("run:progress", (_event, progress) => {
     const value = Number(progress);

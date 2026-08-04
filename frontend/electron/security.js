@@ -5,6 +5,9 @@ const EXTERNAL_URLS = Object.freeze({
   homepage: "https://github.com/dexterR35/midgard",
   releases: "https://github.com/dexterR35/midgard/releases",
   issues: "https://github.com/dexterR35/midgard/issues",
+  supir: "https://github.com/Fanghua-Yu/SUPIR",
+  "supir-downloads": "https://drive.google.com/drive/folders/1yELzm5SvAi9e7kPcO_jPp2XkTs4vK6aR",
+  "supir-mirror": "https://huggingface.co/XCogni/Supir",
 });
 
 /** @param {string} rawUrl @param {string | undefined} devServerUrl */
@@ -53,4 +56,13 @@ async function openApprovedExternal(id) {
   await shell.openExternal(url);
 }
 
-export { installWindowSecurity, installContentSecurityPolicy, openApprovedExternal };
+/** @param {string} rawUrl */
+async function openApprovedHuggingFace(rawUrl) {
+  const url = new URL(rawUrl);
+  if (url.protocol !== "https:" || url.hostname !== "huggingface.co") {
+    throw new Error("Only huggingface.co links may be opened from the model manager");
+  }
+  await shell.openExternal(url.toString());
+}
+
+export { installWindowSecurity, installContentSecurityPolicy, openApprovedExternal, openApprovedHuggingFace };

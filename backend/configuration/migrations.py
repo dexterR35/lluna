@@ -14,6 +14,7 @@ _MODERN_SECTIONS = {
     "low_light",
     "generation",
     "object_selection",
+    "models",
 }
 
 
@@ -88,5 +89,6 @@ def migrate_mapping(raw: Mapping[str, Any]) -> dict[str, Any]:
             "steps": generation.get("Steps", 4),
         },
         "object_selection": {"more_complex": object_selection.get("MoreComplex", False)},
+        "models": {},
         "save_directory": main.get("SaveDirectory", ""),
     }

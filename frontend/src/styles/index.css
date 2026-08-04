@@ -111,6 +111,9 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   .ui-control {
     @apply h-9 w-full rounded-xl border border-mg-border bg-mg-app px-3 text-xs text-mg-primary outline-none transition placeholder:text-mg-muted hover:border-mg-secondary/50 focus:border-mg-focus focus:ring-2 focus:ring-mg-focus/20 disabled:cursor-not-allowed disabled:opacity-50;
   }
+  .ui-control-sm {
+    @apply h-7 w-auto max-w-37 min-w-24 cursor-pointer appearance-none rounded-full px-2.5 text-[10px] font-medium tracking-tight;
+  }
   .ui-control-inline {
     @apply h-7 max-w-52 min-w-28 truncate border-transparent bg-transparent px-1.5 font-semibold tracking-tight hover:border-mg-border focus:border-mg-secondary/40 focus:bg-mg-elevated focus:ring-0;
   }
@@ -215,9 +218,9 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   }
   .ui-settings-nav .ui-kicker { @apply mb-2; }
   .ui-settings-main { @apply min-h-0 overflow-y-auto p-6; }
-  .ui-settings-header { @apply mb-4 border-b border-mg-border pb-3; }
-  .ui-settings-header .ui-copy-title { @apply text-[13px]; }
-  .ui-settings-header .ui-copy-muted { @apply mt-1 text-[11px]; }
+  .ui-settings-header { @apply mb-3 border-b border-mg-border pb-2.5; }
+  .ui-settings-header .ui-copy-title { @apply text-[12px]; }
+  .ui-settings-header .ui-copy-muted { @apply mt-0.5 text-[10px]; }
   .ui-settings-footer {
     @apply mt-1 flex justify-end border-t border-mg-border pt-2.5;
   }
@@ -246,7 +249,7 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
 .midgard-node {
   position: relative;
   display: flex;
-  width: 280px;
+  width: 312px;
   flex-direction: column;
   overflow: visible;
   border: 1px solid var(--mg-border);
@@ -261,10 +264,10 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
 .midgard-node.is-disabled { opacity: .5; }
 .midgard-node-header {
   display: flex;
-  min-height: 40px;
+  min-height: 44px;
   align-items: center;
   gap: 8px;
-  padding: 10px 14px 6px;
+  padding: 12px 14px 8px;
 }
 .midgard-node-title {
   min-width: 0;
@@ -279,7 +282,7 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
 .midgard-node-body {
   position: relative;
   display: flex;
-  min-height: 168px;
+  min-height: 196px;
   flex: 1;
   flex-direction: column;
   margin: 0 10px;
@@ -292,13 +295,13 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
 .midgard-node-body [aria-label^="Loading"],
 .midgard-node-body .border-y {
   height: 100%;
-  min-height: 168px;
+  min-height: 196px;
   border: 0 !important;
 }
 .midgard-node-thumbs {
   display: grid;
   flex: 1;
-  min-height: 168px;
+  min-height: 196px;
   grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
   gap: 4px;
   padding: 6px;
@@ -314,7 +317,7 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
 }
 .midgard-node-stage {
   display: grid;
-  min-height: 168px;
+  min-height: 196px;
   flex: 1;
   place-items: center;
 }
@@ -349,7 +352,7 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 10px 12px 12px;
+  padding: 12px 12px 14px;
 }
 .midgard-node-footer-options,
 .midgard-node-footer-actions {
@@ -365,8 +368,8 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
 }
 .midgard-node-gear {
   display: grid;
-  width: 28px;
-  height: 28px;
+  width: 34px;
+  height: 34px;
   place-items: center;
   border: 0;
   border-radius: var(--mg-radius-pill);
@@ -376,21 +379,28 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   transition: color .15s ease, background-color .15s ease;
 }
 .midgard-node-gear:hover { background: var(--mg-bg-elevated); color: var(--mg-text-primary); }
+.midgard-node-gear > svg {
+  width: 18px;
+  height: 18px;
+}
 .midgard-node-run {
   display: grid;
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   place-items: center;
   border: 0;
   border-radius: var(--mg-radius-pill);
-  background: #eceff4;
-  color: #111318;
+  background: var(--mg-accent);
+  color: #fff;
   cursor: pointer;
   transition: filter .15s ease, opacity .15s ease;
 }
-.midgard-node.is-selected .midgard-node-run { background: #fff; }
-.midgard-node-run:hover { filter: brightness(1.05); }
+.midgard-node-run:hover { filter: brightness(1.08); }
 .midgard-node-run:disabled { cursor: not-allowed; opacity: .45; }
+.midgard-node-run > svg {
+  width: 16px;
+  height: 16px;
+}
 
 .react-flow__handle.midgard-port-handle {
   display: grid;

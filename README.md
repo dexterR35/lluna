@@ -159,6 +159,37 @@ Everything below runs **locally**. Check each license before use ([third-party n
 
 Install only what you need. One model downloads at a time; the queue is in **Activity → Downloads**.
 
+### Custom models and Hugging Face
+
+Open **Settings → Local model manager → Add model** to:
+
+- paste a Hugging Face repository link;
+- import a local model folder; or
+- import a `.safetensors`, `.onnx`, `.pth`, `.pt`, `.ckpt`, or `.bin` weight file.
+
+Midgard analyzes repository metadata, license, download size, runtime, disk, RAM,
+VRAM, and backend compatibility before installation. Hugging Face downloads are
+pinned to the analyzed commit, restricted to reviewed files, staged outside the
+active model directory, verified, and promoted atomically. Fine-grained and
+read-only Hugging Face tokens can be connected from the same panel; supported
+operating systems use their credential store, with a permission-restricted local
+fallback.
+
+Managed user models live under `models/custom/<model-id>/` and use a versioned
+`midgard-model.json`. Folders dropped into `models/custom/` are discovered
+automatically; folders without a manifest appear as **Needs configuration**.
+Each manifest contains a reviewed capability contract. Node controls change with
+the selected model—for example, distilled models expose their smaller step range,
+while guidance, negative prompt, dtype, LoRA, ControlNet, inpainting, and
+upscaler controls appear only when declared. Hugging Face metadata and safe local
+JSON inspection can prefill the review, but unknown facts are never guessed and
+keep the model disabled.
+Remote repository code is disabled, SafeTensors is preferred, and legacy
+pickle-capable weights require explicit opt-in. Repository `requirements.txt`
+files are never installed into Midgard's main environment. See
+[the model platform guide](backend/models/PLATFORM.md) and
+[manifest schema](backend/models/model-manifest.schema.json).
+
 ---
 
 ## Nodes you’ll use most

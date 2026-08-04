@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 
 from backend.api.auth import require_token
-from backend.graph.registry import NODE_REGISTRY, list_nodes
+from backend.graph.registry import get_node, list_nodes
 
 router = APIRouter(prefix="/api/nodes", dependencies=[Depends(require_token)])
 
@@ -15,7 +15,8 @@ def nodes() -> list[dict]:
 
 @router.get("/{schema_id}")
 def node(schema_id: str) -> dict:
-    definition = NODE_REGISTRY.get(schema_id)
-    if definition is None:
+    try:
+        definition = get_node(schema_id)
+    except KeyError:
         raise HTTPException(status_code=404, detail="Unknown node schema")
     return definition.model_dump(mode="json", by_alias=True)

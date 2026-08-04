@@ -41,6 +41,19 @@ def test_processing_nodes_publish_explicit_model_choices_and_defaults():
         assert all(option.get("modelId") for option in model.options)
 
 
+def test_supir_is_a_reviewed_upscale_option_with_model_specific_controls():
+    upscale = next(item for item in list_nodes() if item.schema_id == "midgard.image.upscale")
+    model = next(item for item in upscale.parameters if item.id == "model")
+    supir = next(item for item in model.options if item["value"] == "SUPIR")
+    assert supir["modelId"] == "supir"
+    assert supir["capabilities"]["complete"] is True
+    parameters = {item.id: item for item in upscale.parameters}
+    assert parameters["edmSteps"].visible_for_models == ["SUPIR"]
+    assert parameters["useLlava"].default is True
+    assert parameters["useTileVae"].visible_for_models == ["SUPIR"]
+    assert "SUPIR" not in parameters["denoise"].visible_for_models
+
+
 def test_image_queue_and_composite_nodes_publish_batch_contracts():
     catalog = {item.schema_id: item for item in list_nodes()}
     source = catalog["midgard.input.images"]
@@ -106,7 +119,7 @@ def test_incompatible_connection_and_cycle_are_rejected():
     assert any(issue.code == "INCOMPATIBLE_PORTS" for issue in validate_workflow(workflow).issues)
 
 
-def test_known_batch_cannot_flow_into_a_scalar_only_output():
+def test_known_batch_can_flow_into_batch_save_output():
     source = node("midgard.input.images", "source")
     source.parameters = {"pathGrantIds": ["one", "two"]}
     enhance = node("midgard.image.upscale", "enhance")
@@ -129,8 +142,12 @@ def test_known_batch_cannot_flow_into_a_scalar_only_output():
         ],
     )
     result = validate_workflow(workflow)
-    assert not result.valid
-    assert any(issue.code == "BATCH_TO_SCALAR" for issue in result.issues)
+    assert result.valid, result.issues
+    catalog = {item.schema_id: item for item in list_nodes()}
+    save_definition = catalog["midgard.output.save_image"]
+    assert save_definition.inputs[0].multiple
+    assert save_definition.outputs[0].multiple
+    assert save_definition.supports_preview
 
 
 def test_repeated_processor_is_rejected_only_inside_the_planned_path():

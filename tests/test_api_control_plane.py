@@ -1,6 +1,7 @@
+import asyncio
 import time
 
-from fastapi.testclient import TestClient
+import httpx
 from PIL import Image
 
 from backend.api.app import create_app
@@ -19,13 +20,19 @@ def test_health_ready_and_authenticated_catalog(monkeypatch, tmp_path):
     monkeypatch.setenv("MIDGARD_TESTING", "1")
     monkeypatch.setenv("MIDGARD_DISABLE_MODEL_DOWNLOADS", "1")
     token = "test-session-token-that-is-at-least-thirty-two-characters"  # noqa: S105
-    with TestClient(create_app(token)) as client:
-        assert client.get("/health").json() == {"status": "healthy"}
-        assert client.get("/ready").json() == {"ready": True}
-        assert client.get("/api/nodes").status_code == 401
-        response = client.get("/api/nodes", headers={"X-Midgard-Token": token})
-        assert response.status_code == 200
-        assert any(item["schemaId"] == "midgard.generate.image" for item in response.json())
+    app = create_app(token)
+
+    async def scenario():
+        async with app.router.lifespan_context(app):
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+                assert (await client.get("/health")).json() == {"status": "healthy"}
+                assert (await client.get("/ready")).json() == {"ready": True}
+                assert (await client.get("/api/nodes")).status_code == 401
+                response = await client.get("/api/nodes", headers={"X-Midgard-Token": token})
+                assert response.status_code == 200
+                assert any(item["schemaId"] == "midgard.generate.image" for item in response.json())
+
+    asyncio.run(scenario())
 
 
 def test_completed_artifact_can_be_saved_through_a_write_grant(tmp_path):
@@ -75,27 +82,33 @@ def test_queue_and_history_api_expose_frozen_workflow_identity(monkeypatch, tmp_
     )
     headers = {"X-Midgard-Token": token}
 
-    with TestClient(create_app(token)) as client:
-        response = client.post(
-            "/api/runs",
-            headers=headers,
-            json={"workflow": workflow.model_dump(mode="json", by_alias=True)},
-        )
-        assert response.status_code == 200, response.text
-        started = response.json()
-        assert len(started["workflowHash"]) == 64
+    app = create_app(token)
 
-        deadline = time.monotonic() + 2
-        while time.monotonic() < deadline:
-            current = client.get(f"/api/runs/{started['runId']}", headers=headers).json()
-            if current["status"] in {"COMPLETED", "FAILED", "CANCELLED"}:
-                break
-            time.sleep(0.02)
-        assert current["status"] == "COMPLETED"
+    async def scenario():
+        async with app.router.lifespan_context(app):
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+                response = await client.post(
+                    "/api/runs",
+                    headers=headers,
+                    json={"workflow": workflow.model_dump(mode="json", by_alias=True)},
+                )
+                assert response.status_code == 200, response.text
+                started = response.json()
+                assert len(started["workflowHash"]) == 64
 
-        queue = client.get("/api/queue", headers=headers)
-        assert queue.status_code == 200
-        assert queue.json()["pending"] == []
-        history = client.get("/api/history?limit=10", headers=headers)
-        assert history.status_code == 200
-        assert history.json()["runs"][0]["workflowHash"] == started["workflowHash"]
+                deadline = time.monotonic() + 2
+                while time.monotonic() < deadline:
+                    current = (await client.get(f"/api/runs/{started['runId']}", headers=headers)).json()
+                    if current["status"] in {"COMPLETED", "FAILED", "CANCELLED"}:
+                        break
+                    await asyncio.sleep(0.02)
+                assert current["status"] == "COMPLETED"
+
+                queue = await client.get("/api/queue", headers=headers)
+                assert queue.status_code == 200
+                assert queue.json()["pending"] == []
+                history = await client.get("/api/history?limit=10", headers=headers)
+                assert history.status_code == 200
+                assert history.json()["runs"][0]["workflowHash"] == started["workflowHash"]
+
+    asyncio.run(scenario())

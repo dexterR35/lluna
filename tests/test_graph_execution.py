@@ -11,6 +11,17 @@ from backend.graph.executor import RunManager
 from backend.graph.schema import WorkflowDocument, WorkflowEdge, WorkflowNode
 
 
+def wait_for_run(manager, run_id, timeout=3):
+    deadline = time.monotonic() + timeout
+    snapshot = manager.get(run_id)
+    while time.monotonic() < deadline:
+        snapshot = manager.get(run_id)
+        if snapshot.status in {"COMPLETED", "FAILED", "CANCELLED"}:
+            return snapshot
+        time.sleep(0.02)
+    return snapshot
+
+
 def test_fake_worker_vertical_slice_commits_artifact(monkeypatch, tmp_path):
     monkeypatch.setenv("MIDGARD_FAKE_WORKER", "1")
     source_path = tmp_path / "input.png"
@@ -67,6 +78,87 @@ def test_fake_worker_vertical_slice_commits_artifact(monkeypatch, tmp_path):
     assert cached_snapshot.status == "COMPLETED", cached_snapshot.error
     assert cached_snapshot.nodes["enhance"].status == "CACHED"
     assert cached_snapshot.nodes["enhance"].artifact_ids
+
+
+def test_image_queue_saves_lineage_names_and_requires_explicit_replace(monkeypatch, tmp_path):
+    monkeypatch.setenv("MIDGARD_FAKE_WORKER", "1")
+    first_path = tmp_path / "portrait.png"
+    second_path = tmp_path / "product.jpg"
+    Image.new("RGBA", (4, 3), (10, 20, 30, 255)).save(first_path)
+    Image.new("RGB", (5, 4), (30, 20, 10)).save(second_path)
+    destination = tmp_path / "exports"
+    destination.mkdir()
+
+    ArtifactStore._instance = ArtifactStore(tmp_path / "artifacts")
+    DesktopGrantStore._instance = None
+    grants = DesktopGrantStore.instance()
+    source_grants = [grants.issue(first_path), grants.issue(second_path)]
+    destination_grant = grants.issue(destination, mode="directory")
+    RunManager._instance = None
+    manager = RunManager.instance()
+
+    source = WorkflowNode(
+        id="load",
+        schema_id="midgard.input.images",
+        parameters={"pathGrantIds": [item.grant_id for item in source_grants]},
+    )
+    remove_background = WorkflowNode(
+        id="remove-background",
+        schema_id="midgard.image.remove_background",
+        parameters={"model": "test"},
+    )
+    upscale = WorkflowNode(
+        id="upscale",
+        schema_id="midgard.image.upscale",
+        parameters={"model": "test"},
+    )
+    save = WorkflowNode(
+        id="save",
+        schema_id="midgard.output.save_image",
+        parameters={
+            "destinationGrantId": destination_grant.grant_id,
+            "conflictPolicy": "ask",
+        },
+    )
+    workflow = WorkflowDocument(
+        nodes=[source, remove_background, upscale, save],
+        edges=[
+            WorkflowEdge(
+                source_node_id="load",
+                source_port_id="images",
+                target_node_id="remove-background",
+                target_port_id="image",
+            ),
+            WorkflowEdge(
+                source_node_id="remove-background",
+                source_port_id="image",
+                target_node_id="upscale",
+                target_port_id="image",
+            ),
+            WorkflowEdge(
+                source_node_id="upscale",
+                source_port_id="image",
+                target_node_id="save",
+                target_port_id="image",
+            ),
+        ],
+    )
+
+    first_run = wait_for_run(manager, manager.start(workflow).run_id)
+    assert first_run.status == "COMPLETED", first_run.error
+    expected = {"portrait_nobg_upscale.png", "product_nobg_upscale.png"}
+    assert {item.name for item in destination.iterdir()} == expected
+    assert len(first_run.nodes["save"].artifact_ids) == 2
+
+    conflict_run = wait_for_run(manager, manager.start(workflow).run_id)
+    assert conflict_run.status == "FAILED"
+    assert conflict_run.error and conflict_run.error["code"] == "OUTPUT_EXISTS"
+    assert {item.name for item in destination.iterdir()} == expected
+
+    save.parameters["conflictPolicy"] = "replace"
+    replacement_run = wait_for_run(manager, manager.start(workflow, force=True).run_id)
+    assert replacement_run.status == "COMPLETED", replacement_run.error
+    assert {item.name for item in destination.iterdir()} == expected
 
 
 def test_load_image_uses_saved_artifact_when_desktop_grant_has_expired(tmp_path):

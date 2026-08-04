@@ -19,7 +19,7 @@ def get_settings() -> dict:
 @router.get("/schema")
 def settings_schema() -> dict:
     return {
-        "schemaVersion": 2,
+        "schemaVersion": 3,
         "sections": [
             "subtitle",
             "runtime",
@@ -28,6 +28,7 @@ def settings_schema() -> dict:
             "low_light",
             "generation",
             "object_selection",
+            "models",
             "save_directory",
         ],
     }

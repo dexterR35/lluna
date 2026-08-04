@@ -224,6 +224,85 @@ export function boundsForNodes(nodes, nodeIds) {
     height: maxY - minY + 116,
   };
 }
+
+/**
+ * @param {WorkflowGroup[]} groups
+ * @param {EditorNode[]} nodes
+ * @param {{x: number, y: number}} point
+ * @param {string | null} [preferredId]
+ */
+export function findFlowContainingPoint(
+  groups,
+  nodes,
+  point,
+  preferredId = null,
+) {
+  const hits = groups.flatMap((group) => {
+    if (group.kind !== "flow" || !group.nodeIds?.length) return [];
+    const bounds = boundsForNodes(nodes, group.nodeIds);
+    const inside =
+      point.x >= bounds.position.x &&
+      point.x <= bounds.position.x + bounds.width &&
+      point.y >= bounds.position.y &&
+      point.y <= bounds.position.y + bounds.height;
+    if (!inside) return [];
+    return [{ group, area: bounds.width * bounds.height }];
+  });
+  if (!hits.length) return null;
+  if (preferredId) {
+    const preferred = hits.find((hit) => hit.group.id === preferredId);
+    if (preferred) return preferred.group;
+  }
+  hits.sort((a, b) => a.area - b.area);
+  return hits[0]?.group ?? null;
+}
+
+/**
+ * @param {WorkflowGroup} group
+ * @param {string[]} nodeIds
+ * @param {EditorNode[]} nodes
+ * @param {EditorEdge[]} edges
+ */
+function expandFlowGroup(group, nodeIds, nodes, edges) {
+  const known = new Set(group.nodeIds);
+  const extraStarts = nodeIds.filter((id) => !known.has(id));
+  const startNodeIds = [
+    ...new Set([...(group.startNodeIds || []), ...extraStarts]),
+  ];
+  const nextNodeIds = downstreamNodeIds(startNodeIds, edges).filter((id) =>
+    nodes.some((node) => node.id === id),
+  );
+  return {
+    ...group,
+    startNodeIds,
+    nodeIds: nextNodeIds,
+    ...boundsForNodes(nodes, nextNodeIds),
+  };
+}
+
+/**
+ * @param {WorkflowGroup[]} groups
+ * @param {string[]} seedIds
+ * @param {string | null} [preferredId]
+ */
+function findOverlappingFlow(groups, seedIds, preferredId = null) {
+  const seeds = new Set(seedIds);
+  const hits = groups.filter(
+    (group) =>
+      group.kind === "flow" &&
+      group.nodeIds?.some((id) => seeds.has(id)),
+  );
+  if (!hits.length) return null;
+  if (preferredId) {
+    const preferred = hits.find((group) => group.id === preferredId);
+    if (preferred) return preferred;
+  }
+  return [...hits].sort((a, b) => {
+    const overlapA = a.nodeIds.filter((id) => seeds.has(id)).length;
+    const overlapB = b.nodeIds.filter((id) => seeds.has(id)).length;
+    return overlapB - overlapA;
+  })[0];
+}
 /** @type {import("zustand").StateCreator<EditorState>} */
 const createEditorState = (set, get) => ({
   nodes: [],
@@ -236,21 +315,45 @@ const createEditorState = (set, get) => ({
   project: projectTemplate(),
   definitions: [],
   setDefinitions: (definitions) => set({ definitions }),
-  addNode: (schemaId, position = { x: 120, y: 120 }) => {
+  addNode: (schemaId, position = { x: 120, y: 120 }, options = {}) => {
     const definition = get().definitions.find(
       (value) => value.schemaId === schemaId,
     );
     if (!definition) return null;
     const node = createNode(definition, position);
-    set((state) =>
-      history(state, {
-        nodes: [
-          ...state.nodes.map((value) => ({ ...value, selected: false })),
-          { ...node, selected: true },
-        ],
-      }),
-    );
+    const flowId = options?.flowId;
+    set((state) => {
+      const nodes = [
+        ...state.nodes.map((value) => ({ ...value, selected: false })),
+        { ...node, selected: true },
+      ];
+      const groups =
+        flowId && state.groups.some((group) => group.id === flowId)
+          ? state.groups.map((group) =>
+              group.id === flowId
+                ? expandFlowGroup(group, [node.id], nodes, state.edges)
+                : group,
+            )
+          : state.groups;
+      return history(state, { nodes, groups });
+    });
     return node.id;
+  },
+  addNodesToFlow: (flowId, nodeIds) => {
+    if (!flowId || !nodeIds?.length) return null;
+    const state = get();
+    if (!state.groups.some((group) => group.id === flowId)) return null;
+    set((current) => ({
+      ...history(current, {
+        groups: current.groups.map((group) =>
+          group.id === flowId
+            ? expandFlowGroup(group, nodeIds, current.nodes, current.edges)
+            : group,
+        ),
+      }),
+      selectedGroupId: flowId,
+    }));
+    return flowId;
   },
   onNodesChange: (changes) =>
     set((state) => {
@@ -547,6 +650,25 @@ const createEditorState = (set, get) => ({
       .filter((node) => node.selected)
       .map((node) => node.id);
     if (!seeds.length) return null;
+    const existing = findOverlappingFlow(
+      state.groups,
+      seeds,
+      state.selectedGroupId,
+    );
+    if (existing) {
+      set((current) => ({
+        ...history(current, {
+          groups: current.groups.map((group) =>
+            group.id === existing.id
+              ? expandFlowGroup(group, seeds, current.nodes, current.edges)
+              : group,
+          ),
+          nodes: current.nodes.map((node) => ({ ...node, selected: false })),
+        }),
+        selectedGroupId: existing.id,
+      }));
+      return existing.id;
+    }
     const nodeIds = downstreamNodeIds(seeds, state.edges);
     const bounds = boundsForNodes(state.nodes, nodeIds);
     const id = crypto.randomUUID();

@@ -175,6 +175,15 @@ def infer_worker_main(cmd_queue, evt_queue, hardware_accel: bool = True) -> None
                     heartbeat_log,
                     job_evt_queue,
                 )
+            elif job_type == JobType.SUPIR.value:
+                _job_supir(
+                    run_id,
+                    payload,
+                    cancel_event,
+                    on_progress,
+                    heartbeat_log,
+                    job_evt_queue,
+                )
             elif job_type == JobType.LOW_LIGHT.value:
                 _job_low_light(
                     run_id,
@@ -381,6 +390,22 @@ def _job_enhance(run_id, payload, cancel_event, on_progress, heartbeat_log, evt_
     _emit(evt_queue, result(run_id, output_path))
 
 
+def _job_supir(run_id, payload, cancel_event, on_progress, heartbeat_log, evt_queue) -> None:
+    from backend.tools.image_supir import SupirCancelled, run_supir
+
+    try:
+        output_path = run_supir(
+            payload,
+            cancel_event=cancel_event,
+            progress=lambda value: on_progress(run_id, value),
+            log=lambda message: heartbeat_log(run_id, message),
+        )
+    except SupirCancelled:
+        _emit(evt_queue, error(run_id, "__cancelled__"))
+        return
+    _emit(evt_queue, result(run_id, output_path))
+
+
 def _job_low_light(run_id, payload, cancel_event, on_progress, heartbeat_log, evt_queue) -> None:
     from PIL import Image, ImageOps
 
@@ -470,11 +495,6 @@ def _job_generate(run_id, payload, cancel_event, on_progress, heartbeat_log, evt
 
     apply_hardware_from_payload(payload)
 
-    ok, reason = cuda_ready_for_generate()
-    if not ok:
-        _emit(evt_queue, error(run_id, reason))
-        return
-
     prompt = str(payload.get("prompt") or "").strip()
     if not prompt:
         _emit(evt_queue, error(run_id, "Prompt is empty."))
@@ -484,6 +504,53 @@ def _job_generate(run_id, payload, cancel_event, on_progress, heartbeat_log, evt
     mode_value = payload.get("mode")
     if not mode_value:
         _emit(evt_queue, error(run_id, "Generate model was not selected."))
+        return
+    if str(mode_value).startswith("custom:"):
+        from backend.models.adapters import AdapterError, generate_with_custom_model
+
+        model_id = str(mode_value).removeprefix("custom:")
+        width = int(payload.get("width") or 768)
+        height = int(payload.get("height") or 768)
+        steps = int(payload.get("steps") or 20)
+        seed = payload.get("seed")
+        seed_i = int(seed) if seed is not None and str(seed).strip() != "" else None
+        heartbeat_log(run_id, f"Loading custom model: {model_id}")
+        on_progress(run_id, 2)
+        stop_custom_hb = threading.Event()
+
+        def custom_heartbeat():
+            while not stop_custom_hb.wait(20.0):
+                heartbeat_log(run_id, "Custom model is still working…")
+
+        custom_hb = threading.Thread(target=custom_heartbeat, daemon=True)
+        custom_hb.start()
+        try:
+            output = generate_with_custom_model(
+                model_id,
+                prompt,
+                width=width,
+                height=height,
+                steps=steps,
+                seed=seed_i,
+                guidance=(float(payload["guidance"]) if payload.get("guidance") is not None else None),
+                negative_prompt=str(payload.get("negative_prompt") or ""),
+                progress=lambda value: on_progress(run_id, max(5, min(99, int(value)))),
+                cancel_event=cancel_event,
+            )
+        except AdapterError as exc:
+            _emit(evt_queue, error(run_id, "__cancelled__" if str(exc) == "__cancelled__" else str(exc)))
+            return
+        finally:
+            stop_custom_hb.set()
+        os.makedirs(os.path.dirname(os.path.abspath(output_path)) or ".", exist_ok=True)
+        output.save(output_path, format="PNG")
+        on_progress(run_id, 100)
+        _emit(evt_queue, result(run_id, output_path))
+        return
+
+    ok, reason = cuda_ready_for_generate()
+    if not ok:
+        _emit(evt_queue, error(run_id, reason))
         return
     mode = GenerateMode(mode_value)
 

@@ -42,6 +42,8 @@ class ParameterDefinition(ContractModel):
     step: float | None = None
     options: list[dict[str, Any]] = Field(default_factory=list)
     description: str = ""
+    capability: str = ""
+    visible_for_models: list[str] = Field(default_factory=list)
 
 
 class NodeDefinition(ContractModel):

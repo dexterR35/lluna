@@ -273,10 +273,14 @@ function EditorApp() {
     },
     runFromHere,
     createFlow: () => {
+      const before = useEditorStore.getState().groups.length;
       const id = useEditorStore.getState().createFlowFromSelected();
+      const after = useEditorStore.getState().groups.length;
       toast.push(
         id
-          ? "Created a flow box from the selection to its final outputs"
+          ? after > before
+            ? "Created a flow box from the selection to its final outputs"
+            : "Added the selection to the existing flow"
           : "Select a start node first",
         id ? "success" : "error",
       );

@@ -115,9 +115,8 @@ export function SettingsDialog() {
     sectionId === "models"
       ? {
           id: "models",
-          label: "Local model manager",
-          description:
-            "Install, enable, or remove models on this device. Expand Options to tune related defaults.",
+          label: "Models",
+          description: null,
           values: null,
         }
       : sections.find((section) => section.id === sectionId) ||
@@ -166,14 +165,16 @@ export function SettingsDialog() {
             icon={<Box />}
             onClick={() => set("settingsSection", "models")}
           >
-            Local model manager
+            Models
           </NavItem>
         </nav>
         <section className="ui-settings-main">
           <SectionHeader
             title={active.label}
             description={
-              active.description || "Changes are saved automatically."
+              active.id === "models"
+                ? undefined
+                : active.description || undefined
             }
           />
           {active.id === "models" ? (

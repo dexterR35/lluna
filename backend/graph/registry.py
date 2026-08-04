@@ -85,7 +85,23 @@ UPSCALE_MODELS = [
         "realesrgan-x4",
         "Maximum enlargement with higher memory use.",
     ),
+    option(
+        "SUPIR",
+        "SUPIR · diffusion restoration",
+        "supir",
+        "Professional photo-realistic restoration with quality/fidelity tuning (CUDA).",
+    ),
 ]
+SUPIR_POSITIVE_PROMPT = (
+    "Cinematic, High Contrast, highly detailed, taken using a Canon EOS R camera, "
+    "hyper detailed photo - realistic maximum detail, 32k, Color Grading, ultra HD, "
+    "extreme meticulous detailing, skin pore detailing, hyper sharpness, perfect without deformations."
+)
+SUPIR_NEGATIVE_PROMPT = (
+    "painting, oil painting, illustration, drawing, art, sketch, cartoon, CG Style, "
+    "3D render, unreal engine, blurring, dirty, messy, worst quality, low quality, "
+    "frames, watermark, signature, jpeg artifacts, deformed, lowres, over-smooth"
+)
 GENERATE_MODELS = [
     option(
         "FLUX.2-klein-base-4B",
@@ -226,10 +242,34 @@ _NODES = [
         outputs=[port("image", "Image", PortType.IMAGE)],
         parameters=[
             parameter("model", "Model", "model", "FLUX.2-klein-base-4B", options=GENERATE_MODELS),
-            parameter("width", "Width", "integer", 768, minimum=64, maximum=8192),
-            parameter("height", "Height", "integer", 768, minimum=64, maximum=8192),
-            parameter("steps", "Steps", "integer", 4, minimum=1, maximum=250),
-            parameter("seed", "Seed", "integer", -1, description="Use -1 for a random seed."),
+            parameter(
+                "width", "Width", "integer", 768, minimum=64, maximum=8192, capability="width"
+            ),
+            parameter(
+                "height", "Height", "integer", 768, minimum=64, maximum=8192, capability="height"
+            ),
+            parameter("steps", "Steps", "integer", 4, minimum=1, maximum=250, capability="steps"),
+            parameter(
+                "guidance",
+                "Guidance",
+                "number",
+                4.0,
+                minimum=0,
+                maximum=20,
+                step=0.1,
+                capability="guidance",
+            ),
+            parameter(
+                "negativePrompt", "Negative prompt", "textarea", "", capability="negativePrompt"
+            ),
+            parameter(
+                "seed",
+                "Seed",
+                "integer",
+                -1,
+                description="Use -1 for a random seed.",
+                capability="seed",
+            ),
         ],
         capabilities=["diffusers"],
         required_models=["flux"],
@@ -240,13 +280,19 @@ _NODES = [
         "midgard.image.upscale",
         "Upscale Image",
         "Image/Enhance",
-        "Upscales one image or an ordered image queue with Real-ESRGAN.",
+        "Upscales image queues with Real-ESRGAN or diffusion-based SUPIR restoration.",
         icon="zoom-in",
         inputs=[port("image", "Image queue", PortType.IMAGE, required=True, multiple=True)],
         outputs=[port("image", "Images", PortType.IMAGE, multiple=True)],
         parameters=[
             parameter("model", "Model", "model", "RealESRGAN_x2plus", options=UPSCALE_MODELS),
-            parameter("denoise", "Pre-denoise", "boolean", False),
+            parameter(
+                "denoise",
+                "Pre-denoise",
+                "boolean",
+                False,
+                visible_for_models=["RealESRGAN_x2plus", "RealESRGAN_x4plus"],
+            ),
             parameter(
                 "denoiseStrength",
                 "Denoise strength",
@@ -256,6 +302,7 @@ _NODES = [
                     {"value": "safe", "label": "Safe"},
                     {"value": "medium", "label": "Medium"},
                 ],
+                visible_for_models=["RealESRGAN_x2plus", "RealESRGAN_x4plus"],
             ),
             parameter(
                 "maxLongEdge",
@@ -265,6 +312,272 @@ _NODES = [
                 minimum=256,
                 maximum=32768,
                 description="Caps the final image size to manage memory.",
+                visible_for_models=["RealESRGAN_x2plus", "RealESRGAN_x4plus"],
+            ),
+            parameter(
+                "supirPreset",
+                "Tuning preset",
+                "select",
+                "quality",
+                options=[
+                    {"value": "quality", "label": "Quality · more detail"},
+                    {"value": "fidelity", "label": "Fidelity · closer to input"},
+                    {"value": "custom", "label": "Custom"},
+                ],
+                visible_for_models=["SUPIR"],
+            ),
+            parameter(
+                "supirVariant",
+                "Checkpoint",
+                "select",
+                "Q",
+                options=[
+                    {"value": "Q", "label": "v0-Q · general quality"},
+                    {"value": "F", "label": "v0-F · light degradation"},
+                ],
+                visible_for_models=["SUPIR"],
+            ),
+            parameter(
+                "upscale",
+                "Upscale factor",
+                "integer",
+                2,
+                minimum=1,
+                maximum=8,
+                visible_for_models=["SUPIR"],
+            ),
+            parameter(
+                "minSize",
+                "Minimum output side",
+                "integer",
+                1024,
+                minimum=512,
+                maximum=2048,
+                step=64,
+                visible_for_models=["SUPIR"],
+            ),
+            parameter(
+                "edmSteps",
+                "EDM sampling steps",
+                "integer",
+                50,
+                minimum=1,
+                maximum=200,
+                visible_for_models=["SUPIR"],
+            ),
+            parameter(
+                "sStage1",
+                "Stage 1 restoration",
+                "number",
+                -1.0,
+                minimum=-1,
+                maximum=6,
+                step=1,
+                visible_for_models=["SUPIR"],
+            ),
+            parameter(
+                "sStage2",
+                "Stage 2 guidance",
+                "number",
+                1.0,
+                minimum=0,
+                maximum=1,
+                step=0.05,
+                visible_for_models=["SUPIR"],
+            ),
+            parameter(
+                "sCfg",
+                "Text guidance (CFG)",
+                "number",
+                4.0,
+                minimum=1,
+                maximum=15,
+                step=0.1,
+                visible_for_models=["SUPIR"],
+            ),
+            parameter(
+                "seed",
+                "Seed",
+                "integer",
+                1234,
+                minimum=-1,
+                maximum=2147483647,
+                visible_for_models=["SUPIR"],
+            ),
+            parameter(
+                "sChurn",
+                "EDM churn",
+                "number",
+                5,
+                minimum=0,
+                maximum=40,
+                step=1,
+                visible_for_models=["SUPIR"],
+            ),
+            parameter(
+                "sNoise",
+                "EDM noise",
+                "number",
+                1.01,
+                minimum=1,
+                maximum=1.1,
+                step=0.001,
+                visible_for_models=["SUPIR"],
+            ),
+            parameter("prompt", "Image description", "textarea", "", visible_for_models=["SUPIR"]),
+            parameter(
+                "positivePrompt",
+                "Additive positive prompt",
+                "textarea",
+                SUPIR_POSITIVE_PROMPT,
+                visible_for_models=["SUPIR"],
+            ),
+            parameter(
+                "negativePrompt",
+                "Negative prompt",
+                "textarea",
+                SUPIR_NEGATIVE_PROMPT,
+                visible_for_models=["SUPIR"],
+            ),
+            parameter(
+                "colorFixType",
+                "Color correction",
+                "select",
+                "Wavelet",
+                options=[
+                    {"value": "None", "label": "None"},
+                    {"value": "AdaIn", "label": "AdaIN"},
+                    {"value": "Wavelet", "label": "Wavelet"},
+                ],
+                visible_for_models=["SUPIR"],
+            ),
+            parameter("linearCfg", "Linear CFG", "boolean", True, visible_for_models=["SUPIR"]),
+            parameter(
+                "cfgStart",
+                "Linear CFG start",
+                "number",
+                1.0,
+                minimum=1,
+                maximum=9,
+                step=0.5,
+                visible_for_models=["SUPIR"],
+            ),
+            parameter(
+                "linearStage2", "Linear Stage 2", "boolean", False, visible_for_models=["SUPIR"]
+            ),
+            parameter(
+                "stage2Start",
+                "Stage 2 start",
+                "number",
+                0.0,
+                minimum=0,
+                maximum=1,
+                step=0.05,
+                visible_for_models=["SUPIR"],
+            ),
+            parameter(
+                "gammaCorrection",
+                "Gamma correction",
+                "number",
+                1.0,
+                minimum=0.1,
+                maximum=2,
+                step=0.1,
+                visible_for_models=["SUPIR"],
+            ),
+            parameter(
+                "diffDtype",
+                "Diffusion precision",
+                "select",
+                "fp16",
+                options=[
+                    {"value": "fp32", "label": "FP32"},
+                    {"value": "fp16", "label": "FP16"},
+                    {"value": "bf16", "label": "BF16"},
+                ],
+                visible_for_models=["SUPIR"],
+            ),
+            parameter(
+                "aeDtype",
+                "Autoencoder precision",
+                "select",
+                "bf16",
+                options=[
+                    {"value": "fp32", "label": "FP32"},
+                    {"value": "bf16", "label": "BF16"},
+                ],
+                visible_for_models=["SUPIR"],
+            ),
+            parameter(
+                "useLlava", "Automatic LLaVA caption", "boolean", True, visible_for_models=["SUPIR"]
+            ),
+            parameter(
+                "llavaTemperature",
+                "LLaVA temperature",
+                "number",
+                0.2,
+                minimum=0,
+                maximum=1,
+                step=0.1,
+                visible_for_models=["SUPIR"],
+            ),
+            parameter(
+                "llavaTopP",
+                "LLaVA top-p",
+                "number",
+                0.7,
+                minimum=0,
+                maximum=1,
+                step=0.1,
+                visible_for_models=["SUPIR"],
+            ),
+            parameter(
+                "llavaQuestion",
+                "LLaVA instruction",
+                "textarea",
+                "Describe this image and its style in a very detailed manner. The image is a realistic photography, not an art painting.",
+                visible_for_models=["SUPIR"],
+            ),
+            parameter(
+                "load8BitLlava",
+                "8-bit LLaVA (lower VRAM)",
+                "boolean",
+                False,
+                visible_for_models=["SUPIR"],
+            ),
+            parameter(
+                "loadingHalfParams",
+                "Half-precision model load",
+                "boolean",
+                False,
+                visible_for_models=["SUPIR"],
+            ),
+            parameter(
+                "useTileVae",
+                "Tiled VAE (lower VRAM)",
+                "boolean",
+                False,
+                visible_for_models=["SUPIR"],
+            ),
+            parameter(
+                "encoderTileSize",
+                "VAE encoder tile",
+                "integer",
+                512,
+                minimum=128,
+                maximum=1024,
+                step=64,
+                visible_for_models=["SUPIR"],
+            ),
+            parameter(
+                "decoderTileSize",
+                "VAE decoder tile",
+                "integer",
+                64,
+                minimum=32,
+                maximum=256,
+                step=32,
+                visible_for_models=["SUPIR"],
             ),
         ],
         capabilities=["pytorch"],
@@ -427,14 +740,28 @@ _NODES = [
         "midgard.output.save_image",
         "Save Image",
         "Output/Save",
-        "Copies an image artifact to a user-selected destination.",
+        "Saves one image or an image queue to a user-selected folder.",
         kind="output",
         icon="save",
-        inputs=[port("image", "Image", PortType.IMAGE, required=True)],
-        outputs=[port("image", "Saved Image", PortType.IMAGE)],
-        parameters=[parameter("destinationGrantId", "Destination", "saveFile", "")],
+        inputs=[port("image", "Image", PortType.IMAGE, required=True, multiple=True)],
+        outputs=[port("image", "Saved Image", PortType.IMAGE, multiple=True)],
+        parameters=[
+            parameter("destinationGrantId", "Destination folder", "directory", ""),
+            parameter(
+                "conflictPolicy",
+                "If a file already exists",
+                "select",
+                "ask",
+                options=[
+                    {"value": "ask", "label": "Ask before replacing"},
+                    {"value": "replace", "label": "Replace existing"},
+                    {"value": "keep-both", "label": "Keep both"},
+                ],
+            ),
+        ],
         side_effects=True,
         cache_policy="none",
+        supports_preview=True,
         adapter="save",
     ),
     node(
@@ -457,11 +784,57 @@ NODE_REGISTRY = {definition.schema_id: definition for definition in _NODES}
 
 
 def list_nodes() -> list[NodeDefinition]:
-    return list(NODE_REGISTRY.values())
+    values = [definition.model_copy(deep=True) for definition in NODE_REGISTRY.values()]
+    from backend.models.capability_resolver import builtin_contract
+
+    for definition in values:
+        for parameter_definition in definition.parameters:
+            for model_option in parameter_definition.options:
+                model_id = model_option.get("modelId")
+                if not model_id:
+                    continue
+                variant, capabilities = builtin_contract(str(model_id))
+                task = capabilities.tasks[0] if capabilities.tasks else "custom"
+                model_option["variant"] = variant.to_dict()
+                model_option["capabilities"] = capabilities.to_dict(task)
+    try:
+        from backend.models.dynamic_registry import DynamicModelRegistry
+        from backend.models.runtime_profiles import runtime_status
+
+        custom_records = [
+            record
+            for record in DynamicModelRegistry.instance().records()
+            if record.installed
+            and record.enabled
+            and record.manifest.is_configured()
+            and runtime_status(record.manifest)["compatible"]
+            and record.manifest.adapter == "diffusers"
+            and record.manifest.task == "text-to-image"
+        ]
+        custom = []
+        for record in custom_records:
+            model_option = option(
+                f"custom:{record.manifest.id}",
+                record.manifest.name,
+                record.manifest.id,
+                record.manifest.description or "Custom Diffusers model.",
+            )
+            model_option["variant"] = record.manifest.variant.to_dict()
+            model_option["capabilities"] = record.manifest.capabilities.to_dict(
+                record.manifest.task
+            )
+            custom.append(model_option)
+        if custom:
+            generate = next(item for item in values if item.schema_id == "midgard.generate.image")
+            model_parameter = next(item for item in generate.parameters if item.id == "model")
+            model_parameter.options.extend(custom)
+    except (ImportError, OSError, ValueError):
+        pass
+    return values
 
 
 def get_node(schema_id: str) -> NodeDefinition:
-    try:
-        return NODE_REGISTRY[schema_id]
-    except KeyError as exc:
-        raise KeyError(f"Unknown node schema: {schema_id}") from exc
+    definition = next((item for item in list_nodes() if item.schema_id == schema_id), None)
+    if definition is None:
+        raise KeyError(f"Unknown node schema: {schema_id}")
+    return definition

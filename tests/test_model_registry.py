@@ -18,6 +18,7 @@ def test_required_model_inventory_is_unique() -> None:
         "rembg",
         "realesrgan-x2",
         "realesrgan-x4",
+        "supir",
         "mirnet",
         "sam2",
         "grounding-dino",
