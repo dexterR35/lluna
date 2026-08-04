@@ -1,4 +1,4 @@
-"""One-way migrations into the current Qt-free settings schema."""
+"""One-way migrations into the current typed settings schema."""
 
 from __future__ import annotations
 

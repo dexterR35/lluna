@@ -62,7 +62,7 @@ def detect_vram_and_cap() -> Tuple[float, Optional[str]]:
 
 
 def apply_soft_defaults_if_needed() -> bool:
-    """Apply VRAM-based defaults once without mutating a GUI configuration."""
+    """Apply VRAM-based defaults once without mutating saved configuration."""
     from backend.configuration.service import get_settings, update_settings
 
     settings = get_settings()

@@ -37,4 +37,4 @@ for source in (ROOT/"frontend"/"src").rglob("*"):
         errors.append(f"Frontend application source must be JS/JSX/CSS (declaration-only .d.ts files are allowed): {source.relative_to(ROOT)}")
 if errors:
     print("\n".join(errors),file=sys.stderr);raise SystemExit(1)
-print("Static guards passed: removed scaffolding stays absent, Electron-only, Qt-free Python, no forbidden UI framework.")
+print("Static guards passed: removed scaffolding stays absent, Electron-only Python, no forbidden UI framework.")

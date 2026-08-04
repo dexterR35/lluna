@@ -1,6 +1,6 @@
 """Feature-specific setting schemas.
 
-Schemas deliberately do not import Qt or concrete ML frameworks.
+Schemas deliberately do not import UI toolkits or concrete ML frameworks.
 """
 
 from __future__ import annotations

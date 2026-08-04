@@ -1,4 +1,4 @@
-"""Qt-free, typed application settings.
+"""Typed application settings for the Electron control plane.
 
 The control plane owns functional settings. Renderer layout preferences live in
 the Electron renderer and are intentionally not represented here.

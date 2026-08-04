@@ -1,8 +1,4 @@
-"""Subtitle removal pipeline.
-
-This module contains the legacy-compatible implementation while its media,
-workspace, output-path, progress, and worker concerns are extracted.
-"""
+"""Subtitle removal pipeline used by the Electron control-plane worker path."""
 
 import gc
 import logging
@@ -66,7 +62,7 @@ class SubtitleRemover:
     def __init__(
         self,
         vd_path,
-        gui_mode=False,
+        interactive=False,
         *,
         settings: SubtitleSettings | None = None,
         cancellation_token: CancellationToken | None = None,
@@ -81,8 +77,8 @@ class SubtitleRemover:
         self.lock = threading.RLock()
         # User-specified subtitle region positions
         self.sub_areas = []
-        # Whether running in GUI mode (GUI needs preview)
-        self.gui_mode = gui_mode
+        # Interactive runs suppress tqdm and emit preview frames to the client.
+        self.interactive = interactive
         self.hardware_accelerator = HardwareAccelerator.instance()
         # Whether to use hardware acceleration
         self.hardware_accelerator.set_enabled(settings.hardware_acceleration)
@@ -531,7 +527,7 @@ class SubtitleRemover:
             unit="frame",
             position=0,
             desc="Subtitle Removing",
-            disable=self.gui_mode,
+            disable=self.interactive,
         )
         self._progress_bar = tbar
         if self.is_picture:

@@ -1,4 +1,4 @@
-"""Qt-free model lifecycle facade for the control-plane API."""
+"""Model lifecycle facade for the control-plane API."""
 
 from __future__ import annotations
 

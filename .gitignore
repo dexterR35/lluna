@@ -10,8 +10,6 @@
 /dylib/
 /.cache_get_pip.py
 .condarc
-settings.ini
-subtitle.ini
 
 # Installer / packaging artifacts
 backend/test.py

@@ -1,7 +1,7 @@
 """Worker-safe immutable configuration snapshots.
 
 Typed settings are copied in the control-plane process. Worker processes validate the
-plain payload and never mutate the GUI configuration file.
+plain payload and never mutate the shared configuration file.
 """
 
 from __future__ import annotations

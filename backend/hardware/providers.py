@@ -120,7 +120,7 @@ def _paddle_gpu_build_installed() -> bool:
     """Detect Paddle's GPU build without importing its native runtime.
 
     Importing Paddle starts BRPC process-metric machinery.  Hardware detection
-    runs in both the GUI and the idle inference worker, so a runtime import here
+    runs in both the control plane and the idle inference worker, so a runtime import here
     would keep Paddle background services alive before OCR is ever requested.
     """
     try:

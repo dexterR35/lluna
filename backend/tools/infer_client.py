@@ -1,4 +1,4 @@
-"""GUI-side client for the persistent shared inference worker."""
+"""Control-plane client for the persistent shared inference worker."""
 
 from __future__ import annotations
 

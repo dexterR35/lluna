@@ -315,7 +315,7 @@ class STTNAutoInpaint:
                     
                     # Apply inpainting results
                     for j in range(valid_frames_count):
-                        if input_sub_remover is not None and input_sub_remover.gui_mode:
+                        if input_sub_remover is not None and input_sub_remover.interactive:
                             original_frame = frames_hr[j].copy()
                         else:
                             original_frame = None
@@ -338,7 +338,7 @@ class STTNAutoInpaint:
                         if input_sub_remover is not None:
                             if tbar is not None:
                                 input_sub_remover.update_progress(tbar, increment=1)
-                            if original_frame is not None and input_sub_remover.gui_mode:
+                            if original_frame is not None and input_sub_remover.interactive:
                                 input_sub_remover.update_preview_with_comp(original_frame, frame)
                 # Clear GPU cache after each chunk
                 del frames_hr, frames, comps

@@ -138,7 +138,7 @@ class SubtitleDetect:
             unit="frame",
             position=0,
             desc="Subtitle Finding",
-            disable=bool(sub_remover and sub_remover.gui_mode),
+            disable=bool(sub_remover and sub_remover.interactive),
         )
         current_frame_no = 0
         # Phase 1: sample detection - run OCR only every sample_step frames

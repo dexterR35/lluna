@@ -1,4 +1,4 @@
-"""Shared job status representation for GUI and worker adapters."""
+"""Shared job status representation for control-plane and worker adapters."""
 
 from __future__ import annotations
 

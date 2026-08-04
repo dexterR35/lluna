@@ -1,4 +1,4 @@
-"""Qt-free control-plane bootstrap."""
+"""Control-plane bootstrap for the Electron sidecar."""
 
 from __future__ import annotations
 

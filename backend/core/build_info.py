@@ -1,6 +1,6 @@
 """Canonical build and repository metadata.
 
-This module must stay importable in installers, workers, and tests without Qt.
+This module must stay importable in installers, workers, and tests without UI toolkits.
 """
 
 from __future__ import annotations

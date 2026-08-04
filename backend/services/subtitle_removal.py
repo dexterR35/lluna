@@ -1,4 +1,4 @@
-"""Validated subtitle-removal orchestration independent of Qt and IPC."""
+"""Validated subtitle-removal orchestration for the control-plane worker path."""
 
 from __future__ import annotations
 

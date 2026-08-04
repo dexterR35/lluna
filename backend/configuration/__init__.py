@@ -1,4 +1,4 @@
-"""Qt-free application configuration boundary."""
+"""Application configuration boundary for the Electron control plane."""
 
 from backend.configuration.loader import ConfigurationLoader, LoadedConfiguration
 from backend.configuration.models import (
