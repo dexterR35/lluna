@@ -63,7 +63,9 @@ export function BottomDrawer({ issues }) {
     ]),
   );
   const downloadCount =
-    (downloads?.active?.length || 0) + (downloads?.pending?.length || 0);
+    (downloads?.active?.length || 0) +
+    (downloads?.pending?.length || 0) +
+    (downloads?.recent || []).filter((item) => item.state === "failed").length;
   const tabs = [
     {
       id: "logs",
@@ -127,7 +129,11 @@ export function BottomDrawer({ issues }) {
           ))}
         {tab === "downloads" && (
           <div className="grid gap-2.5">
-            {[...(downloads?.active || []), ...(downloads?.pending || [])].map(
+            {[
+              ...(downloads?.active || []),
+              ...(downloads?.pending || []),
+              ...(downloads?.recent || []),
+            ].map(
               (item) => (
                 <Card key={item.jobId || `${item.kind}-${item.key}`}>
                   <div className="mb-2 flex justify-between gap-2">
@@ -136,7 +142,11 @@ export function BottomDrawer({ issues }) {
                         {item.modelId || item.key}
                       </p>
                       <p className="text-[9px] text-mg-muted">
-                        {item.state === "queued"
+                        {item.state === "failed" || item.state === "cancelled"
+                          ? item.error || "The model install did not complete."
+                          : item.state === "completed"
+                            ? item.detail || "Installed"
+                            : item.state === "queued"
                           ? item.position === 1
                             ? "Next in queue"
                             : `${item.position} installs ahead`
@@ -145,29 +155,51 @@ export function BottomDrawer({ issues }) {
                     </div>
                     <Badge
                       size="xs"
-                      tone={item.state === "queued" ? "accent" : "running"}
+                      tone={
+                        item.state === "failed"
+                          ? "error"
+                          : item.state === "cancelled"
+                            ? "warning"
+                            : item.state === "completed"
+                              ? "success"
+                              : item.state === "queued"
+                                ? "accent"
+                                : "running"
+                      }
                     >
-                      {item.state === "queued"
+                      {item.state === "failed"
+                        ? "Failed"
+                        : item.state === "cancelled"
+                          ? "Cancelled"
+                          : item.state === "completed"
+                            ? "Installed"
+                            : item.state === "queued"
                         ? `Queued · ${item.position}`
                         : "Installing"}
                     </Badge>
                   </div>
-                  <ProgressBar
-                    value={item.state === "queued" ? 0 : item.progress}
-                    indeterminate={
-                      item.state !== "queued" && item.progress == null
-                    }
-                    label={
-                      item.state === "queued"
-                        ? `Queue position ${item.position}`
-                        : item.detail || "Model download"
-                    }
-                    showLabel
-                  />
+                  {["active", "stopping", "queued"].includes(item.state) && (
+                    <ProgressBar
+                      value={item.state === "queued" ? 0 : item.progress}
+                      indeterminate={
+                        item.state !== "queued" && item.progress == null
+                      }
+                      label={
+                        item.state === "queued"
+                          ? `Queue position ${item.position}`
+                          : item.detail || "Model download"
+                      }
+                      showLabel
+                    />
+                  )}
                 </Card>
               ),
             )}
-            {!(downloads?.active?.length || downloads?.pending?.length) && (
+            {!(
+              downloads?.active?.length ||
+              downloads?.pending?.length ||
+              downloads?.recent?.length
+            ) && (
               <EmptyState
                 icon={<Download className="size-5" />}
                 title="Download queue is empty"

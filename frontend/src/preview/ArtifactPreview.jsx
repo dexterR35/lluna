@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import {
   AlertTriangle,
   Download,
-  FileImage,
   Image as ImageIcon,
 } from "lucide-react";
 import { api, artifactObjectUrl, saveArtifact } from "../api/client";

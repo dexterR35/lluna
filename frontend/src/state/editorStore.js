@@ -132,6 +132,20 @@ function linkedNodeIds(seedId, edges, direction) {
   return included;
 }
 
+/** @param {string} nodeId @param {EditorNode[]} nodes @param {EditorEdge[]} edges @param {NodeDefinition[]} definitions */
+function hasBatchSource(nodeId, nodes, edges, definitions) {
+  const map = definitionsById(definitions);
+  const upstream = linkedNodeIds(nodeId, edges, "upstream");
+  return [...upstream].some((id) => {
+    const node = nodes.find((candidate) => candidate.id === id);
+    const definition = node ? map[node.data.schemaId] : undefined;
+    return (
+      definition?.kind === "input" &&
+      definition.outputs.some((port) => Boolean(port.multiple))
+    );
+  });
+}
+
 /**
  * Return the repeated processor introduced when two existing paths are joined.
  * Parallel branches remain valid because only ancestors of the source and
@@ -303,7 +317,15 @@ const createEditorState = (set, get) => ({
         valid: false,
         reason: `${sourcePort.type} cannot connect to ${targetPort.type}.`,
       };
-    if (sourcePort.multiple && !targetPort.multiple)
+    if (
+      !targetPort.multiple &&
+      hasBatchSource(
+        source.id,
+        state.nodes,
+        state.edges,
+        state.definitions,
+      )
+    )
       return {
         valid: false,
         reason: `${targetPort.label} accepts one item, but this output contains a queue.`,

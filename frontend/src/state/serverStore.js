@@ -8,7 +8,7 @@ const createServerState = (set, get) => ({
   models: [],
   capabilities: null,
   diagnostics: null,
-  downloads: { active: [], pending: [] },
+  downloads: { active: [], pending: [], recent: [] },
   loading: false,
   error: null,
   async bootstrap() {
@@ -49,6 +49,7 @@ const createServerState = (set, get) => ({
         downloads: {
           active: event.payload.active || [],
           pending: event.payload.pending || [],
+          recent: event.payload.recent || [],
         },
       });
       return;

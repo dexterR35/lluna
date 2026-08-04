@@ -48,11 +48,18 @@ def download_queue_snapshot(
     source = queue or ModelDownloadQueue.instance()
     jobs = [
         _download_job_payload(job)
-        for job in source.jobs(include_finished=False)
+        for job in source.jobs(include_finished=True)
     ]
     return {
         "active": [job for job in jobs if job["state"] in {"active", "stopping"}],
         "pending": [job for job in jobs if job["state"] == "queued"],
+        # Keep terminal results in the snapshot so a fast failure is still
+        # visible when the renderer reconnects or polls after the job exits.
+        "recent": [
+            job
+            for job in jobs
+            if job["state"] in {"completed", "failed", "cancelled"}
+        ][:20],
     }
 
 

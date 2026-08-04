@@ -54,7 +54,7 @@ export interface DownloadJob {
   key: string;
   modelId?: string | null;
   operation: string;
-  state: "active" | "stopping" | "queued";
+  state: "active" | "stopping" | "queued" | "completed" | "failed" | "cancelled";
   position: number;
   progress?: number | null;
   detail?: string;
@@ -69,6 +69,7 @@ export interface DownloadJob {
 export interface DownloadQueueState {
   active: DownloadJob[];
   pending: DownloadJob[];
+  recent: DownloadJob[];
 }
 
 export interface NodeDefinition {

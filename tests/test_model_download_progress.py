@@ -334,3 +334,24 @@ def test_model_service_serializes_multiple_installs_in_fifo_order(monkeypatch) -
     assert second_started.wait(timeout=2)
     _wait_until(lambda: not queue.is_busy())
     assert execution_order == ["realesrgan-x2", "realesrgan-x4"]
+
+
+def test_download_snapshot_retains_fast_failures() -> None:
+    from backend.models import service
+
+    queue = ModelDownloadQueue()
+    finished = threading.Event()
+
+    def fail() -> None:
+        raise RuntimeError("download host unavailable")
+
+    queue.enqueue("model", "realesrgan-x2", fail, lambda _error: finished.set())
+    assert finished.wait(timeout=2)
+
+    snapshot = service.download_queue_snapshot(queue)
+    assert snapshot["active"] == []
+    assert snapshot["pending"] == []
+    recent = snapshot["recent"][0]
+    assert recent["modelId"] == "realesrgan-x2"
+    assert recent["state"] == "failed"
+    assert recent["error"] == "download host unavailable"

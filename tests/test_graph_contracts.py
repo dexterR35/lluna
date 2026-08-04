@@ -25,6 +25,16 @@ def test_processing_nodes_publish_explicit_model_choices_and_defaults():
         assert {option["value"] for option in model.options}
         assert all(option.get("modelId") for option in model.options)
 
+def test_image_queue_and_composite_nodes_publish_batch_contracts():
+    catalog={item.schema_id:item for item in list_nodes()}
+    source=catalog["midgard.input.images"]
+    remove=catalog["midgard.image.remove_background"]
+    composite=catalog["midgard.image.composite"]
+    assert source.outputs[0].multiple
+    assert next(port for port in remove.inputs if port.id=="image").multiple
+    assert all(port.multiple for port in composite.inputs)
+    assert composite.adapter=="composite"
+
 def test_every_node_model_option_has_a_lifecycle_inventory_entry():
     lifecycle_ids=known_model_ids()
     option_ids={
@@ -52,6 +62,22 @@ def test_incompatible_connection_and_cycle_are_rejected():
     prompt=node("midgard.input.prompt","prompt"); preview=node("midgard.output.preview_image","preview")
     workflow=WorkflowDocument(nodes=[prompt,preview],edges=[WorkflowEdge(source_node_id="prompt",source_port_id="prompt",target_node_id="preview",target_port_id="image")])
     assert any(issue.code=="INCOMPATIBLE_PORTS" for issue in validate_workflow(workflow).issues)
+
+def test_known_batch_cannot_flow_into_a_scalar_only_output():
+    source=node("midgard.input.images","source")
+    source.parameters={"pathGrantIds":["one","two"]}
+    enhance=node("midgard.image.upscale","enhance")
+    save=node("midgard.output.save_image","save")
+    workflow=WorkflowDocument(
+        nodes=[source,enhance,save],
+        edges=[
+            WorkflowEdge(source_node_id="source",source_port_id="images",target_node_id="enhance",target_port_id="image"),
+            WorkflowEdge(source_node_id="enhance",source_port_id="image",target_node_id="save",target_port_id="image"),
+        ],
+    )
+    result=validate_workflow(workflow)
+    assert not result.valid
+    assert any(issue.code=="BATCH_TO_SCALAR" for issue in result.issues)
 
 def test_repeated_processor_is_rejected_only_inside_the_planned_path():
     source=node("midgard.input.image","source"); source.parameters={"pathGrantId":"grant"}

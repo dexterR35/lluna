@@ -63,6 +63,35 @@ function EditorApp() {
       (event) => {
         useServerStore.getState().handleEvent(event);
         useRunStore.getState().handleEvent(event);
+        if (
+          event.type === "download.failed" ||
+          event.type === "model.action.failed"
+        ) {
+          const modelId =
+            typeof event.payload?.modelId === "string"
+              ? event.payload.modelId
+              : "Model";
+          const message =
+            typeof event.payload?.message === "string" && event.payload.message
+              ? event.payload.message
+              : `${modelId} action failed`;
+          const desktop = useDesktopStore.getState();
+          desktop.setValue("drawerVisible", true);
+          desktop.setValue("drawerTab", "downloads");
+          toast.push(message, "error");
+        } else if (event.type === "download.cancelled") {
+          const modelId =
+            typeof event.payload?.modelId === "string"
+              ? event.payload.modelId
+              : "Model";
+          toast.push(`${modelId} install cancelled`, "error");
+        } else if (event.type === "download.completed") {
+          const modelId =
+            typeof event.payload?.modelId === "string"
+              ? event.payload.modelId
+              : null;
+          if (modelId) toast.push(`Installed ${modelId}`);
+        }
       },
       (value) => useRunStore.getState().setConnection(value),
     ).then((value) => {
@@ -73,7 +102,7 @@ function EditorApp() {
       disposed = true;
       stop?.();
     };
-  }, []);
+  }, [toast]);
   useEffect(() => {
     if (server.nodes.length)
       useEditorStore.getState().setDefinitions(server.nodes);

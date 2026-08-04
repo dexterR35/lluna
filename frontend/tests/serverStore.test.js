@@ -2,7 +2,7 @@ import { beforeEach, expect, test } from "vitest";
 import { useServerStore } from "../src/state/serverStore";
 
 beforeEach(() => {
-  useServerStore.setState({ downloads: { active: [], pending: [] } });
+  useServerStore.setState({ downloads: { active: [], pending: [], recent: [] } });
 });
 
 test("download queue events preserve active progress and FIFO positions", () => {
@@ -33,10 +33,26 @@ test("download queue events preserve active progress and FIFO positions", () => 
           progress: null,
         },
       ],
+      recent: [
+        {
+          jobId: 10,
+          kind: "model",
+          key: "mirnet",
+          modelId: "mirnet",
+          operation: "install",
+          state: "failed",
+          position: -1,
+          error: "network unavailable",
+        },
+      ],
     },
   });
 
   const downloads = useServerStore.getState().downloads;
   expect(downloads.active[0]).toMatchObject({ progress: 46, position: 0 });
   expect(downloads.pending[0]).toMatchObject({ position: 1, state: "queued" });
+  expect(downloads.recent[0]).toMatchObject({
+    state: "failed",
+    error: "network unavailable",
+  });
 });

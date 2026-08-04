@@ -51,11 +51,39 @@ export function ModelsDialog() {
     if (operation === "install") {
       setLifecycleState(model.id, { state: "requesting" });
     }
+    const modelPath = encodeURIComponent(model.id);
     try {
-      await api(
-        `/api/models/${model.id}${operation === "remove" ? "" : `/${operation}`}`,
+      const result = await api(
+        `/api/models/${modelPath}${operation === "remove" ? "" : `/${operation}`}`,
         { method: operation === "remove" ? "DELETE" : "POST" },
       );
+      if (operation === "install") {
+        const jobId = Number(result?.jobId);
+        for (const delay of [0, 150, 350, 750, 1500]) {
+          if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
+          const snapshot = await refreshDownloads();
+          const job = [
+            ...snapshot.active,
+            ...snapshot.pending,
+            ...(snapshot.recent || []),
+          ].find((item) =>
+            Number.isFinite(jobId)
+              ? item.jobId === jobId
+              : (item.modelId || item.key) === model.id,
+          );
+          if (job?.state === "failed" || job?.state === "cancelled") {
+            toast.push(
+              job.error ||
+                (job.state === "cancelled"
+                  ? "Model installation was cancelled."
+                  : "Model installation failed."),
+              "error",
+            );
+            break;
+          }
+          if (job || model.installed) break;
+        }
+      }
     } catch (error) {
       if (operation === "install") {
         setLifecycleState(model.id, { state: "not_installed" });
@@ -141,6 +169,11 @@ export function ModelsDialog() {
           models.map((model) => {
             const job = [...downloads.active, ...downloads.pending].find(
               (item) => (item.modelId || item.key) === model.id,
+            );
+            const recent = (downloads.recent || []).find(
+              (item) =>
+                (item.modelId || item.key) === model.id &&
+                ["failed", "cancelled"].includes(item.state),
             );
             const installing =
               job?.state === "active" || job?.state === "stopping";
@@ -247,6 +280,17 @@ export function ModelsDialog() {
                         {formatTransfer(job)}
                       </p>
                     )}
+                  </div>
+                )}
+                {!job && !requesting && !model.installed && recent && (
+                  <div
+                    role="alert"
+                    className="order-last mt-1 w-full rounded-xl border border-mg-error/30 bg-mg-error/5 px-3 py-2 text-[10px] text-mg-error"
+                  >
+                    {recent.error ||
+                      (recent.state === "cancelled"
+                        ? "Installation was cancelled. Try Install again."
+                        : "Installation failed. Try again or open Downloads for details.")}
                   </div>
                 )}
               </article>

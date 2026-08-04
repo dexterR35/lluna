@@ -340,7 +340,6 @@ export function NodeEditorDialog({ nodeId, onClose, onManageModels }) {
             <ArtifactPreview
               artifactId={artifactId}
               effect={String(node.data.appearance?.imageEffect || "none")}
-              className="h-full min-h-0"
             />
           </div>
         </aside>

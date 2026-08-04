@@ -34,6 +34,17 @@ def prepare_control_plane() -> BootstrapReport:
     paths.data_dir.mkdir(parents=True, exist_ok=True)
     ConfigurationService.instance()
     try:
+        from backend.tools.model_download_lifecycle import prepare_restart_pending
+
+        recovered = prepare_restart_pending()
+        if recovered:
+            logger.info(
+                "Prepared %d interrupted model download(s) for retry",
+                len(recovered),
+            )
+    except (OSError, RuntimeError, ValueError) as exc:
+        logger.warning("Model download recovery was not applied: %s", exc)
+    try:
         from backend.tools.hf_auth import apply_hf_token_to_env
         apply_hf_token_to_env()
     except (ImportError, OSError, ValueError):

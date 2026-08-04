@@ -157,6 +157,54 @@ test("a processor cannot repeat along the same linked path", () => {
   );
   expect(useEditorStore.getState().edges).toHaveLength(1);
 });
+test("known image queues connect only to batch-capable inputs", () => {
+  const batchInput = /** @type {import("../src/types").NodeDefinition} */ ({
+    ...definition,
+    schemaId: "test.images",
+    name: "Load Images",
+    kind: "input",
+    inputs: [],
+    outputs: [{ id: "images", label: "Images", type: "IMAGE", multiple: true }],
+  });
+  const processor = /** @type {import("../src/types").NodeDefinition} */ ({
+    ...definition,
+    schemaId: "test.batch-processor",
+    name: "Batch Processor",
+    kind: "processor",
+    inputs: [{ id: "image", label: "Images", type: "IMAGE", multiple: true }],
+    outputs: [{ id: "image", label: "Images", type: "IMAGE", multiple: true }],
+  });
+  const scalarOutput = /** @type {import("../src/types").NodeDefinition} */ ({
+    ...definition,
+    schemaId: "test.scalar-output",
+    name: "Single Save",
+    kind: "output",
+    inputs: [{ id: "image", label: "Image", type: "IMAGE" }],
+    outputs: [],
+  });
+  useEditorStore
+    .getState()
+    .setDefinitions([batchInput, processor, scalarOutput]);
+  const source = addNode(batchInput.schemaId);
+  const process = addNode(processor.schemaId);
+  const save = addNode(scalarOutput.schemaId);
+  expect(
+    useEditorStore.getState().connect({
+      source,
+      sourceHandle: "images",
+      target: process,
+      targetHandle: "image",
+    }).valid,
+  ).toBe(true);
+  const invalid = useEditorStore.getState().connect({
+    source: process,
+    sourceHandle: "image",
+    target: save,
+    targetHandle: "image",
+  });
+  expect(invalid.valid).toBe(false);
+  expect(invalid.reason).toContain("accepts one item");
+});
 test("unlinking a connection removes only that edge and refreshes its parent flow", () => {
   const first = addNode();
   const second = addNode();

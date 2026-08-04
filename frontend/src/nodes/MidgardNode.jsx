@@ -345,6 +345,7 @@ function MidgardNodeComponent({ id, data, selected }) {
           <ProgressBar
             value={state?.progress || 0}
             label={state?.message || `${nodeLabel} progress`}
+            showLabel
           />
         </div>
       )}

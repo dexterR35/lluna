@@ -385,23 +385,11 @@ class RunManager:
                     artifact_ids = result.get("artifactIds") or result.get("artifact_ids") or []
                     if artifact_ids:
                         try:
-                            source_port = next(
-                                (
-                                    port
-                                    for port in definition.outputs
-                                    if port.id == edge.source_port_id
-                                ),
-                                None,
-                            )
                             artifacts = [
                                 self._artifacts.get(str(artifact_id))
                                 for artifact_id in artifact_ids
                             ]
-                            value = (
-                                artifacts
-                                if source_port and source_port.multiple
-                                else artifacts[-1]
-                            )
+                            value = artifacts if len(artifacts) > 1 else artifacts[-1]
                         except (KeyError, FileNotFoundError) as exc:
                             raise ExecutionFailure(
                                 "BOUNDARY_INPUT_UNAVAILABLE",
@@ -562,6 +550,7 @@ class RunManager:
                         "itemIndex": index,
                         "itemCount": count,
                         "cached": True,
+                        "message": f"Item {index + 1} of {count} loaded from cache",
                     },
                 )
             outputs.append(artifact)
@@ -760,6 +749,7 @@ class RunManager:
                 "progress": progress,
                 "itemIndex": item_index,
                 "itemCount": item_count,
+                "message": f"Composited item {item_index + 1} of {item_count}",
             },
         )
         return artifact
@@ -883,6 +873,7 @@ class RunManager:
                     "itemProgress": int(value),
                     "itemIndex": item_index,
                     "itemCount": item_count,
+                    "message": f"Processing item {item_index + 1} of {item_count}",
                 },
             )
         def log(message: str) -> None:
@@ -954,6 +945,7 @@ class RunManager:
                     "itemProgress": progress,
                     "itemIndex": item_index,
                     "itemCount": item_count,
+                    "message": f"Processing item {item_index + 1} of {item_count}",
                 },
             )
         fd, raw = tempfile.mkstemp(prefix="midgard-fake-", suffix=".png")

@@ -149,6 +149,34 @@ def _repeated_processor_nodes(
     return repeated
 
 
+def _batch_node_ids(
+    workflow: WorkflowDocument,
+    node_ids: set[str],
+) -> set[str]:
+    """Propagate known list-valued outputs through batch-capable ports."""
+    nodes = {node.id: node for node in workflow.nodes}
+    incoming: dict[str, list] = defaultdict(list)
+    for edge in workflow.edges:
+        incoming[edge.target_node_id].append(edge)
+    batch: set[str] = set()
+    for node_id in topological_order(workflow, node_ids):
+        node = nodes[node_id]
+        definition = NODE_REGISTRY.get(node.schema_id)
+        if definition is None:
+            continue
+        if definition.adapter == "load_images":
+            batch.add(node_id)
+            continue
+        for edge in incoming.get(node_id, ()):
+            if edge.source_node_id not in batch:
+                continue
+            target_port = _port(definition, edge.target_port_id, output=False)
+            if target_port and target_port.multiple:
+                batch.add(node_id)
+                break
+    return batch
+
+
 def validate_workflow(
     workflow: WorkflowDocument,
     *,
@@ -170,6 +198,7 @@ def validate_workflow(
         issues.append(ValidationIssue(severity="error", code="DUPLICATE_NODE_ID", message="Node IDs must be unique."))
     seen_edges: set[str] = set()
     connected_inputs: dict[tuple[str, str], int] = defaultdict(int)
+    batch_nodes = _batch_node_ids(workflow, validation_ids)
     for node in workflow.nodes:
         if node.id not in validation_ids:
             continue
@@ -235,7 +264,7 @@ def validate_workflow(
             continue
         if not ports_compatible(PortType(source_port.type), PortType(target_port.type)):
             issues.append(ValidationIssue(severity="error", code="INCOMPATIBLE_PORTS", message=f"{source_port.label} ({source_port.type}) cannot connect to {target_port.label} ({target_port.type}).", edge_id=edge.id))
-        if source_port.multiple and not target_port.multiple:
+        if source.id in batch_nodes and not target_port.multiple:
             issues.append(
                 ValidationIssue(
                     severity="error",

@@ -92,6 +92,48 @@ test("image parameter accepts a dropped file and returns its preview artifact", 
   expect(registerDroppedFiles).toHaveBeenCalledWith([file]);
   window.midgardDesktop = previousDesktop;
 });
+test("multi-image parameter preserves the dropped file order", async () => {
+  const registerDroppedFiles = vi.fn().mockResolvedValue([
+    {
+      grantId: "grant-1",
+      artifactId: "artifact-1",
+      name: "first.png",
+      mediaType: "image/png",
+    },
+    {
+      grantId: "grant-2",
+      artifactId: "artifact-2",
+      name: "second.png",
+      mediaType: "image/png",
+    },
+  ]);
+  const previousDesktop = window.midgardDesktop;
+  window.midgardDesktop = /** @type {any} */ ({ registerDroppedFiles });
+  const onChange = vi.fn();
+  render(
+    <NodeParameterField
+      definition={{ id: "pathGrantIds", label: "Images", type: "files" }}
+      nodeDefinition={{ schemaId: "midgard.input.images" }}
+      onChange={onChange}
+    />,
+  );
+  const first = new File(["first"], "first.png", { type: "image/png" });
+  const second = new File(["second"], "second.png", { type: "image/png" });
+  fireEvent.drop(screen.getByRole("button", { name: "Drop image files" }), {
+    dataTransfer: { files: [first, second] },
+  });
+  await waitFor(() =>
+    expect(onChange).toHaveBeenCalledWith(
+      ["grant-1", "grant-2"],
+      expect.arrayContaining([
+        expect.objectContaining({ artifactId: "artifact-1" }),
+        expect.objectContaining({ artifactId: "artifact-2" }),
+      ]),
+    ),
+  );
+  expect(registerDroppedFiles).toHaveBeenCalledWith([first, second]);
+  window.midgardDesktop = previousDesktop;
+});
 test("node selectors include only installed and enabled models", () => {
   const options = [
     { value: "a", label: "A", modelId: "model-a" },
