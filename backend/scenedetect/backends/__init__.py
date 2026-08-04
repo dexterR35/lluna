@@ -86,26 +86,10 @@ examples for details.
 
 from typing import Dict, Type
 
-# OpenCV must be available at minimum.
-from backend.scenedetect.backends.opencv import VideoStreamCv2, VideoCaptureAdapter
+from backend.scenedetect.backends.opencv import VideoCaptureAdapter, VideoStreamCv2
 
-try:
-    from scenedetect.backends.pyav import VideoStreamAv
-except ImportError:
-    VideoStreamAv = None
-
-try:
-    from scenedetect.backends.moviepy import VideoStreamMoviePy
-except ImportError:
-    VideoStreamMoviePy = None
-
-# TODO(0.6.3): Replace this with a function named `get_available_backends`.
 AVAILABLE_BACKENDS: Dict[str, Type] = {
-    backend.BACKEND_NAME: backend for backend in filter(None, [
-        VideoStreamCv2,
-        VideoStreamAv,
-        VideoStreamMoviePy,
-    ])
+    VideoStreamCv2.BACKEND_NAME: VideoStreamCv2,
 }
 """All available backends that :func:`scenedetect.open_video` can consider for the `backend`
 parameter. These backends must support construction with the following signature:

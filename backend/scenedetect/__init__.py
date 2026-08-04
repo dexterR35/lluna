@@ -35,8 +35,7 @@ from backend.scenedetect.platform import init_logger
 from backend.scenedetect.frame_timecode import FrameTimecode
 from backend.scenedetect.video_stream import VideoStream, VideoOpenFailure
 from backend.scenedetect.scene_detector import SceneDetector
-from backend.scenedetect.backends import (AVAILABLE_BACKENDS, VideoStreamCv2, VideoStreamAv,
-                                  VideoStreamMoviePy, VideoCaptureAdapter)
+from backend.scenedetect.backends import AVAILABLE_BACKENDS, VideoCaptureAdapter, VideoStreamCv2
 from backend.scenedetect.stats_manager import StatsManager, StatsFileCorrupt
 from backend.scenedetect.scene_manager import SceneManager, save_images
 

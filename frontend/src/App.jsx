@@ -410,7 +410,6 @@ function EditorApp() {
       <NodeEditorDialog
         nodeId={editingNodeId}
         onClose={() => setEditingNodeId(null)}
-        onRun={(/** @type {string} */ id) => actions.runFromHere(id)}
         onManageModels={() => {
           setEditingNodeId(null);
           layout.setValue("modelsOpen", true);

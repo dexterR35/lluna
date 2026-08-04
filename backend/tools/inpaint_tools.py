@@ -1,4 +1,3 @@
-import multiprocessing
 import math
 
 import cv2
@@ -357,6 +356,3 @@ def is_frame_number_in_ab_sections(frame_no, ab_sections):
         if frame_no in section:
             return True
     return False
-
-if __name__ == '__main__':
-    multiprocessing.set_start_method("spawn")

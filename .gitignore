@@ -2,6 +2,7 @@
 /midgardEnv/
 /midgard_runtime.json
 /config/config.json
+/config/runtime.json
 /config/pending_model_downloads.json
 /config/model_download_cancel.flag
 /midgard_out/
@@ -40,13 +41,6 @@ config/hf_token
 !.env.example
 
 # Sample / output media
-test/**/*.mp4
-test/**/*.avi
-test/**/*.mkv
-test/**/*.mov
-test/pic_test/
-test/coods/
-test/debug/
 *_no_sub.mp4
 *_no_sub*.mp4
 demo*.mp4

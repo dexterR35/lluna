@@ -113,9 +113,6 @@ export function NodeLibrary({ onAdd }) {
 
   return (
     <Panel
-      title="Library"
-      subtitle={`${visibleDefinitions.length} nodes`}
-      icon={<Blocks className="size-3.5" />}
       className="h-full border-r border-mg-border"
       bodyClassName="flex flex-col"
     >

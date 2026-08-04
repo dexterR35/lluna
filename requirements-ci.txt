@@ -5,7 +5,6 @@
 -c constraints.txt
 
 cryptography
-je-showinfilemanager
 numpy
 opencv-python
 Pillow

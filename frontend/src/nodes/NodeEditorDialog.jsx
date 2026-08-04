@@ -4,7 +4,6 @@ import {
   Cpu,
   Database,
   Image as ImageIcon,
-  Play,
   Settings2,
   Sparkles,
 } from "lucide-react";
@@ -12,7 +11,6 @@ import { ArtifactPreview } from "../preview/ArtifactPreview";
 import {
   Badge,
   Button,
-  Card,
   Checkbox,
   Dialog,
   EmptyState,
@@ -25,30 +23,29 @@ import { useServerStore } from "../state/serverStore";
 import { NodeParameterField } from "./NodeParameterField";
 import { enabledModelOptions, inventoryForOption } from "../models/modelAvailability";
 
-/** @param {import("../types").ParameterOption | undefined} option @param {Record<string, any>[]} models */
 /** @param {{option: import("../types").ParameterOption, selected: boolean, inventory?: Record<string, any>, onSelect: () => void}} props */
-function ModelCard({ option, selected, inventory, onSelect }) {
+function ModelRow({ option, selected, inventory, onSelect }) {
   const installed = inventory?.installed;
   return (
-    <Card
-      as="button"
+    <button
       type="button"
       aria-pressed={selected}
       onClick={onSelect}
-      padded
-      interactive
-      selected={selected}
-      className="w-full p-3 text-left"
+      className={`w-full rounded-lg px-2 py-2 text-left transition ${
+        selected
+          ? "bg-mg-accent/10 text-mg-primary"
+          : "text-mg-secondary hover:bg-mg-elevated hover:text-mg-primary"
+      }`}
     >
-      <div className="flex items-start gap-2.5">
+      <span className="flex items-start gap-2.5">
         <span
-          className={`mt-0.5 grid size-5 shrink-0 place-items-center rounded-full border ${selected ? "border-mg-accent bg-mg-accent text-white" : "border-mg-border text-transparent"}`}
+          className={`mt-0.5 grid size-4 shrink-0 place-items-center rounded-full border ${selected ? "border-mg-accent bg-mg-accent text-white" : "border-mg-border text-transparent"}`}
         >
-          <Check className="size-3" />
+          <Check className="size-2.5" />
         </span>
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-1.5">
-            <strong className="truncate text-[12px] font-semibold tracking-tight text-mg-primary">
+            <strong className="truncate text-[12px] font-semibold tracking-tight">
               {option.label}
             </strong>
             {installed !== undefined && (
@@ -58,12 +55,12 @@ function ModelCard({ option, selected, inventory, onSelect }) {
             )}
           </span>
           {option.description && (
-            <span className="mt-1 block text-[10px] leading-4 text-mg-secondary">
+            <span className="mt-0.5 block text-[10px] leading-4 text-mg-muted">
               {option.description}
             </span>
           )}
           {inventory && (
-            <span className="mt-1.5 flex items-center gap-1 text-[10px] text-mg-muted">
+            <span className="mt-1 flex items-center gap-1 text-[10px] text-mg-muted">
               <Cpu className="size-2.5" />
               {inventory.framework || inventory.capability || "Local model"}
               {inventory.minimum_vram_mb
@@ -72,8 +69,8 @@ function ModelCard({ option, selected, inventory, onSelect }) {
             </span>
           )}
         </span>
-      </div>
-    </Card>
+      </span>
+    </button>
   );
 }
 
@@ -81,17 +78,14 @@ function ModelCard({ option, selected, inventory, onSelect }) {
 function RequiredModels({ ids, models }) {
   if (!ids?.length) return null;
   return (
-    <div className="grid gap-1.5">
+    <div className="grid gap-1">
       <span className="text-[11px] font-medium text-mg-secondary">
         Required runtime
       </span>
       {ids.map((id) => {
         const model = models.find((item) => item.id === id);
         return (
-          <div
-            key={id}
-            className="flex items-center gap-2 rounded-xl border border-mg-border bg-mg-app/50 px-2.5 py-1.5"
-          >
+          <div key={id} className="flex items-center gap-2 py-1">
             <Database className="size-3 text-mg-muted" />
             <span className="min-w-0 flex-1 truncate text-[11px] text-mg-secondary">
               {model?.name || id}
@@ -106,8 +100,8 @@ function RequiredModels({ ids, models }) {
   );
 }
 
-/** @param {{nodeId: string | null, onClose: () => void, onRun: (id: string) => void, onManageModels: () => void}} props */
-export function NodeEditorDialog({ nodeId, onClose, onRun, onManageModels }) {
+/** @param {{nodeId: string | null, onClose: () => void, onManageModels: () => void}} props */
+export function NodeEditorDialog({ nodeId, onClose, onManageModels }) {
   const node = useEditorStore((store) =>
     store.nodes.find((item) => item.id === nodeId),
   );
@@ -147,7 +141,6 @@ export function NodeEditorDialog({ nodeId, onClose, onRun, onManageModels }) {
       : persistedResult?.artifactIds || []
   ).at(-1);
   const status = liveRun?.status || persistedResult?.status || "IDLE";
-  const runLabel = definition?.kind === "input" ? "Run" : "Run from here";
 
   function setParameter(
     /** @type {import("../types").ParameterDefinition | undefined} */ parameter,
@@ -176,24 +169,19 @@ export function NodeEditorDialog({ nodeId, onClose, onRun, onManageModels }) {
       open
       onClose={onClose}
       wide
+      className="!max-w-6xl"
       title={definition?.name || node.data.label}
       description="Node options · choose the model and settings used by this node."
       bodyClassName="!max-h-[72vh] !overflow-hidden !p-0"
       footer={
-        <>
-          <Button variant="secondary" onClick={onClose}>
-            Done
-          </Button>
-          <Button onClick={() => onRun(node.id)}>
-            <Play className="size-3.5 fill-current" />
-            {runLabel}
-          </Button>
-        </>
+        <Button variant="secondary" onClick={onClose}>
+          Done
+        </Button>
       }
     >
-      <div className="grid h-[62vh] min-h-[30rem] grid-cols-[16rem_minmax(0,1fr)]">
-        <aside className="min-h-0 overflow-y-auto border-r border-mg-border bg-mg-app/40 p-3.5">
-          <div className="mb-3 flex items-center gap-2">
+      <div className="grid h-[62vh] min-h-[30rem] grid-cols-[15rem_minmax(15rem,0.85fr)_minmax(0,1.15fr)]">
+        <aside className="min-h-0 overflow-y-auto border-r border-mg-border p-3.5">
+          <div className="mb-2.5 flex items-center gap-2">
             <IconTile size="sm">
               <Sparkles className="size-3" />
             </IconTile>
@@ -205,9 +193,9 @@ export function NodeEditorDialog({ nodeId, onClose, onRun, onManageModels }) {
             </div>
           </div>
           {modelOptions.length ? (
-            <div className="grid gap-1.5">
+            <div className="grid gap-0.5">
               {modelOptions.map((option) => (
-                <ModelCard
+                <ModelRow
                   key={option.value}
                   option={option}
                   selected={option.value === currentModel}
@@ -217,20 +205,18 @@ export function NodeEditorDialog({ nodeId, onClose, onRun, onManageModels }) {
               ))}
             </div>
           ) : (
-            <div className="ui-section">
-              <EmptyState
-                icon={<Box className="size-4" />}
-                title={modelParameter ? "No enabled model" : "No model choice"}
-                description={
-                  modelParameter
-                    ? "Install and enable a compatible model in Model settings."
-                    : definition?.requiredModels?.length
+            <EmptyState
+              icon={<Box className="size-4" />}
+              title={modelParameter ? "No enabled model" : "No model choice"}
+              description={
+                modelParameter
+                  ? "Install and enable a compatible model in Model settings."
+                  : definition?.requiredModels?.length
                     ? "This operation uses its required bundled model."
                     : "This node does not run an AI model."
-                }
-                compact
-              />
-            </div>
+              }
+              compact
+            />
           )}
           <div className="mt-3">
             <RequiredModels ids={effectiveRequiredModels} models={models} />
@@ -246,112 +232,107 @@ export function NodeEditorDialog({ nodeId, onClose, onRun, onManageModels }) {
           )}
         </aside>
 
-        <main className="min-h-0 overflow-y-auto p-4">
-          <div className="grid gap-4">
-            <section className="grid gap-2.5">
-              <div className="flex items-center gap-2">
-                <Settings2 className="size-3.5 text-mg-muted" />
-                <div className="min-w-0 flex-1">
-                  <h3 className="text-[11px] font-semibold tracking-tight text-mg-secondary">
-                    Node settings
-                  </h3>
-                  <p className="text-[9px] text-mg-muted">
-                    These values belong only to this node instance.
-                  </p>
-                </div>
-                <Badge
-                  tone={
-                    status === "FAILED"
-                      ? "error"
-                      : status === "RUNNING"
-                        ? "running"
-                        : ["SUCCEEDED", "CACHED"].includes(status)
-                          ? "success"
-                          : "neutral"
-                  }
-                >
-                  {status}
-                </Badge>
-              </div>
-              <div className="ui-section grid gap-3 p-3">
-                <TextField
-                  label="Node label"
-                  value={node.data.label || ""}
-                  onChange={(event) =>
-                    update(node.id, { label: event.target.value })
-                  }
-                />
-                {selectedOption && (
-                  <div className="rounded-xl border border-mg-accent/25 bg-mg-accent/5 px-3 py-2">
-                    <span className="text-[10px] text-mg-muted">
-                      Selected model
-                    </span>
-                    <p className="mt-0.5 text-[10px] font-medium text-mg-primary">
-                      {selectedOption.label}
-                    </p>
-                  </div>
-                )}
-                {operationParameters.length ? (
-                  <div className="grid grid-cols-2 gap-3">
-                    {operationParameters.map((parameter) => (
-                      <div
-                        key={parameter.id}
-                        className={
-                          parameter.type === "textarea" ||
-                          parameter.type === "json" ||
-                          parameter.type === "file" ||
-                          parameter.type === "saveFile"
-                            ? "col-span-2"
-                            : ""
-                        }
-                      >
-                        <NodeParameterField
-                          definition={parameter}
-                          nodeDefinition={definition}
-                          value={node.data.parameters?.[parameter.id]}
-                          selectedName={
-                            parameter.type === "file"
-                              ? node.data.result?.sourceName
-                              : undefined
-                          }
-                          onChange={(value, selection) =>
-                            setParameter(parameter, value, selection)
-                          }
-                        />
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-[10px] text-mg-muted">
-                    This node has no additional operation settings.
-                  </p>
-                )}
-                <div className="border-t border-mg-border pt-2">
-                  <Checkbox
-                    label="Disable node"
-                    checked={Boolean(node.data.disabled)}
-                    onChange={(event) =>
-                      update(node.id, { disabled: event.target.checked })
-                    }
-                  />
-                </div>
-              </div>
-            </section>
-
-            <section className="grid gap-2">
-              <div className="flex items-center gap-2">
-                <ImageIcon className="size-3.5 text-mg-muted" />
-                <h3 className="text-[11px] font-semibold tracking-tight text-mg-secondary">
-                  Latest result
-                </h3>
-              </div>
-              <ArtifactPreview
-                artifactId={artifactId}
-                effect={String(node.data.appearance?.imageEffect || "none")}
-              />
-            </section>
+        <section className="min-h-0 overflow-y-auto border-r border-mg-border p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <Settings2 className="size-3.5 text-mg-muted" />
+            <div className="min-w-0 flex-1">
+              <h3 className="text-[11px] font-semibold tracking-tight text-mg-secondary">
+                Node settings
+              </h3>
+              <p className="text-[9px] text-mg-muted">
+                These values belong only to this node instance.
+              </p>
+            </div>
+            <Badge
+              tone={
+                status === "FAILED"
+                  ? "error"
+                  : status === "RUNNING"
+                    ? "running"
+                    : ["SUCCEEDED", "CACHED"].includes(status)
+                      ? "success"
+                      : "neutral"
+              }
+            >
+              {status}
+            </Badge>
           </div>
-        </main>
+          <div className="grid gap-3">
+            <TextField
+              label="Node label"
+              value={node.data.label || ""}
+              onChange={(event) =>
+                update(node.id, { label: event.target.value })
+              }
+            />
+            {selectedOption && (
+              <p className="text-[10px] text-mg-muted">
+                Selected model{" "}
+                <span className="font-medium text-mg-primary">
+                  {selectedOption.label}
+                </span>
+              </p>
+            )}
+            {operationParameters.length ? (
+              <div className="grid grid-cols-2 gap-3">
+                {operationParameters.map((parameter) => (
+                  <div
+                    key={parameter.id}
+                    className={
+                      parameter.type === "textarea" ||
+                      parameter.type === "json" ||
+                      parameter.type === "file" ||
+                      parameter.type === "saveFile"
+                        ? "col-span-2"
+                        : ""
+                    }
+                  >
+                    <NodeParameterField
+                      definition={parameter}
+                      nodeDefinition={definition}
+                      value={node.data.parameters?.[parameter.id]}
+                      selectedName={
+                        parameter.type === "file"
+                          ? node.data.result?.sourceName
+                          : undefined
+                      }
+                      onChange={(value, selection) =>
+                        setParameter(parameter, value, selection)
+                      }
+                    />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-[10px] text-mg-muted">
+                This node has no additional operation settings.
+              </p>
+            )}
+            <Checkbox
+              label="Disable node"
+              checked={Boolean(node.data.disabled)}
+              onChange={(event) =>
+                update(node.id, { disabled: event.target.checked })
+              }
+            />
+          </div>
+        </section>
+
+        <aside className="flex min-h-0 flex-col overflow-hidden p-4">
+          <div className="mb-2.5 flex items-center gap-2">
+            <ImageIcon className="size-3.5 text-mg-muted" />
+            <h3 className="text-[11px] font-semibold tracking-tight text-mg-secondary">
+              Preview
+            </h3>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <ArtifactPreview
+              artifactId={artifactId}
+              effect={String(node.data.appearance?.imageEffect || "none")}
+              className="h-full min-h-0"
+            />
+          </div>
+        </aside>
       </div>
     </Dialog>
   );

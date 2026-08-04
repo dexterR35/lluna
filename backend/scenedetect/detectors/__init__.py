@@ -74,8 +74,3 @@ processing videos, however they can also be used to process frames directly.
 
 # PySceneDetect Detection Algorithm Imports
 from backend.scenedetect.detectors.content_detector import ContentDetector
-from backend.scenedetect.detectors.threshold_detector import ThresholdDetector
-from backend.scenedetect.detectors.adaptive_detector import AdaptiveDetector
-
-# Algorithms being ported:
-#from scenedetect.detectors.motion_detector import MotionDetector

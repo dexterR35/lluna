@@ -6,19 +6,15 @@ import cv2
 import torch
 import numpy as np
 from tqdm import tqdm
-from torchvision import transforms
 
 from backend.inpaint.sttn.auto_sttn import InpaintGenerator
-from backend.inpaint.utils.sttn_utils import Stack, ToTorchFormatTensor
+from backend.inpaint.tensor_transforms import to_tensors
 from backend.tools.inpaint_tools import get_inpaint_area_by_mask, is_frame_number_in_ab_sections
 from backend.tools.video_io import FramePrefetcher
 from backend.tools.hardware_accelerator import HardwareAccelerator
 
 # Define image preprocessing pipeline
-_to_tensors = transforms.Compose([
-    Stack(),  # Stack images into a sequence
-    ToTorchFormatTensor()  # Convert stacked images to PyTorch tensors
-])
+_to_tensors = to_tensors()
 
 class STTNInpaint:
     def __init__(

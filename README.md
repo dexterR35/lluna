@@ -11,7 +11,6 @@ Midgard is a local-first Electron node editor for AI media workflows. Electron i
 - WebSocket events carry progress/log metadata; artifacts and path grants keep large media out of JSON/IPC.
 - The existing `InferClient` remains the one-worker GPU scheduling boundary.
 
-See [Electron architecture](docs/ELECTRON_ARCHITECTURE.md) and [implementation status](docs/IMPLEMENTATION_STATUS.md).
 
 ## Source development
 
