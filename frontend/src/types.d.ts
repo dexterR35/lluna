@@ -106,6 +106,10 @@ export interface ArtifactMetadata {
   duration?: number;
   frameCount?: number;
   alpha?: boolean;
+  originalSourcePath?: string | null;
+  creatingRunId?: string | null;
+  creatingNodeId?: string | null;
+  inputArtifactIds?: string[];
 }
 
 export interface ArtifactPreviewState {
@@ -196,6 +200,7 @@ export interface MidgardDesktopApi {
   selectMaskFile(): Promise<DesktopGrant | null>;
   selectDirectory(): Promise<DesktopGrant | null>;
   selectSaveFile(kind: "image" | "video"): Promise<DesktopGrant | null>;
+  writeGrantInDirectory(directoryGrantId: string, fileName: string): Promise<DesktopGrant>;
   revealPath(grantId: string): Promise<boolean>;
   openExternal(urlId: string): Promise<void>;
   getPlatformInfo(): Promise<Record<string, unknown>>;

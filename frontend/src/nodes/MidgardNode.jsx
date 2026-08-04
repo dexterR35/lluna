@@ -302,6 +302,7 @@ function MidgardNodeComponent({ id, data, selected }) {
         {appearance.showPreview !== false && artifactIds.length > 1 ? (
           <ArtifactThumbGrid
             artifactIds={artifactIds}
+            schemaId={data.schemaId}
             effect={String(appearance.imageEffect || "none")}
             fit={String(appearance.imageFit || "cover")}
             label={`${nodeLabel} output`}
@@ -309,6 +310,7 @@ function MidgardNodeComponent({ id, data, selected }) {
         ) : appearance.showPreview !== false && artifactId ? (
           <ArtifactThumbnail
             artifactId={artifactId}
+            schemaId={data.schemaId}
             effect={String(appearance.imageEffect || "none")}
             fit={String(appearance.imageFit || "cover")}
             ratio="square"

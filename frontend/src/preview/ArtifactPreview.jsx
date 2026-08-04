@@ -4,10 +4,11 @@ import {
   Download,
   Image as ImageIcon,
 } from "lucide-react";
-import { api, artifactObjectUrl, artifactThumbnailUrl, saveArtifact } from "../api/client";
+import { api, artifactObjectUrl, artifactThumbnailUrl } from "../api/client";
 import { Badge, Button, EmptyState, LoadingState } from "../components";
 import { useToast } from "../components/ToastContext";
 import { IMAGE_EFFECTS } from "./imageEffects";
+import { saveArtifactsExport } from "./saveExport";
 
 /** @param {string | undefined} artifactId @param {{thumbnail?: boolean, maxEdge?: number}} [options] */
 function useArtifact(artifactId, options = {}) {
@@ -86,29 +87,26 @@ function ArtifactMedia({
   );
 }
 
-/** @param {string | undefined} artifactId @param {import("../types").ArtifactPreviewState} state */
-function useArtifactSaver(artifactId, state) {
+/**
+ * @param {string | string[] | undefined} artifactIds
+ * @param {import("../types").ArtifactPreviewState | null | undefined} state
+ * @param {string | undefined} schemaId
+ */
+function useArtifactSaver(artifactIds, state, schemaId) {
   const toast = useToast();
   return async function save() {
-    if (!artifactId || !state.url) return;
-    const desktop = window.midgardDesktop;
-    if (!desktop) {
-      const anchor = document.createElement("a");
-      anchor.href = state.url;
-      anchor.download = state.metadata?.mediaType?.startsWith("video/")
-        ? "midgard-output.mp4"
-        : "midgard-output.png";
-      anchor.click();
-      return;
-    }
+    const ids = /** @type {string[]} */ (
+      (Array.isArray(artifactIds) ? artifactIds : [artifactIds]).filter(
+        (id) => typeof id === "string" && id.length > 0,
+      )
+    );
+    if (!ids.length) return;
+    if (state && !state.url && ids.length === 1) return;
     try {
-      const kind = state.metadata?.mediaType?.startsWith("video/")
-        ? "video"
-        : "image";
-      const grant = await desktop.selectSaveFile(kind);
-      if (!grant) return;
-      const result = await saveArtifact(artifactId, grant.grantId);
-      toast.push(`Saved ${result.name}`);
+      const saved = await saveArtifactsExport(ids, { schemaId });
+      if (!saved) return;
+      if (saved.length === 1) toast.push(`Saved ${saved[0]}`);
+      else toast.push(`Saved ${saved.length} files`);
     } catch (error) {
       toast.push(
         error instanceof Error ? error.message : String(error),
@@ -154,9 +152,10 @@ function PreviewMeta({ metadata }) {
   );
 }
 
-/** @param {{artifactId?: string, effect?: string, fit?: string, ratio?: string, label?: string, size?: "sm"|"md"}} props */
+/** @param {{artifactId?: string, schemaId?: string, effect?: string, fit?: string, ratio?: string, label?: string, size?: "sm"|"md"}} props */
 export function ArtifactThumbnail({
   artifactId,
+  schemaId,
   effect = "none",
   fit = "cover",
   ratio = "wide",
@@ -167,7 +166,7 @@ export function ArtifactThumbnail({
     thumbnail: true,
     maxEdge: size === "sm" ? 128 : 256,
   });
-  const save = useArtifactSaver(artifactId, state);
+  const save = useArtifactSaver(artifactId, state, schemaId);
   const height =
     size === "sm"
       ? "h-full min-h-0"
@@ -227,9 +226,10 @@ export function ArtifactThumbnail({
 }
 
 /** Compact multi-image thumb grid for node bodies (thumbnails only). */
-/** @param {{artifactIds: string[], effect?: string, fit?: string, label?: string}} props */
+/** @param {{artifactIds: string[], schemaId?: string, effect?: string, fit?: string, label?: string}} props */
 export function ArtifactThumbGrid({
   artifactIds,
+  schemaId,
   effect = "none",
   fit = "cover",
   label = "Node output",
@@ -245,6 +245,7 @@ export function ArtifactThumbGrid({
         <div key={id} className="midgard-node-thumb">
           <ArtifactThumbnail
             artifactId={id}
+            schemaId={schemaId}
             effect={effect}
             fit={fit}
             size="sm"
@@ -256,15 +257,19 @@ export function ArtifactThumbGrid({
   );
 }
 
-/** @param {{artifactId?: string, effect?: string, compact?: boolean}} props */
+/** @param {{artifactId?: string, artifactIds?: string[], schemaId?: string, effect?: string, compact?: boolean}} props */
 export function ArtifactPreview({
   artifactId,
+  artifactIds,
+  schemaId,
   effect = "none",
   compact = false,
 }) {
-  const state = useArtifact(artifactId);
-  const save = useArtifactSaver(artifactId, state);
-  if (!artifactId)
+  const ids = artifactIds?.length ? artifactIds : artifactId ? [artifactId] : [];
+  const primaryId = ids.at(-1);
+  const state = useArtifact(primaryId);
+  const save = useArtifactSaver(ids, state, schemaId);
+  if (!primaryId)
     return (
       <EmptyState
         icon={<ImageIcon className="ui-icon-lg" />}
@@ -311,7 +316,7 @@ export function ArtifactPreview({
           className="min-h-6 px-2 text-[9px]"
         >
           <Download className="ui-icon-sm" />
-          Save
+          {ids.length > 1 ? `Save ${ids.length}` : "Save"}
         </Button>
       </div>
     </div>

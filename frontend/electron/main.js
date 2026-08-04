@@ -110,6 +110,27 @@ function installIpc() {
     const result = await dialog.showSaveDialog(mainWindow, { title: `Save ${video ? "Video" : "Image"}`, filters: [{ name: video ? "Video" : "Image", extensions: video ? ["mp4", "mkv"] : ["png", "jpg", "webp"] }] });
     return result.canceled || !result.filePath ? null : registerPathGrant(result.filePath, "write");
   });
+  ipcMain.handle("files:write-in-directory", async (_event, directoryGrantId, fileName) => {
+    const directoryPath = grants.get(directoryGrantId);
+    if (!directoryPath) throw new Error("Unknown directory grant");
+    const safeName = path.basename(String(fileName || "").trim());
+    if (!safeName || safeName === "." || safeName === "..") {
+      throw new Error("Invalid export file name");
+    }
+    const parsed = path.parse(safeName);
+    let candidate = path.join(directoryPath, safeName);
+    if (fs.existsSync(candidate)) {
+      for (let number = 1; number < 10_000; number += 1) {
+        const alternate = path.join(directoryPath, `${parsed.name}-${number}${parsed.ext}`);
+        if (!fs.existsSync(alternate)) {
+          candidate = alternate;
+          break;
+        }
+      }
+      if (fs.existsSync(candidate)) throw new Error("No available export file name in that folder");
+    }
+    return registerPathGrant(candidate, "write");
+  });
   ipcMain.handle("native:reveal", async (_event, grantId) => {
     const filePath = grants.get(grantId);
     if (!filePath) throw new Error("Unknown path grant");

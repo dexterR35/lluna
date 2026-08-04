@@ -127,11 +127,10 @@ export function NodeEditorDialog({ nodeId, onClose, onManageModels }) {
     (parameter) => parameter.id !== "model",
   );
   const persistedResult = node.data.result;
-  const artifactId = (
-    liveRun?.artifactIds?.length
-      ? liveRun.artifactIds
-      : persistedResult?.artifactIds || []
-  ).at(-1);
+  const artifactIds = liveRun?.artifactIds?.length
+    ? liveRun.artifactIds
+    : persistedResult?.artifactIds || [];
+  const artifactId = artifactIds.at(-1);
   const status = liveRun?.status || persistedResult?.status || "IDLE";
 
   function setParameter(
@@ -333,6 +332,8 @@ export function NodeEditorDialog({ nodeId, onClose, onManageModels }) {
           <div className="min-h-0 flex-1 overflow-y-auto">
             <ArtifactPreview
               artifactId={artifactId}
+              artifactIds={artifactIds}
+              schemaId={node.data.schemaId}
               effect={String(node.data.appearance?.imageEffect || "none")}
             />
           </div>

@@ -1,11 +1,14 @@
-import { Image as ImageIcon } from "lucide-react";
-import { Badge, Dialog } from "../components";
+import { Download, Image as ImageIcon } from "lucide-react";
+import { Badge, Button, Dialog } from "../components";
+import { useToast } from "../components/ToastContext";
 import { ArtifactPreview, ArtifactThumbnail } from "../preview/ArtifactPreview";
+import { saveArtifactsExport } from "../preview/saveExport";
 import { useEditorStore } from "../state/editorStore";
 import { useRunStore } from "../state/runStore";
 
 /** @param {{nodeId: string | null, onClose: () => void}} props */
 export function NodePreviewDialog({ nodeId, onClose }) {
+  const toast = useToast();
   const node = useEditorStore((store) =>
     store.nodes.find((item) => item.id === nodeId),
   );
@@ -19,7 +22,26 @@ export function NodePreviewDialog({ nodeId, onClose }) {
     ? liveRun.artifactIds
     : persistedResult?.artifactIds || [];
   const artifactId = artifactIds.at(-1);
+  const schemaId = node.data.schemaId;
   const label = node.data.label || node.data.definition?.name || "Node";
+
+  async function saveAll() {
+    if (!artifactIds.length) return;
+    try {
+      const saved = await saveArtifactsExport(artifactIds, { schemaId });
+      if (!saved) return;
+      toast.push(
+        saved.length === 1
+          ? `Saved ${saved[0]}`
+          : `Saved ${saved.length} files`,
+      );
+    } catch (error) {
+      toast.push(
+        error instanceof Error ? error.message : String(error),
+        "error",
+      );
+    }
+  }
 
   return (
     <Dialog
@@ -36,6 +58,16 @@ export function NodePreviewDialog({ nodeId, onClose }) {
         {artifactIds.length > 1 && (
           <Badge tone="accent">{artifactIds.length} ordered items</Badge>
         )}
+        {artifactIds.length > 1 && (
+          <Button
+            variant="secondary"
+            onClick={() => void saveAll()}
+            className="ml-auto min-h-6 px-2 text-[9px]"
+          >
+            <Download className="ui-icon-sm" />
+            Save {artifactIds.length}
+          </Button>
+        )}
       </div>
       {artifactIds.length > 1 ? (
         <div className="ui-preview grid grid-cols-2 gap-2 p-2 sm:grid-cols-3">
@@ -46,6 +78,7 @@ export function NodePreviewDialog({ nodeId, onClose }) {
               </div>
               <ArtifactThumbnail
                 artifactId={id}
+                schemaId={schemaId}
                 ratio="square"
                 label={`${label} item ${index + 1}`}
               />
@@ -55,6 +88,7 @@ export function NodePreviewDialog({ nodeId, onClose }) {
       ) : (
         <ArtifactPreview
           artifactId={artifactId}
+          schemaId={schemaId}
           effect={String(node.data.appearance?.imageEffect || "none")}
         />
       )}

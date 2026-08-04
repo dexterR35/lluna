@@ -21,6 +21,10 @@ contextBridge.exposeInMainWorld("midgardDesktop", Object.freeze({
   selectMaskFile: () => ipcRenderer.invoke("files:mask"),
   selectDirectory: () => ipcRenderer.invoke("files:directory"),
   selectSaveFile: (/** @type {"image" | "video"} */ kind) => ipcRenderer.invoke("files:save", kind),
+  writeGrantInDirectory: (
+    /** @type {string} */ directoryGrantId,
+    /** @type {string} */ fileName,
+  ) => ipcRenderer.invoke("files:write-in-directory", directoryGrantId, fileName),
   revealPath: (/** @type {string} */ grantId) => ipcRenderer.invoke("native:reveal", grantId),
   openExternal: (/** @type {string} */ urlId) => ipcRenderer.invoke("native:external", urlId),
   getPlatformInfo: () => ipcRenderer.invoke("native:platform"),
