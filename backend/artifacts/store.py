@@ -93,17 +93,23 @@ class ArtifactStore:
             return
         try:
             raw = json.loads(self.index_path.read_text(encoding="utf-8"))
-            self._records = {key: ArtifactRecord.model_validate(value) for key, value in raw.items()}
+            self._records = {
+                key: ArtifactRecord.model_validate(value) for key, value in raw.items()
+            }
         except (OSError, ValueError, json.JSONDecodeError):
             self._records = {}
 
     def _save(self) -> None:
-        atomic_write_json(self.index_path, {key: value.model_dump(mode="json") for key, value in self._records.items()})
+        atomic_write_json(
+            self.index_path,
+            {key: value.model_dump(mode="json") for key, value in self._records.items()},
+        )
 
     @staticmethod
     def _image_metadata(path: Path) -> tuple[int | None, int | None, bool | None]:
         try:
             from PIL import Image
+
             with Image.open(path) as image:
                 return image.width, image.height, "A" in image.getbands()
         except (ImportError, OSError):
@@ -115,16 +121,32 @@ class ArtifactStore:
             raise FileNotFoundError(source)
         width, height, alpha = self._image_metadata(source)
         record = ArtifactRecord(
-            media_type=media_type or mimetypes.guess_type(source.name)[0] or "application/octet-stream",
-            path=str(source), original_source_path=str(source), content_hash=hash_file(source),
-            byte_size=source.stat().st_size, width=width, height=height, alpha=alpha,
+            media_type=media_type
+            or mimetypes.guess_type(source.name)[0]
+            or "application/octet-stream",
+            path=str(source),
+            original_source_path=str(source),
+            content_hash=hash_file(source),
+            byte_size=source.stat().st_size,
+            width=width,
+            height=height,
+            alpha=alpha,
         )
         with self._lock:
             self._records[record.artifact_id] = record
             self._save()
         return record
 
-    def commit(self, source: str | Path, *, run_id: str, node_id: str, inputs: list[ArtifactRecord], media_type: str | None = None, parameters_hash: str = "") -> ArtifactRecord:
+    def commit(
+        self,
+        source: str | Path,
+        *,
+        run_id: str,
+        node_id: str,
+        inputs: list[ArtifactRecord],
+        media_type: str | None = None,
+        parameters_hash: str = "",
+    ) -> ArtifactRecord:
         source_path = Path(source).expanduser().resolve()
         if not source_path.is_file():
             raise FileNotFoundError(source_path)
@@ -136,10 +158,20 @@ class ArtifactStore:
         temporary.replace(destination)
         width, height, alpha = self._image_metadata(destination)
         record = ArtifactRecord(
-            artifact_id=artifact_id, media_type=media_type or mimetypes.guess_type(destination.name)[0] or "application/octet-stream",
-            path=str(destination), content_hash=hash_file(destination), byte_size=destination.stat().st_size,
-            width=width, height=height, alpha=alpha, creating_run_id=run_id, creating_node_id=node_id,
-            input_artifact_ids=[item.artifact_id for item in inputs], parameters_hash=parameters_hash,
+            artifact_id=artifact_id,
+            media_type=media_type
+            or mimetypes.guess_type(destination.name)[0]
+            or "application/octet-stream",
+            path=str(destination),
+            content_hash=hash_file(destination),
+            byte_size=destination.stat().st_size,
+            width=width,
+            height=height,
+            alpha=alpha,
+            creating_run_id=run_id,
+            creating_node_id=node_id,
+            input_artifact_ids=[item.artifact_id for item in inputs],
+            parameters_hash=parameters_hash,
         )
         with self._lock:
             self._records[record.artifact_id] = record
@@ -155,6 +187,42 @@ class ArtifactStore:
             raise FileNotFoundError(record.path)
         return record
 
+    def thumbnail_path(self, artifact_id: str, *, max_edge: int = 256) -> Path:
+        """Return a cached small JPEG for node previews; fall back to source for non-images."""
+        record = self.get(artifact_id)
+        source = Path(record.path)
+        if not (record.media_type or "").startswith("image/"):
+            return source
+        thumbs_dir = self.root / "thumbs"
+        thumbs_dir.mkdir(parents=True, exist_ok=True)
+        thumb = thumbs_dir / f"{artifact_id}_{max_edge}.jpg"
+        try:
+            if thumb.is_file() and thumb.stat().st_mtime >= source.stat().st_mtime:
+                return thumb
+        except OSError:
+            pass
+        try:
+            from PIL import Image, ImageOps
+
+            with Image.open(source) as opened:
+                image = ImageOps.exif_transpose(opened)
+                if image.mode in {"RGBA", "LA"} or (
+                    image.mode == "P" and "transparency" in image.info
+                ):
+                    rgba = image.convert("RGBA")
+                    background = Image.new("RGB", rgba.size, (18, 20, 26))
+                    background.paste(rgba, mask=rgba.split()[-1])
+                    image = background
+                else:
+                    image = image.convert("RGB")
+                image.thumbnail((max_edge, max_edge), Image.Resampling.LANCZOS)
+                temporary = thumb.with_suffix(".tmp.jpg")
+                image.save(temporary, format="JPEG", quality=72, optimize=True)
+                temporary.replace(thumb)
+            return thumb
+        except (ImportError, OSError, ValueError):
+            return source
+
     def list(self) -> list[ArtifactRecord]:
         with self._lock:
             return list(self._records.values())
@@ -167,4 +235,6 @@ class ArtifactStore:
             path = Path(record.path)
             if self.files_dir in path.parents:
                 path.unlink(missing_ok=True)
+            for thumb in (self.root / "thumbs").glob(f"{artifact_id}_*.jpg"):
+                thumb.unlink(missing_ok=True)
             self._save()

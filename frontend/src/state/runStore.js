@@ -17,6 +17,8 @@ const nodeStatus = {
 /** @type {import("zustand").StateCreator<RunState>} */
 const createRunState = (set, get) => ({
   run: null,
+  queue: { running: null, pending: [] },
+  history: [],
   nodeStates: {},
   logs: [],
   connection: "connecting",
@@ -54,10 +56,16 @@ const createRunState = (set, get) => ({
       return { nodeStates };
     });
   },
-  async start(workflow, mode = "all", selectedNodeIds = []) {
+  async start(workflow, mode = "all", selectedNodeIds = [], options = {}) {
     const run = await api("/api/runs", {
       method: "POST",
-      body: JSON.stringify({ workflow, mode, selectedNodeIds }),
+      body: JSON.stringify({
+        workflow,
+        mode,
+        selectedNodeIds,
+        force: Boolean(options.force),
+        queueFront: Boolean(options.queueFront),
+      }),
     });
     set((state) => ({
       run,
@@ -74,6 +82,7 @@ const createRunState = (set, get) => ({
       ),
       logs: [],
     }));
+    void get().loadActivity();
     return run;
   },
   async pause() {
@@ -90,12 +99,23 @@ const createRunState = (set, get) => ({
         run: await api(`/api/runs/${run.runId}/resume`, { method: "POST" }),
       });
   },
-  async cancel() {
-    const run = get().run;
-    if (run)
-      set({
-        run: await api(`/api/runs/${run.runId}/cancel`, { method: "POST" }),
+  async cancel(runId) {
+    const current = get().run;
+    const targetId = runId || current?.runId;
+    if (targetId) {
+      const cancelled = await api(`/api/runs/${targetId}/cancel`, {
+        method: "POST",
       });
+      if (current?.runId === targetId) set({ run: cancelled });
+      await get().loadActivity();
+    }
+  },
+  async loadActivity() {
+    const [queue, history] = await Promise.all([
+      api("/api/queue"),
+      api("/api/history?limit=50"),
+    ]);
+    set({ queue, history: history.runs || [] });
   },
   async clearCache() {
     const run = get().run;
@@ -104,6 +124,16 @@ const createRunState = (set, get) => ({
   },
   handleEvent(event) {
     const current = get().run;
+    if (
+      [
+        "run.queued",
+        "run.started",
+        "run.completed",
+        "run.failed",
+        "run.cancelled",
+      ].includes(event.type)
+    )
+      void get().loadActivity();
     if (event.runId && current && event.runId !== current.runId) return;
     if (event.type === "node.log")
       set((state) => ({

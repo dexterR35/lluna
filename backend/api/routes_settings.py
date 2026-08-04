@@ -3,11 +3,9 @@
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import TypeAdapter
 
 from backend.api.auth import require_token
 from backend.api.events import EventBroker
-from backend.configuration.models import ApplicationConfiguration
 from backend.configuration.service import ConfigurationService
 
 router = APIRouter(prefix="/api/settings", dependencies=[Depends(require_token)])
@@ -22,7 +20,16 @@ def get_settings() -> dict:
 def settings_schema() -> dict:
     return {
         "schemaVersion": 2,
-        "sections": ["subtitle", "runtime", "background_removal", "enhancement", "low_light", "generation", "object_selection", "save_directory"],
+        "sections": [
+            "subtitle",
+            "runtime",
+            "background_removal",
+            "enhancement",
+            "low_light",
+            "generation",
+            "object_selection",
+            "save_directory",
+        ],
     }
 
 

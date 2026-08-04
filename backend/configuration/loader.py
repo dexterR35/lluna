@@ -17,7 +17,6 @@ from backend.core.atomic import atomic_write_json
 from backend.core.paths import PATHS, AppPaths
 from backend.diagnostics.errors import ConfigurationError
 
-
 _ENVIRONMENT_KEYS: dict[str, tuple[str, str, type]] = {
     "MIDGARD_HARDWARE_ACCELERATION": (
         "subtitle",

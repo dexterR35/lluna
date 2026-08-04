@@ -14,7 +14,6 @@ import {
 } from "./components";
 import { BottomDrawer } from "./diagnostics/BottomDrawer";
 import { WorkflowCanvas } from "./editor/WorkflowCanvas";
-import { ModelsDialog } from "./models/ModelsDialog";
 import { SettingsDialog } from "./settings/SettingsDialog";
 import { useDesktopStore } from "./state/desktopStore";
 import { useEditorStore } from "./state/editorStore";
@@ -56,6 +55,7 @@ function EditorApp() {
   const [zoom, setZoom] = useState(0.78);
   useEffect(() => {
     void useServerStore.getState().bootstrap();
+    void useRunStore.getState().loadActivity();
     let disposed = false;
     /** @type {(() => void) | undefined} */
     let stop;
@@ -163,9 +163,13 @@ function EditorApp() {
     },
     [toast],
   );
-  /** @param {string} [mode] @param {string[]} [selectedNodeIds] */
+  /** @param {string} [mode] @param {string[]} [selectedNodeIds] @param {{queueFront?: boolean, force?: boolean}} [options] */
   const startRun = useCallback(
-    async (mode = "all", /** @type {string[]} */ selectedNodeIds = []) => {
+    async (
+      mode = "all",
+      /** @type {string[]} */ selectedNodeIds = [],
+      /** @type {{queueFront?: boolean, force?: boolean}} */ options = {},
+    ) => {
       const workflow = useEditorStore.getState().serialize();
       void validate({ silent: true });
       try {
@@ -173,13 +177,16 @@ function EditorApp() {
           workflow,
           mode,
           selectedNodeIds,
+          options,
         );
         window.midgardDesktop?.setRunProgress((run.progress || 0) / 100);
         const desktop = useDesktopStore.getState();
         desktop.setValue("drawerVisible", true);
-        desktop.setValue("drawerTab", "logs");
+        desktop.setValue("drawerTab", run.status === "QUEUED" ? "queue" : "logs");
         toast.push(
-          mode === "from"
+          options.queueFront
+            ? "Workflow queued to run next"
+            : mode === "from"
             ? "Running from selected node"
             : mode === "selected"
               ? "Running selected node"
@@ -252,6 +259,7 @@ function EditorApp() {
     },
     validate,
     run: () => void startRun("all"),
+    runNext: () => void startRun("all", [], { queueFront: true }),
     runSelected: () => {
       const ids = useEditorStore
         .getState()
@@ -311,11 +319,18 @@ function EditorApp() {
         d.setValue("drawerVisible", true);
         d.setValue("drawerTab", "diagnostics");
       },
-      "view:settings": () => d.setValue("settingsOpen", true),
-      "view:models": () => d.setValue("modelsOpen", true),
+      "view:settings": () => {
+        d.setValue("settingsSection", "editor");
+        d.setValue("settingsOpen", true);
+      },
+      "view:models": () => {
+        d.setValue("settingsSection", "models");
+        d.setValue("settingsOpen", true);
+      },
       "view:reset-layout": d.reset,
       "run:validate": validate,
       "run:start": actions.run,
+      "run:next": actions.runNext,
       "run:selected": actions.runSelected,
       "run:from-selected": () => runFromHere(undefined),
       "run:pause": runStore.pause,
@@ -349,6 +364,13 @@ function EditorApp() {
       }
       if (event.key.toLowerCase() === "f")
         window.dispatchEvent(new Event("midgard:fit"));
+      if (event.ctrlKey && event.altKey && event.key === "Enter") {
+        event.preventDefault();
+        executeRef.current?.("run:stop");
+      } else if (event.ctrlKey && event.key === "Enter") {
+        event.preventDefault();
+        executeRef.current?.(event.shiftKey ? "run:next" : "run:start");
+      }
     }
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
@@ -422,15 +444,13 @@ function EditorApp() {
               className="ui-row"
             >
               <IconTile>
-                <Search className="size-3.5" />
+                <Search className="ui-icon" />
               </IconTile>
               <span>
-                <strong className="block text-[12px] font-medium tracking-tight">
+                <strong className="ui-copy-title block text-[12px]">
                   {node.name}
                 </strong>
-                <span className="text-[10px] text-mg-muted">
-                  {node.category}
-                </span>
+                <span className="ui-copy-muted">{node.category}</span>
               </span>
             </button>
           ))}
@@ -441,7 +461,8 @@ function EditorApp() {
         onClose={() => setEditingNodeId(null)}
         onManageModels={() => {
           setEditingNodeId(null);
-          layout.setValue("modelsOpen", true);
+          layout.setValue("settingsSection", "models");
+          layout.setValue("settingsOpen", true);
         }}
       />
       <NodePreviewDialog
@@ -449,7 +470,6 @@ function EditorApp() {
         onClose={() => setPreviewNodeId(null)}
       />
       <SettingsDialog />
-      <ModelsDialog />
     </div>
   );
 }

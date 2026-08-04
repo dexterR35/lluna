@@ -47,19 +47,14 @@ function LibraryNode({ node, onAdd }) {
       className="ui-row group"
     >
       <IconTile className="group-hover:border-mg-secondary/30 group-hover:text-mg-primary">
-        <Icon className="size-3.5" />
+        <Icon className="ui-icon" />
       </IconTile>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-[12px] font-medium tracking-tight text-mg-primary">
-          {node.name}
-        </span>
-        <span className="block truncate text-[10px] text-mg-muted">
-          {node.description}
-        </span>
+      <span className="ui-copy-title min-w-0 flex-1 truncate text-[12px]">
+        {node.name}
       </span>
       {!node.available && (
         <Badge tone="warning" size="xs">
-          <AlertTriangle className="size-2.5" />
+          <AlertTriangle className="ui-icon-xs" />
         </Badge>
       )}
     </button>
@@ -75,17 +70,17 @@ function LibraryGroup({ category, nodes, closed, onToggle, onAdd }) {
         type="button"
         aria-expanded={!closed}
         onClick={onToggle}
-        className="flex h-8 w-full items-center gap-2 rounded-xl px-2.5 text-left text-[11px] font-medium text-mg-secondary transition hover:bg-mg-elevated hover:text-mg-primary"
+        className="ui-nav-item"
       >
-        <Icon className="size-3.5" />
+        <Icon className="ui-icon" />
         <span className="flex-1 truncate">{category}</span>
         <span className="tabular-nums text-mg-muted">{nodes.length}</span>
         <ChevronDown
-          className={`size-3.5 text-mg-muted transition ${closed ? "-rotate-90" : ""}`}
+          className={`ui-icon text-mg-muted transition ${closed ? "-rotate-90" : ""}`}
         />
       </button>
       {!closed && (
-        <div className="grid gap-0.5 py-1">
+        <div className="ui-stack-xs py-1">
           {nodes.map((node) => (
             <LibraryNode key={node.schemaId} node={node} onAdd={onAdd} />
           ))}
@@ -121,7 +116,7 @@ function LibraryBody({
       <div className="min-h-0 flex-1 overflow-y-auto p-2.5">
         {!groups.length && (
           <EmptyState
-            icon={<Blocks className="size-4" />}
+            icon={<Blocks className="ui-icon-lg" />}
             title="No matching nodes"
             description="Try another operation or category."
             compact
@@ -226,10 +221,10 @@ export function NodeLibrary({ onAdd }) {
                 setActiveCategory(null);
               }}
             >
-              <PanelLeftOpen className="size-3.5" />
+              <PanelLeftOpen className="ui-icon" />
             </IconButton>
           </div>
-          <div className="flex min-h-0 flex-1 flex-col items-center gap-1 overflow-y-auto py-2">
+          <div className="ui-stack-xs flex min-h-0 flex-1 flex-col items-center overflow-y-auto py-2">
             {categoryIcons.map(([category]) => {
               const Icon = CATEGORY_ICONS[category] || Blocks;
               const active = preview && activeCategory === category;
@@ -251,7 +246,7 @@ export function NodeLibrary({ onAdd }) {
                       : ""
                   }
                 >
-                  <Icon className="size-3.5" />
+                  <Icon className="ui-icon" />
                 </IconButton>
               );
             })}
@@ -287,7 +282,7 @@ export function NodeLibrary({ onAdd }) {
         onToggleCategory={toggleCategory}
         trailing={
           <IconButton label="Collapse library" onClick={collapse}>
-            <PanelLeftClose className="size-3.5" />
+            <PanelLeftClose className="ui-icon" />
           </IconButton>
         }
       />

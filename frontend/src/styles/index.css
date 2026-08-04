@@ -111,9 +111,119 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   .ui-control {
     @apply h-9 w-full rounded-xl border border-mg-border bg-mg-app px-3 text-xs text-mg-primary outline-none transition placeholder:text-mg-muted hover:border-mg-secondary/50 focus:border-mg-focus focus:ring-2 focus:ring-mg-focus/20 disabled:cursor-not-allowed disabled:opacity-50;
   }
+  .ui-control-inline {
+    @apply h-7 max-w-52 min-w-28 truncate border-transparent bg-transparent px-1.5 font-semibold tracking-tight hover:border-mg-border focus:border-mg-secondary/40 focus:bg-mg-elevated focus:ring-0;
+  }
+  .ui-control-area {
+    @apply min-h-20 resize-y py-2;
+  }
   .ui-field-label { @apply grid gap-1.5 text-[11px] font-medium text-mg-secondary; }
   .ui-help { @apply text-[10px] font-normal leading-4 text-mg-muted; }
+  .ui-icon { @apply size-3.5 shrink-0; }
+  .ui-icon-sm { @apply size-3 shrink-0; }
+  .ui-icon-lg { @apply size-4 shrink-0; }
+  .ui-icon-xs { @apply size-2.5 shrink-0; }
+  .ui-tabs {
+    @apply flex h-11 items-center gap-1 border-b border-mg-border px-2.5;
+  }
+  .ui-tab {
+    @apply inline-flex h-7 items-center gap-1.5 rounded-full px-2.5 text-[11px] font-medium text-mg-muted transition hover:bg-mg-app hover:text-mg-secondary;
+  }
+  .ui-tab.is-active { @apply bg-mg-elevated text-mg-primary; }
+  .ui-tab-count {
+    @apply rounded-full bg-mg-app px-1.5 text-[9px] tabular-nums text-mg-secondary;
+  }
+  .ui-switch {
+    @apply flex min-h-8 items-center justify-between gap-3 text-xs text-mg-primary;
+  }
+  .ui-switch-track {
+    @apply relative h-5 w-9 cursor-pointer rounded-full border transition disabled:cursor-not-allowed;
+  }
+  .ui-switch-track.is-on { @apply border-mg-accent bg-mg-accent; }
+  .ui-switch-track.is-off { @apply border-mg-border bg-mg-app; }
+  .ui-switch-thumb {
+    @apply absolute top-0.5 size-3.5 rounded-full bg-white transition;
+  }
+  .ui-switch-thumb.is-on { @apply left-[17px]; }
+  .ui-switch-thumb.is-off { @apply left-0.5; }
+  .ui-dropzone {
+    @apply grid min-h-28 place-items-center rounded-2xl border border-dashed border-mg-border bg-mg-app/45 px-4 py-3 text-center transition hover:border-mg-secondary/60;
+  }
+  .ui-dropzone.is-active {
+    @apply border-mg-accent bg-mg-accent/10;
+  }
+  .ui-preview {
+    @apply overflow-hidden rounded-2xl border border-mg-border bg-mg-app;
+  }
+  .ui-preview-bar {
+    @apply flex min-h-9 items-center gap-2 border-mg-border px-2.5;
+  }
+  .ui-preview-bar.is-header {
+    @apply h-9 border-b bg-mg-elevated/80;
+  }
+  .ui-preview-bar.is-footer {
+    @apply border-t bg-mg-elevated/50 px-2;
+  }
+  .ui-preview-stage {
+    @apply relative grid place-items-center overflow-hidden;
+  }
+  .ui-empty {
+    @apply grid h-full place-items-center text-center;
+  }
+  .ui-empty.is-compact { @apply min-h-28 p-4; }
+  .ui-empty.is-roomy { @apply min-h-36 p-5; }
+  .ui-log-line {
+    @apply grid grid-cols-[5.5rem_1fr] gap-2 px-0 py-1.5 font-mono text-[10px];
+  }
   .ui-divider { @apply mx-1 h-5 w-px shrink-0 bg-mg-border; }
+  .ui-rule { @apply border-t border-mg-border; }
+  .ui-stack { @apply grid gap-3; }
+  .ui-stack-sm { @apply grid gap-2.5; }
+  .ui-stack-xs { @apply grid gap-0.5; }
+  .ui-kicker {
+    @apply px-2.5 text-[9px] font-semibold uppercase tracking-wide text-mg-muted;
+  }
+  .ui-kicker-plain {
+    @apply text-[10px] font-medium uppercase tracking-wide text-mg-muted;
+  }
+  .ui-inline {
+    @apply flex flex-wrap items-center gap-x-4 gap-y-2;
+  }
+  .ui-actions { @apply flex flex-wrap items-center gap-2; }
+  .ui-action-row {
+    @apply flex items-center justify-between gap-3;
+  }
+  .ui-list { @apply divide-y divide-mg-border; }
+  .ui-list-item { @apply py-3 first:pt-0 last:pb-0; }
+  .ui-copy-title {
+    @apply text-[13px] font-semibold tracking-tight text-mg-primary;
+  }
+  .ui-copy-body { @apply text-[11px] text-mg-secondary; }
+  .ui-copy-muted { @apply text-[10px] text-mg-muted; }
+  .ui-nav-item {
+    @apply mb-0.5 flex min-h-8 w-full items-center gap-2 rounded-xl px-2.5 text-left text-[11px] text-mg-secondary transition hover:bg-mg-elevated hover:text-mg-primary;
+  }
+  .ui-nav-item.is-active {
+    @apply bg-mg-accent/15 font-medium text-mg-accent hover:bg-mg-accent/15 hover:text-mg-accent;
+  }
+  .ui-nav-item > svg { @apply size-3.5 shrink-0; }
+  .ui-settings {
+    @apply grid h-[min(78vh,44rem)] grid-cols-[14rem_minmax(0,1fr)];
+  }
+  .ui-settings-nav {
+    @apply min-h-0 space-y-0.5 overflow-y-auto border-r border-mg-border p-3;
+  }
+  .ui-settings-nav .ui-kicker { @apply mb-2; }
+  .ui-settings-main { @apply min-h-0 overflow-y-auto p-6; }
+  .ui-settings-header { @apply mb-4 border-b border-mg-border pb-3; }
+  .ui-settings-header .ui-copy-title { @apply text-[13px]; }
+  .ui-settings-header .ui-copy-muted { @apply mt-1 text-[11px]; }
+  .ui-settings-footer {
+    @apply mt-1 flex justify-end border-t border-mg-border pt-2.5;
+  }
+  .ui-dialog-wide {
+    @apply max-h-[90vh] w-[min(96vw,78rem)] max-w-none;
+  }
   .ui-scroll-fade {
     mask-image: linear-gradient(to bottom, transparent 0, black 8px, black calc(100% - 8px), transparent 100%);
   }
@@ -184,6 +294,23 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   height: 100%;
   min-height: 168px;
   border: 0 !important;
+}
+.midgard-node-thumbs {
+  display: grid;
+  flex: 1;
+  min-height: 168px;
+  grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
+  gap: 4px;
+  padding: 6px;
+  overflow: hidden;
+  background: var(--mg-bg-stage);
+}
+.midgard-node-thumb {
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: 6px;
+  border: 1px solid var(--mg-border-subtle);
+  background: var(--mg-bg-app);
 }
 .midgard-node-stage {
   display: grid;

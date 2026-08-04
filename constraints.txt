@@ -9,7 +9,7 @@ numpy==2.3.5
 Pillow==12.3.0
 scipy==1.16.3
 requests==2.34.2
-cryptography==48.0.1
+cryptography==50.0.0
 rembg==2.0.75
 transformers==5.5.0
 huggingface_hub==1.5.0

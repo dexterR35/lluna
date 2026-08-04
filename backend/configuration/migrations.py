@@ -6,10 +6,14 @@ from typing import Any, Mapping
 
 from backend.configuration.models import SCHEMA_VERSION
 
-
 _MODERN_SECTIONS = {
-    "runtime", "subtitle", "background_removal", "enhancement",
-    "low_light", "generation", "object_selection",
+    "runtime",
+    "subtitle",
+    "background_removal",
+    "enhancement",
+    "low_light",
+    "generation",
+    "object_selection",
 }
 
 
@@ -60,7 +64,9 @@ def migrate_mapping(raw: Mapping[str, Any]) -> dict[str, Any]:
         },
         "background_removal": {
             "mode": background.get("Mode", "birefnet-general"),
-            "enabled_models": background.get("EnabledModels", "birefnet-general,u2net_human_seg,isnet-anime,u2net_cloth_seg"),
+            "enabled_models": background.get(
+                "EnabledModels", "birefnet-general,u2net_human_seg,isnet-anime,u2net_cloth_seg"
+            ),
         },
         "enhancement": {
             "mode": enhancement.get("Mode", "RealESRGAN_x2plus"),

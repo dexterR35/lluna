@@ -28,10 +28,7 @@ export function Tabs({
     <div
       role="tablist"
       aria-label={label}
-      className={cn(
-        "flex h-11 items-center gap-1 border-b border-mg-border px-2.5",
-        className,
-      )}
+      className={cn("ui-tabs", className)}
     >
       {tabs.map((tab, index) => (
         <button
@@ -42,19 +39,15 @@ export function Tabs({
           onKeyDown={(event) => key(event, index)}
           onClick={() => onChange(tab.id)}
           className={cn(
-            "inline-flex h-7 items-center gap-1.5 rounded-full px-2.5 text-[11px] font-medium transition",
+            "ui-tab",
             focusRing,
-            value === tab.id
-              ? "bg-mg-elevated text-mg-primary"
-              : "text-mg-muted hover:bg-mg-app hover:text-mg-secondary",
+            value === tab.id && "is-active",
           )}
         >
           {tab.icon}
           {tab.label}
           {tab.count !== undefined && (
-            <span className="rounded-full bg-mg-app px-1.5 text-[9px] tabular-nums text-mg-secondary">
-              {tab.count}
-            </span>
+            <span className="ui-tab-count">{tab.count}</span>
           )}
         </button>
       ))}

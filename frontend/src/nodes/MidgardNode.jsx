@@ -24,7 +24,7 @@ import {
   ZoomIn,
 } from "lucide-react";
 import { ProgressBar, Badge, IconTile } from "../components";
-import { ArtifactThumbnail } from "../preview/ArtifactPreview";
+import { ArtifactThumbGrid, ArtifactThumbnail } from "../preview/ArtifactPreview";
 import { useRunStore } from "../state/runStore";
 import { PORT_COLORS } from "./portTypes";
 import { enabledModelOptions } from "../models/modelAvailability";
@@ -299,7 +299,14 @@ function MidgardNodeComponent({ id, data, selected }) {
       </header>
 
       <div className="midgard-node-body">
-        {appearance.showPreview !== false && artifactId ? (
+        {appearance.showPreview !== false && artifactIds.length > 1 ? (
+          <ArtifactThumbGrid
+            artifactIds={artifactIds}
+            effect={String(appearance.imageEffect || "none")}
+            fit={String(appearance.imageFit || "cover")}
+            label={`${nodeLabel} output`}
+          />
+        ) : appearance.showPreview !== false && artifactId ? (
           <ArtifactThumbnail
             artifactId={artifactId}
             effect={String(appearance.imageEffect || "none")}
@@ -442,11 +449,9 @@ function MidgardNodeComponent({ id, data, selected }) {
 
         <div className="midgard-node-footer-actions">
           {artifactId && (
-            <Badge
-              as="button"
+            <button
               type="button"
-              size="md"
-              className="nodrag nowheel cursor-pointer gap-1.5"
+              className="nodrag nowheel midgard-node-gear"
               aria-label={`Preview ${nodeLabel} image`}
               title="Preview image"
               onPointerDown={stopPointer}
@@ -455,9 +460,8 @@ function MidgardNodeComponent({ id, data, selected }) {
                 actions.onPreview?.(id);
               }}
             >
-              <Eye className="size-3" />
-              Preview
-            </Badge>
+              <Eye className="ui-icon" />
+            </button>
           )}
           <button
             type="button"
@@ -471,7 +475,7 @@ function MidgardNodeComponent({ id, data, selected }) {
               actions.onRun?.(id);
             }}
           >
-            <Play className="size-3.5 fill-current" />
+            <Play className="ui-icon fill-current" />
           </button>
         </div>
       </footer>

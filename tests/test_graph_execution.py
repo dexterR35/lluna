@@ -1,82 +1,130 @@
 from __future__ import annotations
-import time
-from PIL import Image
-from backend.artifacts.store import ArtifactStore,DesktopGrantStore
-from backend.graph.executor import RunManager
-from backend.graph.schema import WorkflowDocument,WorkflowEdge,WorkflowNode
 
-def test_fake_worker_vertical_slice_commits_artifact(monkeypatch,tmp_path):
-    monkeypatch.setenv("MIDGARD_FAKE_WORKER","1")
-    source_path=tmp_path/"input.png";Image.new("RGBA",(4,3),(10,20,30,255)).save(source_path)
-    ArtifactStore._instance=ArtifactStore(tmp_path/"artifacts")
-    DesktopGrantStore._instance=None;grants=DesktopGrantStore.instance();grant=grants.issue(source_path)
-    RunManager._instance=None;manager=RunManager.instance()
-    source=WorkflowNode(id="load",schema_id="midgard.input.image",parameters={"pathGrantId":grant.grant_id})
-    enhance=WorkflowNode(id="enhance",schema_id="midgard.image.upscale",parameters={"model":"test"})
-    preview=WorkflowNode(id="preview",schema_id="midgard.output.preview_image")
-    workflow=WorkflowDocument(nodes=[source,enhance,preview],edges=[WorkflowEdge(source_node_id="load",source_port_id="image",target_node_id="enhance",target_port_id="image"),WorkflowEdge(source_node_id="enhance",source_port_id="image",target_node_id="preview",target_port_id="image")])
-    run=manager.start(workflow)
-    deadline=time.monotonic()+3
-    while time.monotonic()<deadline:
-        snapshot=manager.get(run.run_id)
-        if snapshot.status in {"COMPLETED","FAILED","CANCELLED"}:break
-        time.sleep(.02)
-    assert snapshot.status=="COMPLETED",snapshot.error
-    assert snapshot.nodes["enhance"].status in {"SUCCEEDED","CACHED"}
+import threading
+import time
+from datetime import datetime, timezone
+
+from PIL import Image
+
+from backend.artifacts.store import ArtifactStore, DesktopGrantStore
+from backend.graph.executor import RunManager
+from backend.graph.schema import WorkflowDocument, WorkflowEdge, WorkflowNode
+
+
+def test_fake_worker_vertical_slice_commits_artifact(monkeypatch, tmp_path):
+    monkeypatch.setenv("MIDGARD_FAKE_WORKER", "1")
+    source_path = tmp_path / "input.png"
+    Image.new("RGBA", (4, 3), (10, 20, 30, 255)).save(source_path)
+    ArtifactStore._instance = ArtifactStore(tmp_path / "artifacts")
+    DesktopGrantStore._instance = None
+    grants = DesktopGrantStore.instance()
+    grant = grants.issue(source_path)
+    RunManager._instance = None
+    manager = RunManager.instance()
+    source = WorkflowNode(
+        id="load", schema_id="midgard.input.image", parameters={"pathGrantId": grant.grant_id}
+    )
+    enhance = WorkflowNode(
+        id="enhance", schema_id="midgard.image.upscale", parameters={"model": "test"}
+    )
+    preview = WorkflowNode(id="preview", schema_id="midgard.output.preview_image")
+    workflow = WorkflowDocument(
+        nodes=[source, enhance, preview],
+        edges=[
+            WorkflowEdge(
+                source_node_id="load",
+                source_port_id="image",
+                target_node_id="enhance",
+                target_port_id="image",
+            ),
+            WorkflowEdge(
+                source_node_id="enhance",
+                source_port_id="image",
+                target_node_id="preview",
+                target_port_id="image",
+            ),
+        ],
+    )
+    run = manager.start(workflow)
+    deadline = time.monotonic() + 3
+    while time.monotonic() < deadline:
+        snapshot = manager.get(run.run_id)
+        if snapshot.status in {"COMPLETED", "FAILED", "CANCELLED"}:
+            break
+        time.sleep(0.02)
+    assert snapshot.status == "COMPLETED", snapshot.error
+    assert snapshot.nodes["enhance"].status in {"SUCCEEDED", "CACHED"}
     assert snapshot.artifact_ids
-    artifact=ArtifactStore.instance().get(snapshot.artifact_ids[-1])
-    assert artifact.width==4 and artifact.height==3
-    cached_run=manager.start(workflow)
-    deadline=time.monotonic()+3
-    while time.monotonic()<deadline:
-        cached_snapshot=manager.get(cached_run.run_id)
-        if cached_snapshot.status in {"COMPLETED","FAILED","CANCELLED"}:break
-        time.sleep(.02)
-    assert cached_snapshot.status=="COMPLETED",cached_snapshot.error
-    assert cached_snapshot.nodes["enhance"].status=="CACHED"
+    artifact = ArtifactStore.instance().get(snapshot.artifact_ids[-1])
+    assert artifact.width == 4 and artifact.height == 3
+    cached_run = manager.start(workflow)
+    deadline = time.monotonic() + 3
+    while time.monotonic() < deadline:
+        cached_snapshot = manager.get(cached_run.run_id)
+        if cached_snapshot.status in {"COMPLETED", "FAILED", "CANCELLED"}:
+            break
+        time.sleep(0.02)
+    assert cached_snapshot.status == "COMPLETED", cached_snapshot.error
+    assert cached_snapshot.nodes["enhance"].status == "CACHED"
     assert cached_snapshot.nodes["enhance"].artifact_ids
 
+
 def test_load_image_uses_saved_artifact_when_desktop_grant_has_expired(tmp_path):
-    source_path=tmp_path/"persisted.png";Image.new("RGB",(5,4),(10,20,30)).save(source_path)
-    ArtifactStore._instance=ArtifactStore(tmp_path/"artifacts")
-    artifact=ArtifactStore.instance().register_source(source_path)
-    DesktopGrantStore._instance=None
-    RunManager._instance=None;manager=RunManager.instance()
-    node=WorkflowNode(
+    source_path = tmp_path / "persisted.png"
+    Image.new("RGB", (5, 4), (10, 20, 30)).save(source_path)
+    ArtifactStore._instance = ArtifactStore(tmp_path / "artifacts")
+    artifact = ArtifactStore.instance().register_source(source_path)
+    DesktopGrantStore._instance = None
+    RunManager._instance = None
+    manager = RunManager.instance()
+    node = WorkflowNode(
         id="load",
         schema_id="midgard.input.image",
-        parameters={"pathGrantId":"expired-grant"},
-        result={"status":"READY","artifactIds":[artifact.artifact_id]},
+        parameters={"pathGrantId": "expired-grant"},
+        result={"status": "READY", "artifactIds": [artifact.artifact_id]},
     )
-    loaded=manager._load_granted_media(node)
-    assert loaded.artifact_id==artifact.artifact_id
+    loaded = manager._load_granted_media(node)
+    assert loaded.artifact_id == artifact.artifact_id
 
-def test_selected_run_reuses_boundary_artifact_without_running_upstream(monkeypatch,tmp_path):
-    monkeypatch.setenv("MIDGARD_FAKE_WORKER","1")
-    source_path=tmp_path/"boundary.png";Image.new("RGB",(6,5),(30,40,50)).save(source_path)
-    ArtifactStore._instance=ArtifactStore(tmp_path/"artifacts")
-    artifact=ArtifactStore.instance().register_source(source_path)
-    DesktopGrantStore._instance=None
-    RunManager._instance=None;manager=RunManager.instance()
-    source=WorkflowNode(
+
+def test_selected_run_reuses_boundary_artifact_without_running_upstream(monkeypatch, tmp_path):
+    monkeypatch.setenv("MIDGARD_FAKE_WORKER", "1")
+    source_path = tmp_path / "boundary.png"
+    Image.new("RGB", (6, 5), (30, 40, 50)).save(source_path)
+    ArtifactStore._instance = ArtifactStore(tmp_path / "artifacts")
+    artifact = ArtifactStore.instance().register_source(source_path)
+    DesktopGrantStore._instance = None
+    RunManager._instance = None
+    manager = RunManager.instance()
+    source = WorkflowNode(
         id="source",
         schema_id="midgard.input.image",
-        result={"status":"SUCCEEDED","artifactIds":[artifact.artifact_id]},
+        result={"status": "SUCCEEDED", "artifactIds": [artifact.artifact_id]},
     )
-    enhance=WorkflowNode(id="enhance",schema_id="midgard.image.upscale",parameters={"model":"test"})
-    workflow=WorkflowDocument(
-        nodes=[source,enhance],
-        edges=[WorkflowEdge(source_node_id="source",source_port_id="image",target_node_id="enhance",target_port_id="image")],
+    enhance = WorkflowNode(
+        id="enhance", schema_id="midgard.image.upscale", parameters={"model": "test"}
     )
-    run=manager.start(workflow,mode="selected",selected_node_ids=["enhance"])
-    deadline=time.monotonic()+3
-    while time.monotonic()<deadline:
-        snapshot=manager.get(run.run_id)
-        if snapshot.status in {"COMPLETED","FAILED","CANCELLED"}:break
-        time.sleep(.02)
-    assert snapshot.status=="COMPLETED",snapshot.error
-    assert set(snapshot.nodes)=={"enhance"}
-    assert snapshot.nodes["enhance"].status in {"SUCCEEDED","CACHED"}
+    workflow = WorkflowDocument(
+        nodes=[source, enhance],
+        edges=[
+            WorkflowEdge(
+                source_node_id="source",
+                source_port_id="image",
+                target_node_id="enhance",
+                target_port_id="image",
+            )
+        ],
+    )
+    run = manager.start(workflow, mode="selected", selected_node_ids=["enhance"])
+    deadline = time.monotonic() + 3
+    while time.monotonic() < deadline:
+        snapshot = manager.get(run.run_id)
+        if snapshot.status in {"COMPLETED", "FAILED", "CANCELLED"}:
+            break
+        time.sleep(0.02)
+    assert snapshot.status == "COMPLETED", snapshot.error
+    assert set(snapshot.nodes) == {"enhance"}
+    assert snapshot.nodes["enhance"].status in {"SUCCEEDED", "CACHED"}
 
 
 def test_boundary_output_keeps_single_artifacts_scalar_and_batches_ordered(tmp_path):
@@ -265,3 +313,85 @@ def test_composite_broadcasts_one_background_across_foreground_queue(tmp_path):
     with Image.open(first.path) as image:
         assert image.size == (4, 4)
         assert image.convert("RGB").getpixel((0, 0)) == (128, 0, 127)
+
+
+def test_workflow_queue_runs_front_priority_before_fifo_items(monkeypatch, tmp_path):
+    ArtifactStore._instance = ArtifactStore(tmp_path / "artifacts")
+    DesktopGrantStore._instance = None
+    RunManager._instance = None
+    manager = RunManager.instance()
+    started = threading.Event()
+    release = threading.Event()
+    order = []
+
+    def execute(control):
+        order.append(control.snapshot.run_id)
+        control.snapshot.status = "RUNNING"
+        if len(order) == 1:
+            started.set()
+            assert release.wait(timeout=2)
+        control.snapshot.status = "COMPLETED"
+        control.snapshot.progress = 100
+        control.snapshot.completed_at = datetime.now(timezone.utc)
+
+    monkeypatch.setattr(manager, "_execute", execute)
+    workflow = WorkflowDocument(
+        nodes=[
+            WorkflowNode(
+                id="prompt",
+                schema_id="midgard.input.prompt",
+                parameters={"value": "queued"},
+            )
+        ]
+    )
+
+    first = manager.start(workflow)
+    assert started.wait(timeout=2)
+    second = manager.start(workflow)
+    next_run = manager.start(workflow, queue_front=True)
+
+    queued = manager.queue_snapshot()["pending"]
+    assert [item.run_id for item in queued] == [next_run.run_id, second.run_id]
+    assert [item.queue_position for item in queued] == [1, 2]
+    release.set()
+
+    assert _wait_for_run(manager, next_run.run_id).status == "COMPLETED"
+    assert _wait_for_run(manager, second.run_id).status == "COMPLETED"
+    assert order == [first.run_id, next_run.run_id, second.run_id]
+    manager.shutdown()
+
+
+def test_cancelling_queued_run_does_not_execute_it(monkeypatch, tmp_path):
+    ArtifactStore._instance = ArtifactStore(tmp_path / "artifacts")
+    DesktopGrantStore._instance = None
+    RunManager._instance = None
+    manager = RunManager.instance()
+    started = threading.Event()
+    release = threading.Event()
+    order = []
+
+    def execute(control):
+        order.append(control.snapshot.run_id)
+        control.snapshot.status = "RUNNING"
+        started.set()
+        if len(order) == 1:
+            assert release.wait(timeout=2)
+        control.snapshot.status = "COMPLETED"
+        control.snapshot.completed_at = datetime.now(timezone.utc)
+
+    monkeypatch.setattr(manager, "_execute", execute)
+    workflow = WorkflowDocument(
+        nodes=[WorkflowNode(id="value", schema_id="midgard.input.number", parameters={"value": 1})]
+    )
+    first = manager.start(workflow)
+    assert started.wait(timeout=2)
+    cancelled = manager.start(workflow)
+    snapshot = manager.cancel(cancelled.run_id)
+    assert snapshot.status == "CANCELLED"
+    assert snapshot.error and snapshot.error["code"] == "CANCELLED"
+    release.set()
+    assert _wait_for_run(manager, first.run_id).status == "COMPLETED"
+    time.sleep(0.05)
+    assert order == [first.run_id]
+    assert cancelled.run_id in {item.run_id for item in manager.history()}
+    manager.shutdown()

@@ -9,6 +9,7 @@ import {
   TextArea,
   TextField,
 } from "../components";
+import { MAX_BATCH_IMAGES } from "../api/client";
 
 /** @param {Pick<import("../types").NodeDefinition, "schemaId"> | undefined} nodeDefinition */
 function mediaKind(nodeDefinition) {
@@ -47,18 +48,24 @@ function FileField({
   const multiple = definition.type === "files";
   const selectedCount = Array.isArray(value) ? value.length : value ? 1 : 0;
 
-  /** @param {() => Promise<import("../types").DesktopGrant | import("../types").DesktopGrant[] | null | undefined>} action */
-  async function selectGrant(action) {
-    setError("");
+  /** @param {() => Promise<import("../types").DesktopGrant | import("../types").DesktopGrant[] | null | undefined>} action @param {string} [notice] */
+  async function selectGrant(action, notice = "") {
+    setError(notice);
     setLoading(true);
     try {
       const selection = await action();
-      const grants = Array.isArray(selection)
+      let grants = Array.isArray(selection)
         ? selection
         : selection
           ? [selection]
           : [];
       if (!grants.length) return;
+      if (multiple && grants.length > MAX_BATCH_IMAGES) {
+        grants = grants.slice(0, MAX_BATCH_IMAGES);
+        setError(
+          `Maximum ${MAX_BATCH_IMAGES} images. Extra files were ignored.`,
+        );
+      }
       if (multiple) onChange(grants.map((grant) => grant.grantId), grants);
       else onChange(grants[0].grantId, grants[0]);
     } catch (selectionError) {
@@ -92,10 +99,10 @@ function FileField({
   async function drop(event) {
     event.preventDefault();
     setDragging(false);
-    const files = [...event.dataTransfer.files].filter((item) =>
+    const accepted = [...event.dataTransfer.files].filter((item) =>
       acceptsFile(item, kind),
     );
-    if (!files.length) {
+    if (!accepted.length) {
       setError(
         kind === "video"
           ? "Drop a supported video file."
@@ -103,27 +110,30 @@ function FileField({
       );
       return;
     }
+    const truncated = multiple && accepted.length > MAX_BATCH_IMAGES;
+    const files = accepted.slice(0, multiple ? MAX_BATCH_IMAGES : 1);
     const desktop = window.midgardDesktop;
     if (!desktop?.registerDroppedFiles) {
       setError("File drop is available in the desktop app.");
       return;
     }
-    await selectGrant(async () => {
-      const grants = await desktop.registerDroppedFiles(
-        multiple ? files : files.slice(0, 1),
-      );
-      return multiple ? grants : grants.at(0);
-    });
+    await selectGrant(
+      async () => {
+        const grants = await desktop.registerDroppedFiles(files);
+        return multiple ? grants : grants.at(0);
+      },
+      truncated
+        ? `Maximum ${MAX_BATCH_IMAGES} images. Extra files were ignored.`
+        : "",
+    );
   }
 
   if (definition.type === "saveFile")
     return (
-      <div className="grid gap-1.5">
-        <span className="text-[11px] font-medium text-mg-secondary">
-          {definition.label}
-        </span>
+      <div className="ui-field-label">
+        <span>{definition.label}</span>
         <Button variant="secondary" onClick={choose} disabled={loading}>
-          {loading && <LoaderCircle className="size-3 animate-spin" />}
+          {loading && <LoaderCircle className="ui-icon-sm animate-spin" />}
           {value ? "Change save location" : "Choose save location"}
         </Button>
       </div>
@@ -131,15 +141,13 @@ function FileField({
 
   const KindIcon = kind === "video" ? Film : FileImage;
   return (
-    <div className="grid gap-1.5">
-      <span className="text-[11px] font-medium text-mg-secondary">
-        {definition.label}
-      </span>
+    <div className="ui-field-label">
+      <span>{definition.label}</span>
       <div
         role="button"
         tabIndex={0}
         aria-label={`Drop ${multiple ? `${kind} files` : `${kind} file`}`}
-        className={`grid min-h-28 place-items-center rounded-2xl border border-dashed px-4 py-3 text-center transition ${dragging ? "border-mg-accent bg-mg-accent/10" : "border-mg-border bg-mg-app/45 hover:border-mg-secondary/60"}`}
+        className={`ui-dropzone ${dragging ? "is-active" : ""}`}
         onDragEnter={(event) => {
           event.preventDefault();
           setDragging(true);
@@ -164,28 +172,28 @@ function FileField({
           }
         }}
       >
-        <div className="grid justify-items-center gap-1.5">
+        <div className="ui-stack-xs justify-items-center">
           <IconTile className="bg-mg-elevated text-mg-accent">
             {loading ? (
-              <LoaderCircle className="size-4 animate-spin" />
+              <LoaderCircle className="ui-icon-lg animate-spin" />
             ) : (
-              <KindIcon className="size-4" />
+              <KindIcon className="ui-icon-lg" />
             )}
           </IconTile>
-          <strong className="text-[10px] font-semibold text-mg-primary">
+          <strong className="ui-copy-title text-[10px]">
             {dragging
-              ? `Drop ${multiple ? `${kind} files` : kind} now`
+              ? `Drop ${multiple ? `up to ${MAX_BATCH_IMAGES} ${kind} files` : kind} now`
               : multiple && selectedCount
-                ? `${selectedCount} images selected`
+                ? `${selectedCount} of ${MAX_BATCH_IMAGES} images selected`
                 : selectedName || `Drop ${kind} here`}
           </strong>
-          <span className="text-[9px] text-mg-muted">
+          <span className="ui-copy-muted text-[9px]">
             {selectedCount
               ? multiple
                 ? "Choose or drop files to replace this queue"
                 : "Drop another file to replace it"
               : multiple
-                ? "or choose multiple local files"
+                ? `or choose up to ${MAX_BATCH_IMAGES} local files`
                 : "or choose a local file"}
           </span>
           <Button
@@ -197,7 +205,7 @@ function FileField({
             }}
             disabled={loading}
           >
-            <Upload className="size-3" />
+            <Upload className="ui-icon-sm" />
             {selectedCount
               ? "Replace"
               : multiple
@@ -207,7 +215,7 @@ function FileField({
         </div>
       </div>
       {error && (
-        <span role="alert" className="text-[9px] text-mg-error">
+        <span role="alert" className="ui-help text-mg-error">
           {error}
         </span>
       )}

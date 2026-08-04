@@ -76,32 +76,32 @@ export function Dialog({
         aria-describedby={description ? "dialog-description" : undefined}
         className={`max-h-[86vh] w-full ${wide ? "max-w-5xl" : "max-w-xl"} overflow-hidden rounded-mg-lg border border-mg-border bg-mg-panel shadow-soft ${className}`}
       >
-        <header className="flex items-start justify-between gap-3 border-b border-mg-border px-4 py-3.5">
+        <header className="ui-preview-bar is-header h-auto items-start justify-between gap-3 px-4 py-3.5">
           <div className="min-w-0">
             <h2
               id="dialog-title"
-              className="text-[13px] font-semibold tracking-tight text-mg-primary"
+              className="ui-copy-title"
             >
               {title}
             </h2>
             {description && (
               <p
                 id="dialog-description"
-                className="mt-1 text-[11px] leading-5 text-mg-secondary"
+                className="ui-copy-body mt-1 leading-5"
               >
                 {description}
               </p>
             )}
           </div>
           <IconButton label="Close dialog" onClick={onClose}>
-            <X className="size-3.5" />
+            <X className="ui-icon" />
           </IconButton>
         </header>
         <div className={`max-h-[68vh] overflow-auto p-4 ${bodyClassName}`}>
           {children}
         </div>
         {footer && (
-          <footer className="flex justify-end gap-2 border-t border-mg-border bg-mg-app/40 p-3">
+          <footer className="ui-actions ui-rule justify-end bg-mg-app/40 p-3">
             {footer}
           </footer>
         )}

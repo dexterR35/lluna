@@ -1,6 +1,6 @@
 """Model catalog and download queue routes."""
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException
 
 from backend.api.auth import require_token
 from backend.models.service import (

@@ -31,6 +31,7 @@ def create_app(token: str | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         from backend.application.bootstrap import prepare_control_plane
+
         prepare_control_plane()
         set_ready(True)
         EventBroker.instance().publish("backend.ready", payload={"apiVersion": 1})
@@ -40,11 +41,15 @@ def create_app(token: str | None = None) -> FastAPI:
             set_ready(False)
             from backend.graph.executor import RunManager
             from backend.tools.model_download_lifecycle import abort_downloads_on_shutdown
+
             RunManager.instance().shutdown()
             abort_downloads_on_shutdown()
 
     app = FastAPI(
-        title="Midgard Control Plane", version="1.0.0", docs_url=None, redoc_url=None,
+        title="Midgard Control Plane",
+        version="1.0.0",
+        docs_url=None,
+        redoc_url=None,
         lifespan=lifespan,
     )
     app.add_middleware(
@@ -54,7 +59,16 @@ def create_app(token: str | None = None) -> FastAPI:
         allow_methods=["GET", "POST", "PUT", "DELETE"],
         allow_headers=["Content-Type", "X-Midgard-Token", "Authorization"],
     )
-    for router in (health_router, nodes_router, workflows_router, runs_router, artifacts_router, settings_router, models_router, diagnostics_router):
+    for router in (
+        health_router,
+        nodes_router,
+        workflows_router,
+        runs_router,
+        artifacts_router,
+        settings_router,
+        models_router,
+        diagnostics_router,
+    ):
         app.include_router(router)
 
     @app.websocket("/api/events")
@@ -68,7 +82,8 @@ def create_app(token: str | None = None) -> FastAPI:
         try:
             while True:
                 done, _pending = await asyncio.wait(
-                    {event_task, receive_task}, return_when=asyncio.FIRST_COMPLETED,
+                    {event_task, receive_task},
+                    return_when=asyncio.FIRST_COMPLETED,
                 )
                 if receive_task in done:
                     message = receive_task.result()

@@ -97,38 +97,37 @@ function FlowBox({ group, nodes, selected, onSelect, onRun }) {
       }}
     >
       <header
-        className="pointer-events-auto absolute inset-x-2.5 top-2 flex h-10 items-center gap-2 rounded-2xl border border-mg-border bg-mg-panel/95 px-2.5 shadow-soft backdrop-blur"
+        className="pointer-events-auto absolute inset-x-0 top-0 flex h-10 items-center gap-2 border-b border-mg-border/60 px-2.5"
         onPointerDown={(event) => {
           event.stopPropagation();
           onSelect();
         }}
       >
         <span
-          className="grid size-7 place-items-center rounded-xl border"
+          className="grid size-6 place-items-center rounded-full"
           style={{
             color,
-            borderColor: `color-mix(in srgb, ${color} 22%, transparent)`,
-            background: `color-mix(in srgb, ${color} 9%, transparent)`,
+            background: `color-mix(in srgb, ${color} 14%, transparent)`,
           }}
         >
-          <StatusIcon className={`size-3 ${running ? "animate-pulse" : ""}`} />
+          <StatusIcon className={`ui-icon-sm ${running ? "animate-pulse" : ""}`} />
         </span>
-        <span className="min-w-0">
-          <strong className="block truncate text-[11px] font-semibold tracking-tight">
+        <span className="min-w-0 flex-1">
+          <strong className="ui-copy-title block truncate text-[11px]">
             {group.label}
           </strong>
-          <span className="block text-[10px] text-mg-muted">
+          <span className="ui-copy-muted block">
             {group.nodeIds.length} nodes{outputs ? ` · ${outputs} results` : ""}
           </span>
         </span>
         {completed && (
-          <Badge tone="success" className="ml-auto">
+          <Badge tone="success" size="xs">
             Complete
           </Badge>
         )}
         <button
           type="button"
-          className={`nodrag ${completed ? "" : "ml-auto"} grid size-7 place-items-center rounded-full text-white transition hover:brightness-110`}
+          className="nodrag grid size-7 place-items-center rounded-full text-white transition hover:brightness-110"
           style={{ background: color }}
           aria-label={`Run ${group.label} from start to end`}
           onClick={(event) => {
@@ -140,7 +139,7 @@ function FlowBox({ group, nodes, selected, onSelect, onRun }) {
             );
           }}
         >
-          <Play className="size-3 fill-current" />
+          <Play className="ui-icon-sm fill-current" />
         </button>
       </header>
     </section>

@@ -2,7 +2,6 @@ import {
   FolderOpen,
   Layers3,
   Logs,
-  PanelLeft,
   Pause,
   Play,
   Redo2,
@@ -12,8 +11,7 @@ import {
   Undo2,
   Workflow,
 } from "lucide-react";
-import midgardIconUrl from "../../assets/app-icon/midgard.svg";
-import { Button, ToolbarButton } from "../components";
+import { Button, TextField, ToolbarButton } from "../components";
 import { useDesktopStore } from "../state/desktopStore";
 import { useEditorStore } from "../state/editorStore";
 import { useRunStore } from "../state/runStore";
@@ -27,6 +25,7 @@ export function EditorToolbar({ actions }) {
   );
   const name = useEditorStore((store) => store.project.name);
   const dirty = useEditorStore((store) => store.dirty);
+  const setProjectName = useEditorStore((store) => store.setProjectName);
   const undo = useEditorStore((store) => store.undo);
   const redo = useEditorStore((store) => store.redo);
   const run = useRunStore((store) => store.run);
@@ -40,72 +39,77 @@ export function EditorToolbar({ actions }) {
 
   return (
     <header className="flex h-full items-center gap-1 border-b border-mg-border bg-mg-panel px-2.5">
-      <div className="mr-1 flex min-w-0 items-center gap-2.5 px-1">
-        <img
-          className="size-7 shrink-0 rounded-xl"
-          src={midgardIconUrl}
-          alt="Midgard"
+      <div className="mr-1 flex min-w-0 items-center gap-1.5 px-1">
+        <TextField
+          bare
+          id="workflow-name"
+          aria-label="Workflow name"
+          value={name}
+          onChange={(event) => setProjectName(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.currentTarget.blur();
+              void actions.saveWorkflow();
+            }
+          }}
+          title="Edit workflow name"
         />
-        <div className="hidden min-w-0 xl:block">
-          <div className="flex items-center gap-1.5">
-            <strong className="max-w-44 truncate text-[12px] font-semibold tracking-tight">
-              {name}
-            </strong>
-            {dirty && (
-              <span
-                className="size-1.5 rounded-full bg-mg-warning"
-                title="Unsaved changes"
-              />
-            )}
-          </div>
-          <span className="block text-[10px] text-mg-muted">Workflow</span>
-        </div>
+        {dirty && (
+          <span
+            className="size-1.5 shrink-0 rounded-full bg-mg-warning"
+            title="Unsaved changes"
+          />
+        )}
       </div>
+      <ToolbarButton
+        label="Save"
+        shortcut="Ctrl+S"
+        icon={<Save className="ui-icon" />}
+        onClick={actions.saveWorkflow}
+      />
       <span className="ui-divider" />
       <ToolbarButton
         label="New"
         shortcut="Ctrl+N"
-        icon={<Workflow className="size-3.5" />}
+        icon={<Workflow className="ui-icon" />}
         onClick={actions.newWorkflow}
       />
       <ToolbarButton
         label="Open"
         shortcut="Ctrl+O"
-        icon={<FolderOpen className="size-3.5" />}
+        icon={<FolderOpen className="ui-icon" />}
         onClick={actions.openWorkflow}
-      />
-      <ToolbarButton
-        label="Save"
-        shortcut="Ctrl+S"
-        icon={<Save className="size-3.5" />}
-        onClick={actions.saveWorkflow}
       />
       <span className="ui-divider" />
       <ToolbarButton
         label="Undo"
         shortcut="Ctrl+Z"
-        icon={<Undo2 className="size-3.5" />}
+        icon={<Undo2 className="ui-icon" />}
         disabled={!past}
         onClick={undo}
       />
       <ToolbarButton
         label="Redo"
         shortcut="Ctrl+Shift+Z"
-        icon={<Redo2 className="size-3.5" />}
+        icon={<Redo2 className="ui-icon" />}
         disabled={!future}
         onClick={redo}
       />
       <span className="ui-divider" />
       <ToolbarButton
         label="Flow box"
-        icon={<Layers3 className="size-3.5" />}
+        icon={<Layers3 className="ui-icon" />}
         disabled={!selected}
         onClick={actions.createFlow}
       />
       <span className="flex-1" />
       {!active ? (
-        <Button onClick={actions.run} className="min-w-20">
-          <Play className="size-3.5 fill-current" />
+        <Button
+          onClick={actions.run}
+          className="min-w-20"
+          title="Run workflow (Ctrl+Enter). Use Ctrl+Shift+Enter to queue next."
+        >
+          <Play className="ui-icon fill-current" />
           Run
         </Button>
       ) : (
@@ -114,32 +118,26 @@ export function EditorToolbar({ actions }) {
             variant="secondary"
             onClick={run?.status === "PAUSED" ? resume : pause}
           >
-            <Pause className="size-3.5" />
+            <Pause className="ui-icon" />
             {run?.status === "PAUSED" ? "Resume" : "Pause"}
           </Button>
           <ToolbarButton
             label="Stop"
-            icon={<Square className="size-3.5" />}
-            onClick={cancel}
+            icon={<Square className="ui-icon" />}
+            onClick={() => void cancel()}
           />
         </>
       )}
       <span className="ui-divider" />
       <ToolbarButton
-        label="Library"
-        active={desktop.libraryVisible}
-        icon={<PanelLeft className="size-3.5" />}
-        onClick={() => desktop.toggle("libraryVisible")}
-      />
-      <ToolbarButton
         label="Activity"
         active={desktop.drawerVisible}
-        icon={<Logs className="size-3.5" />}
+        icon={<Logs className="ui-icon" />}
         onClick={() => desktop.toggle("drawerVisible")}
       />
       <ToolbarButton
         label="Settings"
-        icon={<Settings className="size-3.5" />}
+        icon={<Settings className="ui-icon" />}
         onClick={() => desktop.setValue("settingsOpen", true)}
       />
     </header>

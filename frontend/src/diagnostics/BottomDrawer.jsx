@@ -2,10 +2,19 @@ import {
   AlertTriangle,
   CheckCircle2,
   Download,
+  History,
+  ListOrdered,
   ScrollText,
   Stethoscope,
 } from "lucide-react";
-import { Badge, Card, EmptyState, Panel, ProgressBar, Tabs } from "../components";
+import {
+  Badge,
+  Button,
+  EmptyState,
+  Panel,
+  ProgressBar,
+  Tabs,
+} from "../components";
 import { useDesktopStore } from "../state/desktopStore";
 import { useEditorStore } from "../state/editorStore";
 import { useRunStore } from "../state/runStore";
@@ -15,19 +24,17 @@ import { useServerStore } from "../state/serverStore";
 function ProblemRow({ issue, label, onFocus }) {
   const clickable = Boolean(issue.nodeId);
   const tone =
-    issue.severity === "error"
-      ? "border-mg-error/40 text-mg-error"
-      : "border-mg-warning/40 text-mg-warning";
-  const className = `flex w-full gap-2.5 rounded-2xl border bg-mg-app/40 p-3 text-left text-[11px] ${tone}${clickable ? " hover:bg-mg-selected/40" : ""}`;
+    issue.severity === "error" ? "text-mg-error" : "text-mg-warning";
+  const className = `ui-row ${tone}${clickable ? "" : ""}`;
   const body = (
     <>
-      <AlertTriangle className="size-3.5 shrink-0" />
-      <div>
-        <strong className="font-semibold tracking-tight">{issue.code}</strong>
-        {label ? <p className="text-[10px] opacity-70">{label}</p> : null}
-        <p className="mt-0.5 text-mg-secondary">{issue.message}</p>
+      <AlertTriangle className="ui-icon" />
+      <div className="min-w-0 flex-1">
+        <strong className="ui-copy-title text-[11px]">{issue.code}</strong>
+        {label ? <p className="ui-copy-muted">{label}</p> : null}
+        <p className="ui-copy-body mt-0.5">{issue.message}</p>
         {issue.action ? (
-          <p className="mt-1 text-[10px] opacity-70">{issue.action}</p>
+          <p className="ui-copy-muted mt-1">{issue.action}</p>
         ) : null}
       </div>
     </>
@@ -52,6 +59,9 @@ export function BottomDrawer({ issues }) {
   const set = useDesktopStore((store) => store.setValue);
   const logs = useRunStore((store) => store.logs);
   const run = useRunStore((store) => store.run);
+  const queue = useRunStore((store) => store.queue);
+  const history = useRunStore((store) => store.history);
+  const cancelRun = useRunStore((store) => store.cancel);
   const downloads = useServerStore((store) => store.downloads);
   const diagnostics = useServerStore((store) => store.diagnostics);
   const nodes = useEditorStore((store) => store.nodes);
@@ -68,27 +78,33 @@ export function BottomDrawer({ issues }) {
     (downloads?.recent || []).filter((item) => item.state === "failed").length;
   const tabs = [
     {
+      id: "queue",
+      label: "Queue",
+      icon: <ListOrdered className="ui-icon-sm" />,
+      count: (queue.running ? 1 : 0) + queue.pending.length || undefined,
+    },
+    {
       id: "logs",
       label: "Run log",
-      icon: <ScrollText className="size-3" />,
+      icon: <ScrollText className="ui-icon-sm" />,
       count: logs.length || undefined,
     },
     {
       id: "downloads",
       label: "Downloads",
-      icon: <Download className="size-3" />,
+      icon: <Download className="ui-icon-sm" />,
       count: downloadCount || undefined,
     },
     {
       id: "problems",
       label: "Problems",
-      icon: <AlertTriangle className="size-3" />,
+      icon: <AlertTriangle className="ui-icon-sm" />,
       count: issues.length || undefined,
     },
     {
       id: "diagnostics",
       label: "Diagnostics",
-      icon: <Stethoscope className="size-3" />,
+      icon: <Stethoscope className="ui-icon-sm" />,
     },
   ];
 
@@ -103,14 +119,85 @@ export function BottomDrawer({ issues }) {
         onChange={(value) => set("drawerTab", value)}
       />
       <div className="min-h-0 flex-1 overflow-auto p-3 text-[11px]">
+        {tab === "queue" && (
+          <div className="ui-stack">
+            {queue.running && (
+              <div className="ui-stack-sm">
+                <div className="ui-action-row">
+                  <div className="min-w-0">
+                    <p className="ui-copy-title text-[11px]">Running workflow</p>
+                    <p className="ui-copy-muted truncate font-mono">
+                      {queue.running.runId}
+                    </p>
+                  </div>
+                  <Badge size="xs" tone="running">
+                    {queue.running.progress || 0}%
+                  </Badge>
+                </div>
+                <ProgressBar value={queue.running.progress || 0} />
+              </div>
+            )}
+            {queue.pending.map((item) => (
+              <div key={item.runId} className="ui-action-row">
+                <div className="min-w-0">
+                  <p className="ui-copy-title text-[11px]">
+                    Queue position {item.queuePosition}
+                  </p>
+                  <p className="ui-copy-muted truncate font-mono">
+                    {item.runId}
+                  </p>
+                </div>
+                <Button
+                  variant="ghost"
+                  className="min-h-7 px-2 text-[10px]"
+                  onClick={() => void cancelRun(item.runId)}
+                >
+                  Cancel
+                </Button>
+              </div>
+            ))}
+            {!queue.running && !queue.pending.length && (
+              <EmptyState
+                icon={<ListOrdered className="ui-icon-lg" />}
+                title="Execution queue is empty"
+                description="Ctrl+Enter queues a workflow. Ctrl+Shift+Enter puts it next."
+              />
+            )}
+            {history.length > 0 && (
+              <div>
+                <p className="ui-kicker-plain mb-1.5 ui-inline">
+                  <History className="ui-icon-sm" /> Recent runs
+                </p>
+                <div className="ui-list">
+                  {history.slice(0, 10).map((item) => (
+                    <div key={item.runId} className="ui-action-row py-1.5">
+                      <span className="ui-copy-body truncate font-mono text-[9px]">
+                        {item.runId}
+                      </span>
+                      <Badge
+                        size="xs"
+                        tone={
+                          item.status === "COMPLETED"
+                            ? "success"
+                            : item.status === "FAILED"
+                              ? "error"
+                              : "neutral"
+                        }
+                      >
+                        {item.status}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
         {tab === "logs" &&
           (logs.length ? (
-            <div role="log" className="grid gap-0.5 font-mono text-[10px]">
+            <div role="log" className="ui-stack-xs">
               {logs.map((line) => (
-                <div
-                  key={line.id}
-                  className="grid grid-cols-[5.5rem_1fr] gap-2 rounded-xl px-2 py-1.5 odd:bg-mg-elevated/40"
-                >
+                <div key={line.id} className="ui-log-line">
                   <span className="text-mg-muted">
                     {new Date(
                       line.timestamp || Date.now(),
@@ -122,86 +209,87 @@ export function BottomDrawer({ issues }) {
             </div>
           ) : (
             <EmptyState
-              icon={<ScrollText className="size-5" />}
+              icon={<ScrollText className="ui-icon-lg" />}
               title="No run log"
               description="Execution messages appear here."
             />
           ))}
         {tab === "downloads" && (
-          <div className="grid gap-2.5">
+          <div className="ui-stack-sm">
             {[
               ...(downloads?.active || []),
               ...(downloads?.pending || []),
               ...(downloads?.recent || []),
-            ].map(
-              (item) => (
-                <Card key={item.jobId || `${item.kind}-${item.key}`}>
-                  <div className="mb-2 flex justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="truncate font-medium text-mg-primary">
-                        {item.modelId || item.key}
-                      </p>
-                      <p className="text-[9px] text-mg-muted">
-                        {item.state === "failed" || item.state === "cancelled"
-                          ? item.error || "The model install did not complete."
-                          : item.state === "completed"
-                            ? item.detail || "Installed"
-                            : item.state === "queued"
-                          ? item.position === 1
-                            ? "Next in queue"
-                            : `${item.position} installs ahead`
-                          : item.detail || "Preparing download"}
-                      </p>
-                    </div>
-                    <Badge
-                      size="xs"
-                      tone={
-                        item.state === "failed"
-                          ? "error"
-                          : item.state === "cancelled"
-                            ? "warning"
-                            : item.state === "completed"
-                              ? "success"
-                              : item.state === "queued"
-                                ? "accent"
-                                : "running"
-                      }
-                    >
-                      {item.state === "failed"
-                        ? "Failed"
-                        : item.state === "cancelled"
-                          ? "Cancelled"
-                          : item.state === "completed"
-                            ? "Installed"
-                            : item.state === "queued"
-                        ? `Queued · ${item.position}`
-                        : "Installing"}
-                    </Badge>
+            ].map((item) => (
+              <div
+                key={item.jobId || `${item.kind}-${item.key}`}
+                className="ui-list-item"
+              >
+                <div className="ui-action-row mb-2">
+                  <div className="min-w-0">
+                    <p className="ui-copy-title truncate text-[11px]">
+                      {item.modelId || item.key}
+                    </p>
+                    <p className="ui-copy-muted">
+                      {item.state === "failed" || item.state === "cancelled"
+                        ? item.error || "The model install did not complete."
+                        : item.state === "completed"
+                          ? item.detail || "Installed"
+                          : item.state === "queued"
+                            ? item.position === 1
+                              ? "Next in queue"
+                              : `${item.position} installs ahead`
+                            : item.detail || "Preparing download"}
+                    </p>
                   </div>
-                  {["active", "stopping", "queued"].includes(item.state) && (
-                    <ProgressBar
-                      value={item.state === "queued" ? 0 : item.progress}
-                      indeterminate={
-                        item.state !== "queued" && item.progress == null
-                      }
-                      label={
-                        item.state === "queued"
-                          ? `Queue position ${item.position}`
-                          : item.detail || "Model download"
-                      }
-                      showLabel
-                    />
-                  )}
-                </Card>
-              ),
-            )}
+                  <Badge
+                    size="xs"
+                    tone={
+                      item.state === "failed"
+                        ? "error"
+                        : item.state === "cancelled"
+                          ? "warning"
+                          : item.state === "completed"
+                            ? "success"
+                            : item.state === "queued"
+                              ? "accent"
+                              : "running"
+                    }
+                  >
+                    {item.state === "failed"
+                      ? "Failed"
+                      : item.state === "cancelled"
+                        ? "Cancelled"
+                        : item.state === "completed"
+                          ? "Installed"
+                          : item.state === "queued"
+                            ? `Queued · ${item.position}`
+                            : "Installing"}
+                  </Badge>
+                </div>
+                {["active", "stopping", "queued"].includes(item.state) && (
+                  <ProgressBar
+                    value={item.state === "queued" ? 0 : item.progress}
+                    indeterminate={
+                      item.state !== "queued" && item.progress == null
+                    }
+                    label={
+                      item.state === "queued"
+                        ? `Queue position ${item.position}`
+                        : item.detail || "Model download"
+                    }
+                    showLabel
+                  />
+                )}
+              </div>
+            ))}
             {!(
               downloads?.active?.length ||
               downloads?.pending?.length ||
               downloads?.recent?.length
             ) && (
               <EmptyState
-                icon={<Download className="size-5" />}
+                icon={<Download className="ui-icon-lg" />}
                 title="Download queue is empty"
               />
             )}
@@ -209,7 +297,7 @@ export function BottomDrawer({ issues }) {
         )}
         {tab === "problems" &&
           (issues.length ? (
-            <div className="grid gap-2">
+            <div className="ui-stack-sm">
               {issues.map((issue, index) => (
                 <ProblemRow
                   key={`${issue.code}-${index}`}
@@ -221,18 +309,18 @@ export function BottomDrawer({ issues }) {
             </div>
           ) : (
             <EmptyState
-              icon={<CheckCircle2 className="size-5" />}
+              icon={<CheckCircle2 className="ui-icon-lg" />}
               title="No workflow problems"
             />
           ))}
         {tab === "diagnostics" && (
-          <pre className="whitespace-pre-wrap rounded-2xl border border-mg-border bg-mg-app/40 p-3 font-mono text-[9px] leading-4 text-mg-secondary">
+          <pre className="ui-copy-body whitespace-pre-wrap font-mono text-[9px] leading-4">
             {JSON.stringify(diagnostics, null, 2)}
           </pre>
         )}
       </div>
       {run && (
-        <div className="border-t border-mg-border bg-mg-app/30 p-2.5">
+        <div className="ui-rule p-2.5">
           <ProgressBar
             value={run.progress || 0}
             label={`Run ${run.status}`}

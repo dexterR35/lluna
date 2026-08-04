@@ -31,44 +31,38 @@ function ModelRow({ option, selected, inventory, onSelect }) {
       type="button"
       aria-pressed={selected}
       onClick={onSelect}
-      className={`w-full rounded-lg px-2 py-2 text-left transition ${
-        selected
-          ? "bg-mg-accent/10 text-mg-primary"
-          : "text-mg-secondary hover:bg-mg-elevated hover:text-mg-primary"
-      }`}
+      className={`ui-nav-item h-auto items-start py-2 ${selected ? "is-active" : ""}`}
     >
-      <span className="flex items-start gap-2.5">
-        <span
-          className={`mt-0.5 grid size-4 shrink-0 place-items-center rounded-full border ${selected ? "border-mg-accent bg-mg-accent text-white" : "border-mg-border text-transparent"}`}
-        >
-          <Check className="size-2.5" />
+      <span
+        className={`mt-0.5 grid size-4 shrink-0 place-items-center rounded-full border ${selected ? "border-mg-accent bg-mg-accent text-white" : "border-mg-border text-transparent"}`}
+      >
+        <Check className="ui-icon-xs" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="ui-actions">
+          <strong className="ui-copy-title truncate text-[12px]">
+            {option.label}
+          </strong>
+          {installed !== undefined && (
+            <Badge size="xs" tone={installed ? "success" : "neutral"}>
+              {installed ? "Installed" : "On demand"}
+            </Badge>
+          )}
         </span>
-        <span className="min-w-0 flex-1">
-          <span className="flex items-center gap-1.5">
-            <strong className="truncate text-[12px] font-semibold tracking-tight">
-              {option.label}
-            </strong>
-            {installed !== undefined && (
-              <Badge size="xs" tone={installed ? "success" : "neutral"}>
-                {installed ? "Installed" : "On demand"}
-              </Badge>
-            )}
+        {option.description && (
+          <span className="ui-copy-muted mt-0.5 block leading-4">
+            {option.description}
           </span>
-          {option.description && (
-            <span className="mt-0.5 block text-[10px] leading-4 text-mg-muted">
-              {option.description}
-            </span>
-          )}
-          {inventory && (
-            <span className="mt-1 flex items-center gap-1 text-[10px] text-mg-muted">
-              <Cpu className="size-2.5" />
-              {inventory.framework || inventory.capability || "Local model"}
-              {inventory.minimum_vram_mb
-                ? ` · ${Math.round(inventory.minimum_vram_mb / 1024)} GB VRAM`
-                : ""}
-            </span>
-          )}
-        </span>
+        )}
+        {inventory && (
+          <span className="ui-copy-muted mt-1 ui-inline gap-1">
+            <Cpu className="ui-icon-xs" />
+            {inventory.framework || inventory.capability || "Local model"}
+            {inventory.minimum_vram_mb
+              ? ` · ${Math.round(inventory.minimum_vram_mb / 1024)} GB VRAM`
+              : ""}
+          </span>
+        )}
       </span>
     </button>
   );
@@ -78,16 +72,14 @@ function ModelRow({ option, selected, inventory, onSelect }) {
 function RequiredModels({ ids, models }) {
   if (!ids?.length) return null;
   return (
-    <div className="grid gap-1">
-      <span className="text-[11px] font-medium text-mg-secondary">
-        Required runtime
-      </span>
+    <div className="ui-stack-xs">
+      <span className="ui-field-label">Required runtime</span>
       {ids.map((id) => {
         const model = models.find((item) => item.id === id);
         return (
-          <div key={id} className="flex items-center gap-2 py-1">
-            <Database className="size-3 text-mg-muted" />
-            <span className="min-w-0 flex-1 truncate text-[11px] text-mg-secondary">
+          <div key={id} className="ui-inline py-1">
+            <Database className="ui-icon-sm text-mg-muted" />
+            <span className="ui-copy-body min-w-0 flex-1 truncate">
               {model?.name || id}
             </span>
             <Badge tone={model?.installed ? "success" : "neutral"}>
@@ -190,20 +182,18 @@ export function NodeEditorDialog({ nodeId, onClose, onManageModels }) {
       }
     >
       <div className="grid h-[62vh] min-h-[30rem] grid-cols-[15rem_minmax(15rem,0.85fr)_minmax(0,1.15fr)]">
-        <aside className="min-h-0 overflow-y-auto border-r border-mg-border p-3.5">
-          <div className="mb-2.5 flex items-center gap-2">
+        <aside className="ui-settings-nav border-r p-3.5">
+          <div className="ui-inline mb-2.5">
             <IconTile size="sm">
-              <Sparkles className="size-3" />
+              <Sparkles className="ui-icon-sm" />
             </IconTile>
             <div>
-              <h3 className="text-[11px] font-semibold tracking-tight text-mg-primary">
-                Model
-              </h3>
-              <p className="text-[10px] text-mg-muted">Stored with this node</p>
+              <h3 className="ui-copy-title text-[11px]">Model</h3>
+              <p className="ui-copy-muted">Stored with this node</p>
             </div>
           </div>
           {modelOptions.length ? (
-            <div className="grid gap-0.5">
+            <div className="ui-stack-xs">
               {modelOptions.map((option) => (
                 <ModelRow
                   key={option.value}
@@ -216,7 +206,7 @@ export function NodeEditorDialog({ nodeId, onClose, onManageModels }) {
             </div>
           ) : (
             <EmptyState
-              icon={<Box className="size-4" />}
+              icon={<Box className="ui-icon-lg" />}
               title={modelParameter ? "No enabled model" : "No model choice"}
               description={
                 modelParameter
@@ -242,14 +232,16 @@ export function NodeEditorDialog({ nodeId, onClose, onManageModels }) {
           )}
         </aside>
 
-        <section className="min-h-0 overflow-y-auto border-r border-mg-border p-4">
-          <div className="mb-3 flex items-center gap-2">
-            <Settings2 className="size-3.5 text-mg-muted" />
+        <section className="ui-settings-main border-r p-4">
+          <div className="ui-inline mb-3">
+            <IconTile size="sm">
+              <Settings2 className="ui-icon-sm" />
+            </IconTile>
             <div className="min-w-0 flex-1">
-              <h3 className="text-[11px] font-semibold tracking-tight text-mg-secondary">
+              <h3 className="ui-copy-title text-[11px] text-mg-secondary">
                 Node settings
               </h3>
-              <p className="text-[9px] text-mg-muted">
+              <p className="ui-copy-muted text-[9px]">
                 These values belong only to this node instance.
               </p>
             </div>
@@ -267,7 +259,7 @@ export function NodeEditorDialog({ nodeId, onClose, onManageModels }) {
               {status}
             </Badge>
           </div>
-          <div className="grid gap-3">
+          <div className="ui-stack">
             <TextField
               label="Node label"
               value={node.data.label || ""}
@@ -276,7 +268,7 @@ export function NodeEditorDialog({ nodeId, onClose, onManageModels }) {
               }
             />
             {selectedOption && (
-              <p className="text-[10px] text-mg-muted">
+              <p className="ui-copy-muted">
                 Selected model{" "}
                 <span className="font-medium text-mg-primary">
                   {selectedOption.label}
@@ -315,7 +307,7 @@ export function NodeEditorDialog({ nodeId, onClose, onManageModels }) {
                 ))}
               </div>
             ) : (
-              <p className="text-[10px] text-mg-muted">
+              <p className="ui-copy-muted">
                 This node has no additional operation settings.
               </p>
             )}
@@ -330,9 +322,11 @@ export function NodeEditorDialog({ nodeId, onClose, onManageModels }) {
         </section>
 
         <aside className="flex min-h-0 flex-col overflow-hidden p-4">
-          <div className="mb-2.5 flex items-center gap-2">
-            <ImageIcon className="size-3.5 text-mg-muted" />
-            <h3 className="text-[11px] font-semibold tracking-tight text-mg-secondary">
+          <div className="ui-inline mb-2.5">
+            <IconTile size="sm">
+              <ImageIcon className="ui-icon-sm" />
+            </IconTile>
+            <h3 className="ui-copy-title text-[11px] text-mg-secondary">
               Preview
             </h3>
           </div>

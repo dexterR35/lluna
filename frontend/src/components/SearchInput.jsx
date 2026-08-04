@@ -1,3 +1,35 @@
-import { Search,X } from "lucide-react"; import { IconButton } from "./IconButton"; import { cn } from "./utils";
+import { Search, X } from "lucide-react";
+import { IconButton } from "./IconButton";
+import { cn } from "./utils";
+
 /** @param {{value: string, onChange: (value: string) => void, placeholder?: string, label?: string, autoFocus?: boolean}} props */
-export function SearchInput({value,onChange,placeholder="Search…",label="Search",autoFocus=false}){return <label className={cn("ui-control flex items-center gap-2 px-2")}><Search aria-hidden className="size-3.5 shrink-0 text-mg-muted"/><span className="sr-only">{label}</span><input autoFocus={autoFocus} value={value} onChange={event=>onChange(event.target.value)} placeholder={placeholder} className="min-w-0 flex-1 bg-transparent text-xs text-mg-primary outline-none placeholder:text-mg-muted"/>{value&&<IconButton label="Clear search" className="size-5 rounded-md" onClick={()=>onChange("")}><X className="size-3"/></IconButton>}</label>}
+export function SearchInput({
+  value,
+  onChange,
+  placeholder = "Search…",
+  label = "Search",
+  autoFocus = false,
+}) {
+  return (
+    <label className={cn("ui-control flex items-center gap-2 px-2")}>
+      <Search aria-hidden className="ui-icon text-mg-muted" />
+      <span className="sr-only">{label}</span>
+      <input
+        autoFocus={autoFocus}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        className="min-w-0 flex-1 bg-transparent text-xs text-mg-primary outline-none placeholder:text-mg-muted"
+      />
+      {value && (
+        <IconButton
+          label="Clear search"
+          className="size-5 rounded-md"
+          onClick={() => onChange("")}
+        >
+          <X className="ui-icon-sm" />
+        </IconButton>
+      )}
+    </label>
+  );
+}

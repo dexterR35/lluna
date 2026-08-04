@@ -4,13 +4,15 @@ import {
   Download,
   Image as ImageIcon,
 } from "lucide-react";
-import { api, artifactObjectUrl, saveArtifact } from "../api/client";
+import { api, artifactObjectUrl, artifactThumbnailUrl, saveArtifact } from "../api/client";
 import { Badge, Button, EmptyState, LoadingState } from "../components";
 import { useToast } from "../components/ToastContext";
 import { IMAGE_EFFECTS } from "./imageEffects";
 
-/** @param {string | undefined} artifactId */
-function useArtifact(artifactId) {
+/** @param {string | undefined} artifactId @param {{thumbnail?: boolean, maxEdge?: number}} [options] */
+function useArtifact(artifactId, options = {}) {
+  const thumbnail = options.thumbnail === true;
+  const maxEdge = options.maxEdge || 256;
   const [state, setState] = useState(
     /** @type {import("../types").ArtifactPreviewState} */ ({
       url: null,
@@ -27,10 +29,10 @@ function useArtifact(artifactId) {
       return undefined;
     }
     setState({ url: null, metadata: null, error: null });
-    Promise.all([
-      artifactObjectUrl(artifactId),
-      api(`/api/artifacts/${artifactId}/metadata`),
-    ])
+    const media = thumbnail
+      ? artifactThumbnailUrl(artifactId, { maxEdge })
+      : artifactObjectUrl(artifactId);
+    Promise.all([media, api(`/api/artifacts/${artifactId}/metadata`)])
       .then(([value, metadata]) => {
         url = value;
         if (alive) setState({ url: value, metadata, error: null });
@@ -48,7 +50,7 @@ function useArtifact(artifactId) {
       alive = false;
       if (url) URL.revokeObjectURL(url);
     };
-  }, [artifactId]);
+  }, [artifactId, thumbnail, maxEdge]);
   return state;
 }
 
@@ -135,7 +137,7 @@ function PreviewMeta({ metadata }) {
     : null;
   return (
     <div
-      className="flex min-w-0 flex-wrap items-center justify-end gap-1.5"
+      className="ui-actions min-w-0 justify-end"
       aria-label="Media metadata"
     >
       {dimensions && <Badge size="xs">{dimensions}</Badge>}
@@ -152,30 +154,36 @@ function PreviewMeta({ metadata }) {
   );
 }
 
-/** @param {{artifactId?: string, effect?: string, fit?: string, ratio?: string, label?: string}} props */
+/** @param {{artifactId?: string, effect?: string, fit?: string, ratio?: string, label?: string, size?: "sm"|"md"}} props */
 export function ArtifactThumbnail({
   artifactId,
   effect = "none",
   fit = "cover",
   ratio = "wide",
   label = "Node output",
+  size = "md",
 }) {
-  const state = useArtifact(artifactId);
+  const state = useArtifact(artifactId, {
+    thumbnail: true,
+    maxEdge: size === "sm" ? 128 : 256,
+  });
   const save = useArtifactSaver(artifactId, state);
   const height =
-    ratio === "square"
-      ? "min-h-[168px] flex-1"
-      : ratio === "cinema"
-        ? "h-24"
-        : "h-28";
+    size === "sm"
+      ? "h-full min-h-0"
+      : ratio === "square"
+        ? "min-h-[168px] flex-1"
+        : ratio === "cinema"
+          ? "h-24"
+          : "h-28";
   if (!artifactId) return null;
   if (state.error)
     return (
       <div
         className={`${height} flex items-center justify-center gap-1.5 border-y border-mg-border bg-mg-error/5 text-[9px] text-mg-error`}
       >
-        <AlertTriangle className="size-3" />
-        Preview unavailable
+        <AlertTriangle className="ui-icon-sm" />
+        {size === "sm" ? "!" : "Preview unavailable"}
       </div>
     );
   if (!state.url)
@@ -187,7 +195,7 @@ export function ArtifactThumbnail({
     );
   return (
     <div
-      className={`checkerboard group/preview relative ${height} overflow-hidden border-y border-mg-border bg-mg-app`}
+      className={`checkerboard group/preview relative ${height} overflow-hidden border-y border-mg-border bg-mg-app ${size === "sm" ? "border-0" : ""}`}
     >
       <ArtifactMedia
         state={state}
@@ -197,19 +205,53 @@ export function ArtifactThumbnail({
         controls={false}
         className="size-full"
       />
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-black/70 to-transparent opacity-0 transition group-hover/preview:opacity-100" />
-      <button
-        type="button"
-        className="nodrag absolute bottom-1.5 right-1.5 grid size-7 place-items-center rounded-lg border border-white/10 bg-black/65 text-white opacity-0 backdrop-blur transition hover:bg-black/90 group-hover/preview:opacity-100 focus-visible:opacity-100"
-        aria-label={`Save ${label}`}
-        onPointerDown={(event) => event.stopPropagation()}
-        onClick={(event) => {
-          event.stopPropagation();
-          void save();
-        }}
-      >
-        <Download className="size-3" />
-      </button>
+      {size !== "sm" && (
+        <>
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-black/70 to-transparent opacity-0 transition group-hover/preview:opacity-100" />
+          <button
+            type="button"
+            className="nodrag absolute bottom-1.5 right-1.5 grid size-7 place-items-center rounded-lg border border-white/10 bg-black/65 text-white opacity-0 backdrop-blur transition hover:bg-black/90 group-hover/preview:opacity-100 focus-visible:opacity-100"
+            aria-label={`Save ${label}`}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              void save();
+            }}
+          >
+            <Download className="ui-icon-sm" />
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Compact multi-image thumb grid for node bodies (thumbnails only). */
+/** @param {{artifactIds: string[], effect?: string, fit?: string, label?: string}} props */
+export function ArtifactThumbGrid({
+  artifactIds,
+  effect = "none",
+  fit = "cover",
+  label = "Node output",
+}) {
+  const ids = artifactIds.slice(0, 10);
+  if (!ids.length) return null;
+  return (
+    <div
+      className="midgard-node-thumbs"
+      aria-label={`${label} thumbnails`}
+    >
+      {ids.map((id, index) => (
+        <div key={id} className="midgard-node-thumb">
+          <ArtifactThumbnail
+            artifactId={id}
+            effect={effect}
+            fit={fit}
+            size="sm"
+            label={`${label} ${index + 1}`}
+          />
+        </div>
+      ))}
     </div>
   );
 }
@@ -225,7 +267,7 @@ export function ArtifactPreview({
   if (!artifactId)
     return (
       <EmptyState
-        icon={<ImageIcon className="size-4" />}
+        icon={<ImageIcon className="ui-icon-lg" />}
         title="No preview yet"
         description="Run this node or parent flow to create a local result."
         compact
@@ -234,7 +276,7 @@ export function ArtifactPreview({
   if (state.error)
     return (
       <EmptyState
-        icon={<AlertTriangle className="size-4" />}
+        icon={<AlertTriangle className="ui-icon-lg" />}
         title="Preview unavailable"
         description={state.error}
         compact
@@ -243,15 +285,13 @@ export function ArtifactPreview({
   if (!state.url) return <LoadingState label="Loading preview" />;
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-mg-border bg-mg-app">
-      <div className="flex h-9 items-center gap-2 border-b border-mg-border bg-mg-elevated/80 px-2.5">
- 
-     
+    <div className="ui-preview">
+      <div className="ui-preview-bar is-header">
         <span className="flex-1" />
         <PreviewMeta metadata={state.metadata} />
       </div>
       <div
-        className={`checkerboard relative grid place-items-center overflow-hidden ${compact ? "min-h-28 max-h-52" : "min-h-44 max-h-[26rem]"}`}
+        className={`ui-preview-stage checkerboard ${compact ? "min-h-28 max-h-52" : "min-h-44 max-h-[26rem]"}`}
       >
         <ArtifactMedia
           state={state}
@@ -260,9 +300,9 @@ export function ArtifactPreview({
           className={`${compact ? "max-h-52" : "max-h-[26rem]"} max-w-full`}
         />
       </div>
-      <div className="flex min-h-9 items-center gap-2 border-t border-mg-border bg-mg-elevated/50 px-2">
+      <div className="ui-preview-bar is-footer">
         <span className="size-1.5 rounded-full bg-mg-success" />
-        <span className="min-w-0 flex-1 truncate text-[9px] text-mg-muted">
+        <span className="ui-copy-muted min-w-0 flex-1 truncate text-[9px]">
           Stored locally
         </span>
         <Button
@@ -270,7 +310,7 @@ export function ArtifactPreview({
           onClick={save}
           className="min-h-6 px-2 text-[9px]"
         >
-          <Download className="size-3" />
+          <Download className="ui-icon-sm" />
           Save
         </Button>
       </div>

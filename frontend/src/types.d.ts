@@ -309,7 +309,10 @@ export interface NodeRunState {
 export interface RunSnapshot {
   runId: string;
   workflowId?: string;
+  workflowHash?: string;
   status: string;
+  priority?: number;
+  queuePosition?: number | null;
   progress: number;
   nodes?: Record<string, NodeRunState>;
   artifactIds?: string[];
@@ -318,6 +321,8 @@ export interface RunSnapshot {
 
 export interface RunState {
   run: RunSnapshot | null;
+  queue: {running: RunSnapshot | null; pending: RunSnapshot[]};
+  history: RunSnapshot[];
   nodeStates: Record<string, NodeRunState>;
   logs: Array<{id?: string; nodeId?: string; message: string; timestamp?: string}>;
   connection: string;
@@ -325,10 +330,11 @@ export interface RunState {
   hydrateResults(nodes: EditorNode[]): void;
   clearResults(): void;
   clearNodeResult(nodeId: string): void;
-  start(workflow: WorkflowDocument, mode?: string, selectedNodeIds?: string[]): Promise<RunSnapshot>;
+  start(workflow: WorkflowDocument, mode?: string, selectedNodeIds?: string[], options?: {force?: boolean; queueFront?: boolean}): Promise<RunSnapshot>;
   pause(): Promise<void>;
   resume(): Promise<void>;
-  cancel(): Promise<void>;
+  cancel(runId?: string): Promise<void>;
+  loadActivity(): Promise<void>;
   clearCache(): Promise<void>;
   handleEvent(event: ApiEvent): void;
 }
@@ -339,6 +345,7 @@ export interface DesktopValues {
   drawerVisible: boolean;
   minimapVisible: boolean;
   settingsOpen: boolean;
+  settingsSection: string;
   modelsOpen: boolean;
   drawerTab: string;
   libraryWidth: number;

@@ -36,13 +36,25 @@ def version() -> dict:
 
 @router.get("/api/capabilities", dependencies=[Depends(require_token)])
 def capabilities() -> dict:
-    payload = {"python": sys.version.split()[0], "platform": sys.platform, "backends": ["cpu"], "gpu": None}
+    payload = {
+        "python": sys.version.split()[0],
+        "platform": sys.platform,
+        "backends": ["cpu"],
+        "gpu": None,
+    }
     try:
         from backend.hardware.detector import get_hardware_profile
+
         profile = get_hardware_profile()
-        payload["backends"] = list(profile.available_backends) if hasattr(profile, "available_backends") else ["cpu"]
+        payload["backends"] = (
+            list(profile.available_backends) if hasattr(profile, "available_backends") else ["cpu"]
+        )
         if profile.primary_gpu is not None:
-            payload["gpu"] = {"name": profile.primary_gpu.name, "vramMb": profile.primary_gpu.total_vram_mb, "computeCapability": profile.primary_gpu.compute_capability}
+            payload["gpu"] = {
+                "name": profile.primary_gpu.name,
+                "vramMb": profile.primary_gpu.total_vram_mb,
+                "computeCapability": profile.primary_gpu.compute_capability,
+            }
     except (ImportError, OSError, RuntimeError):
         pass
     return payload

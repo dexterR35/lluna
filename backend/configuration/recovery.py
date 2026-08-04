@@ -18,9 +18,7 @@ def backup_if_corrupt_json(path: str | Path) -> Path | None:
             raise ValueError("top-level value must be an object")
         return None
     except (OSError, UnicodeError, json.JSONDecodeError, ValueError):
-        backup = source.with_name(
-            f"{source.name}.corrupt-{int(time.time())}"
-        )
+        backup = source.with_name(f"{source.name}.corrupt-{int(time.time())}")
         try:
             source.replace(backup)
         except OSError:

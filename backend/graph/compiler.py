@@ -32,7 +32,9 @@ def compile_workflow(
     nodes = {node.id: node for node in workflow.nodes}
     steps = [
         ExecutionStep(
-            index=index, node_id=node_id, schema_id=nodes[node_id].schema_id,
+            index=index,
+            node_id=node_id,
+            schema_id=nodes[node_id].schema_id,
             dependencies=sorted(set(dependencies[node_id])),
             cache_key=build_cache_key(nodes[node_id], []),
         )

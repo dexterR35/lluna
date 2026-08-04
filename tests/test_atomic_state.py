@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import threading
 from pathlib import Path
 
 from backend.core.atomic import atomic_write_json
@@ -18,10 +19,17 @@ def test_atomic_json_replaces_complete_document(tmp_path: Path) -> None:
 def test_download_queue_listener_can_query_without_deadlock() -> None:
     queue = ModelDownloadQueue()
     observed: list[int] = []
+    started = threading.Event()
+    release = threading.Event()
+    finished = threading.Event()
+
+    def work() -> None:
+        started.set()
+        assert release.wait(timeout=2)
+
     queue.add_listener(lambda: observed.append(queue.pending_count()))
-    queue.enqueue("test", "one", lambda: None, lambda error: None)
-    worker = queue._worker
-    assert worker is not None
-    worker.join(timeout=2)
-    assert not worker.is_alive()
+    queue.enqueue("test", "one", work, lambda error: finished.set())
+    assert started.wait(timeout=2)
+    release.set()
+    assert finished.wait(timeout=2)
     assert observed

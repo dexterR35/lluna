@@ -26,7 +26,9 @@ class SaveArtifactRequest(BaseModel):
 def issue_grant(request: GrantRequest) -> dict:
     try:
         grant = DesktopGrantStore.instance().issue(request.path, mode=request.mode)
-        source = ArtifactStore.instance().register_source(grant.path) if grant.mode == "read" else None
+        source = (
+            ArtifactStore.instance().register_source(grant.path) if grant.mode == "read" else None
+        )
     except (OSError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     response = {"grantId": grant.grant_id, "name": grant.display_name, "mode": grant.mode}
@@ -63,9 +65,15 @@ def get_artifact_metadata(artifact_id: str) -> dict:
 
 
 @router.get("/artifacts/{artifact_id}/thumbnail")
-def get_thumbnail(artifact_id: str):
+def get_thumbnail(artifact_id: str, max_edge: int = 256):
     record = artifact(artifact_id)
-    return FileResponse(record.path, media_type=record.media_type)
+    edge = max(64, min(int(max_edge or 256), 512))
+    try:
+        path = ArtifactStore.instance().thumbnail_path(artifact_id, max_edge=edge)
+    except (OSError, ValueError):
+        path = Path(record.path)
+    media = "image/jpeg" if path.suffix.lower() in {".jpg", ".jpeg"} else record.media_type
+    return FileResponse(path, media_type=media, filename=path.name)
 
 
 @router.post("/artifacts/{artifact_id}/save")
@@ -75,7 +83,9 @@ def save_artifact(artifact_id: str, request: SaveArtifactRequest) -> dict:
     try:
         destination = DesktopGrantStore.instance().resolve(request.destinationGrantId, mode="write")
     except PermissionError as exc:
-        raise HTTPException(status_code=403, detail="The save destination expired. Choose it again.") from exc
+        raise HTTPException(
+            status_code=403, detail="The save destination expired. Choose it again."
+        ) from exc
     source = Path(record.path)
     try:
         if source != destination:

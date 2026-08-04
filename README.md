@@ -1,116 +1,200 @@
+<p align="center">
+  <img src="frontend/assets/app-icon/midgard.png" alt="Midgard" width="96" height="96" />
+</p>
+
 # Midgard
 
-Midgard is a local-first Electron node editor for AI media workflows. Electron is the only desktop shell; a hidden Python 3.12 control plane validates and executes graphs through the existing persistent inference worker. Media stays on the machine.
+Local node editor for image and video work. Drag nodes on a canvas, wire them together, run the graph. Models and media stay on your machine — nothing is uploaded to a cloud API.
 
-## Architecture
+<p align="center">
+  <img alt="Linux" src="https://img.shields.io/badge/Linux-supported-2ea44f?logo=linux&logoColor=white" />
+  <img alt="Windows" src="https://img.shields.io/badge/Windows-supported-0078D6?logo=windows&logoColor=white" />
+  <img alt="macOS" src="https://img.shields.io/badge/macOS-supported-000000?logo=apple&logoColor=white" />
+  <img alt="Python" src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" />
+  <img alt="Node" src="https://img.shields.io/badge/Node.js-22%2B-339933?logo=nodedotjs&logoColor=white" />
+</p>
 
-- Electron Forge + Vite owns lifecycle, native menus/dialogs, secure IPC, window state, and the frozen Python sidecar.
-- React 19 in JavaScript/JSX renders the `@xyflow/react` workflow editor.
-- Tailwind CSS and Midgard-owned components provide the entire UI system.
-- FastAPI binds to an ephemeral `127.0.0.1` port with a random per-launch token.
-- WebSocket events carry progress/log metadata; artifacts and path grants keep large media out of JSON/IPC.
-- The existing `InferClient` remains the one-worker GPU scheduling boundary.
+---
 
+## What you can do
 
-## Quick install and run
+| | |
+|---|---|
+| 🖼️ | Load one image or a batch (up to 10) |
+| 🎬 | Load video |
+| ✂️ | Remove backgrounds |
+| 🧽 | Remove burned-in subtitles / text from images and video |
+| ⬆️ | Upscale with Real-ESRGAN |
+| 🌙 | Fix low-light shots |
+| ✨ | Generate images from a prompt (FLUX / Qwen, optional installs) |
+| 🎯 | Select objects (SAM2 + Grounding DINO) |
+| 💾 | Preview and save results locally |
+| 🔗 | Chain steps into reusable workflows (`.midgard.json`) |
 
-Requirements: Python 3.12 (64-bit), Node.js 22+, npm 10+.
+Build left → right, hit **Run**. Progress shows in the Activity panel.
 
-Minimal dev setup:
+---
+
+## Platforms
+
+| OS | Notes |
+|---|---|
+| **Linux** | Primary development target. NVIDIA GPU optional but recommended for generation / heavy models. |
+| **Windows** | Same install flow via `install.bat`. CUDA or DirectML when available. |
+| **macOS** | Supported; Apple Silicon can use MPS where the stack allows. |
+
+You need:
+
+- **Python 3.12** (64-bit)
+- **Node.js 22+** and **npm 10+**
+- Disk space for models (optional models are large — install only what you use)
+- GPU drivers if you want CUDA / DirectML / MPS acceleration (no separate CUDA Toolkit install)
+
+---
+
+## Install (first time)
+
+### 1. Get the repo
 
 ```bash
-python3.12 -m venv .venv
-.venv/bin/python -m pip install -r requirements-control-plane.txt -r requirements-test-core.txt
+git clone <your-midgard-repo-url>
+cd midgard
+```
+
+### 2. Install the Python runtime + deps
+
+This creates the env, picks CPU/CUDA/DirectML/MPS, and verifies bundled pieces.
+
+**Linux / macOS**
+
+```bash
+./install.sh --mode auto
+```
+
+**Windows**
+
+```bat
+install.bat
+```
+
+Useful modes if you already know your hardware:
+
+```bash
+./install.sh --mode cpu
+./install.sh --mode cuda --yes
+./install.sh --mode directml --yes   # Windows
+./install.sh --mode mps --yes        # macOS
+```
+
+### 3. Install the desktop UI
+
+```bash
+npm install --allow-git=all
+```
+
+That’s the first-time setup. Models you install later live outside the app folder and survive upgrades.
+
+---
+
+## Open the app
+
+From the project root:
+
+```bash
+npm run dev
+```
+
+Electron starts, then boots the local Python backend on a loopback port. No separate server step.
+
+First session tip:
+
+1. Open **Settings → Local model manager**
+2. Install something small to start (e.g. **birefnet-general** for background removal)
+3. Enable it so it shows up in node dropdowns
+4. Drop nodes from the library, connect them, press **Run**
+
+Example graph:
+
+`Load Images` → `Remove Background` → `Preview Image` → `Save Image`
+
+---
+
+## Update
+
+Models, settings, and workflows are stored outside the packaged app resources. Updating the code does not wipe them.
+
+```bash
+git pull
+./install.sh --mode auto    # or install.bat on Windows
 npm install --allow-git=all
 npm run dev
 ```
 
-Full AI runtime setup (recommended for actual model usage):
+If a dependency group fails after an update, re-run the installer with the same `--mode` you normally use. Check **Activity → Downloads** if a model reinstall fails.
+
+---
+
+## Models — what they’re for
+
+Everything below runs **locally**. Check each license before use ([third-party notices](THIRD_PARTY_NOTICES.md)).
+
+### Bundled (ship with the app)
+
+| Model | Job |
+|---|---|
+| **STTN Auto / Detection** | Video text / subtitle inpainting |
+| **LaMa** | Still-image inpainting |
+| **ProPainter** | Motion-aware video inpainting |
+| **PaddleOCR Server / Mobile** | Find text regions for subtitle tools |
+
+### Optional (install from Settings → Local model manager)
+
+| Group | Examples | Job |
+|---|---|---|
+| **Background removal** | BiRefNet, U²-Net, ISNet, BRIA | Cut subjects out of photos |
+| **Upscale** | Real-ESRGAN ×2 / ×4 | Sharper, larger images |
+| **Low light** | MIRNet | Brighten / clean dark shots |
+| **Generation** | FLUX.2 Klein, FLUX.2 Dev, Qwen-Image | Text → image (needs VRAM + disk) |
+| **Object selection** | SAM2, Grounding DINO | Point / text-driven masks |
+
+Install only what you need. One model downloads at a time; the queue is in **Activity → Downloads**.
+
+---
+
+## Nodes you’ll use most
+
+**Input** — Load Image, Load Images (max 10), Load Video, Load Mask, Prompt  
+
+**Process** — Remove Background, Generate Image, Upscale Image, Fix Low Light, Select Object, Remove Text from Image / Video, Composite Background  
+
+**Output** — Preview Image / Video, Save Image / Video  
+
+If a node’s model list is empty: install the model, turn it **Enabled**, then reopen the node options.
+
+---
+
+## Workflows & settings
+
+- Workflows save as `*.midgard.json` (atomic save + autosave).
+- App preferences and model defaults live under **Settings** (Editor, Runtime, Subtitle, Enhancement, …).
+- Layout (library width, drawer height) is stored in the desktop UI.
+
+---
+
+## Dev commands
 
 ```bash
-./install.sh --mode auto
-npm run dev
-```
-
-On Windows:
-
-```bash
-install.bat
-npm run dev
-```
-
-`npm run dev` starts Electron. Electron starts the Python backend automatically.
-
-On Linux, Electron requires a working Chromium sandbox. If the npm-installed `chrome-sandbox` helper is not owned by root with mode `4755` and unprivileged user namespaces are disabled, configure the helper through your system administrator before normal development. The automated Playwright smoke test uses `--no-sandbox` only inside its isolated test launch; packaged and normal development windows keep sandboxing enabled.
-
-## Using models and nodes
-
-1. Open **Models -> Manage Models**.
-2. Install the optional models you want (background removal, generation, upscaling, etc.).
-3. Keep models enabled so they appear in node model dropdowns.
-4. Build a graph from left to right, then run:
-   - Input nodes: `Load Image`, `Load Images`, `Load Video`, `Prompt`
-   - Processing nodes: `Remove Background`, `Generate Image`, `Upscale Image`, `Fix Low Light`, `Composite Background`
-   - Output nodes: `Preview Image`, `Preview Video`, `Save Image`, `Save Video`
-
-Simple image workflow example:
-
-`Load Images -> Remove Background -> Composite Background -> Preview Image -> Save Image`
-
-Notes:
-- Models are local on your machine (not cloud API calls).
-- The Downloads panel shows active/queued model installs.
-- If a node says a model is unavailable, install + enable it in the Models dialog.
-
-## Commands
-
-```bash
-npm run build          # production renderer bundle
-npm run test:frontend  # Vitest + Testing Library
-npm run test:backend   # pytest
-npm run check          # strict JS check plus migration guards
+npm run build           # production UI bundle
+npm run test:frontend
+npm run test:backend
+npm run check
 npm run lint
-python scripts/static_guards.py
-python scripts/export_contracts.py
-python packaging/build.py --validate-only
-python packaging/build.py --clean  # frozen sidecar + Electron Forge makers
 ```
 
-## Local security model
+Packaging / frozen sidecar: see `packaging/build.py`.
 
-The renderer has no Node integration, runs with context isolation and sandboxing, and receives a narrow frozen preload API. Navigation and new windows are denied except fixed project links. The API listens only on loopback; every `/api` HTTP request and WebSocket connection requires the random launch token. Desktop paths enter Python only through session-scoped grants.
+---
 
-## Workflow files
+## Privacy in one line
 
-Workflows use `*.midgard.json`, schema version 1. Saves and autosaves are atomic. Functional settings use schema version 2 and migrate once from the old configuration with a timestamped backup. Installed models/settings live outside packaged application resources and survive upgrades.
-
-## Models and licensing
-
-Models are not cloud services. Install only models whose license is appropriate for your use. Bundled and optional model metadata is defined by the Python registry; the Models screen exposes installation state and actions. See [Third-party notices](THIRD_PARTY_NOTICES.md).
-
-### Models available in this app
-
-Core bundled runtimes:
-- `sttn-auto` (video text removal)
-- `sttn-detection`
-- `lama`
-- `propainter`
-- `paddleocr-server`
-- `paddleocr-mobile`
-
-Optional/installable model groups:
-- Background removal (`bg-remove:*`):
-  - `birefnet-general`, `birefnet-general-lite`, `birefnet-portrait`
-  - `birefnet-massive`, `birefnet-dis`, `birefnet-hrsod`, `birefnet-cod`
-  - `u2net`, `u2netp`, `u2net_human_seg`, `u2net_cloth_seg`
-  - `isnet-general-use`, `isnet-anime`, `silueta`, `bria-rmbg`
-- Image generation (`generate:*`):
-  - `FLUX.2-klein-base-4B`, `FLUX.2-klein-4B`
-  - `FLUX.2-klein-base-9B`, `FLUX.2-klein-9B`
-  - `FLUX.2-dev`, `FLUX.2-klein-9b-fp8`, `Qwen-Image`
-- Upscale:
-  - `realesrgan-x2`, `realesrgan-x4`
-- Low light:
-  - `mirnet`
-- Object select helpers:
-  - `sam2`, `grounding-dino`
+Loopback API, per-launch token, sandboxed renderer, path grants for files. Your media does not leave the machine unless you copy it somewhere yourself.

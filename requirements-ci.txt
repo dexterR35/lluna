@@ -2,6 +2,7 @@
 # Torch is installed separately from the platform-appropriate CPU wheel index.
 # Keep heavyweight model and hardware backends in their profile files.
 -r requirements-test.txt
+-r requirements-control-plane.txt
 -c constraints.txt
 
 cryptography

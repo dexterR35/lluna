@@ -9,7 +9,6 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any, Mapping
 
-
 SCHEMA_VERSION = 2
 _INPAINT_MODES = {"sttn-auto", "sttn-det", "lama", "propainter", "opencv"}
 _DETECT_MODES = {"PP_OCRv5_MOBILE", "PP_OCRv5_SERVER"}
@@ -33,6 +32,8 @@ def _string(value: object, name: str) -> str:
 class RuntimeSettings:
     job_watchdog_seconds: float = 90.0
     idle_release_seconds: float = 60.0
+    smart_cache_enabled: bool = True
+    run_history_limit: int = 100
     check_updates_on_startup: bool = True
     soft_defaults_applied: bool = False
 
@@ -41,6 +42,9 @@ class RuntimeSettings:
             raise ValueError("job_watchdog_seconds must be between 5 and 3600")
         if not 0 <= float(self.idle_release_seconds) <= 86_400:
             raise ValueError("idle_release_seconds must be between 0 and 86400")
+        if not isinstance(self.smart_cache_enabled, bool):
+            raise TypeError("smart_cache_enabled must be a boolean")
+        _bounded("run_history_limit", self.run_history_limit, 10, 1000)
         if not isinstance(self.check_updates_on_startup, bool):
             raise TypeError("check_updates_on_startup must be a boolean")
         if not isinstance(self.soft_defaults_applied, bool):
@@ -189,7 +193,9 @@ class ApplicationConfiguration:
             schema_version=int(values.get("schema_version", SCHEMA_VERSION)),
             runtime=RuntimeSettings(**dict(values.get("runtime", {}))),
             subtitle=SubtitleSettings.from_mapping(values.get("subtitle", {})),
-            background_removal=BackgroundRemovalSettings(**dict(values.get("background_removal", {}))),
+            background_removal=BackgroundRemovalSettings(
+                **dict(values.get("background_removal", {}))
+            ),
             enhancement=EnhancementSettings(**dict(values.get("enhancement", {}))),
             low_light=LowLightSettings(**dict(values.get("low_light", {}))),
             generation=GenerationSettings(**dict(values.get("generation", {}))),

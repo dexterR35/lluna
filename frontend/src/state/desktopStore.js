@@ -7,6 +7,7 @@ const defaults = {
   drawerVisible: true,
   minimapVisible: true,
   settingsOpen: false,
+  settingsSection: "editor",
   modelsOpen: false,
   drawerTab: "logs",
   libraryWidth: 248,

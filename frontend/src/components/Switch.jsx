@@ -1,3 +1,26 @@
-import { cn,focusRing } from "./utils";
+import { cn, focusRing } from "./utils";
+
 /** @param {{label: import("react").ReactNode, checked: boolean, onChange?: (checked: boolean) => void, disabled?: boolean}} props */
-export function Switch({label,checked,onChange,disabled=false}){return <label className="flex min-h-8 items-center justify-between gap-3 text-xs text-mg-primary"><span>{label}</span><button type="button" role="switch" aria-checked={checked} disabled={disabled} onClick={()=>onChange?.(!checked)} className={cn("relative h-5 w-9 cursor-pointer rounded-full border transition disabled:cursor-not-allowed",checked?"border-mg-accent bg-mg-accent":"border-mg-border bg-mg-app",focusRing)}><span className={cn("absolute top-0.5 size-3.5 rounded-full bg-white transition",checked?"left-[17px]":"left-0.5")}/></button></label>}
+export function Switch({ label, checked, onChange, disabled = false }) {
+  return (
+    <label className="ui-switch">
+      <span>{label}</span>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        disabled={disabled}
+        onClick={() => onChange?.(!checked)}
+        className={cn(
+          "ui-switch-track",
+          checked ? "is-on" : "is-off",
+          focusRing,
+        )}
+      >
+        <span
+          className={cn("ui-switch-thumb", checked ? "is-on" : "is-off")}
+        />
+      </button>
+    </label>
+  );
+}

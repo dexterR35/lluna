@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from backend.tools.model_download_registry import ModelDownloadRegistry
 from backend.tools.model_download_lifecycle import prepare_restart_pending
+from backend.tools.model_download_registry import ModelDownloadRegistry
 
 
 def test_corrupt_pending_state_is_backed_up(monkeypatch, tmp_path: Path) -> None:
@@ -53,6 +53,4 @@ def test_startup_recovery_clears_stale_cancel_and_keeps_retry_items(
 
     assert [(item.kind, item.key) for item in recovered] == [("bg_remove", "u2net")]
     assert not registry.is_cancelled()
-    assert [(item.kind, item.key) for item in registry.list_pending()] == [
-        ("bg_remove", "u2net")
-    ]
+    assert [(item.kind, item.key) for item in registry.list_pending()] == [("bg_remove", "u2net")]

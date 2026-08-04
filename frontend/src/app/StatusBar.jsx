@@ -10,12 +10,12 @@ export function StatusBar({ zoom }) {
   const capabilities = useServerStore((store) => store.capabilities);
   const error = run?.error?.message;
   return (
-    <footer className="flex h-full items-center gap-3 border-t border-mg-border bg-mg-panel px-3.5 text-[10px] text-mg-muted">
-      <span className="flex items-center gap-1.5">
+    <footer className="ui-inline h-full gap-3 border-t border-mg-border bg-mg-panel px-3.5 text-[10px] text-mg-muted">
+      <span className="ui-inline gap-1.5">
         {connection === "connected" ? (
-          <Wifi className="size-3 text-mg-success" />
+          <Wifi className="ui-icon-sm text-mg-success" />
         ) : (
-          <WifiOff className="size-3 text-mg-warning" />
+          <WifiOff className="ui-icon-sm text-mg-warning" />
         )}
         <span
           className={
@@ -28,8 +28,8 @@ export function StatusBar({ zoom }) {
         </span>
       </span>
       <span className="ui-divider !h-3" />
-      <span className="flex items-center gap-1.5">
-        <Cpu className="size-3" />
+      <span className="ui-inline gap-1.5">
+        <Cpu className="ui-icon-sm" />
         {capabilities?.gpu?.name ||
           capabilities?.backends?.join(", ") ||
           "Detecting hardware"}
@@ -52,7 +52,9 @@ export function StatusBar({ zoom }) {
                 : "neutral"
           }
         >
-          {run.status} · {run.progress || 0}%
+          {run.status === "QUEUED" && run.queuePosition
+            ? `QUEUED · ${run.queuePosition}`
+            : `${run.status} · ${run.progress || 0}%`}
         </Badge>
       )}
     </footer>

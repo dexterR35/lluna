@@ -9,7 +9,6 @@ from typing import Any, Callable, Mapping
 from backend.configuration.loader import ConfigurationLoader
 from backend.configuration.models import ApplicationConfiguration
 
-
 SettingsListener = Callable[[ApplicationConfiguration], None]
 
 
@@ -80,9 +79,11 @@ class ConfigurationService:
     def subscribe(self, listener: SettingsListener) -> Callable[[], None]:
         with self._lock:
             self._listeners.add(listener)
+
         def unsubscribe() -> None:
             with self._lock:
                 self._listeners.discard(listener)
+
         return unsubscribe
 
     @property

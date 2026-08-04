@@ -1,7 +1,7 @@
 import { cn } from "./utils";
 
 /**
- * Reusable surface card — nodes, dialogs, drawers, and settings share this.
+ * Reusable surface card — panels, drawers, and previews share this.
  * @param {{
  *   children?: import("react").ReactNode,
  *   className?: string,
@@ -24,10 +24,8 @@ export function Card({
   return (
     <Tag
       className={cn(
-        "rounded-2xl border bg-mg-node",
-        selected
-          ? "border-mg-accent bg-mg-accent/10"
-          : "border-mg-border",
+        "ui-card",
+        selected && "border-mg-accent bg-mg-accent/10",
         padded && "p-3.5",
         interactive &&
           !selected &&

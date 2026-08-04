@@ -5,7 +5,7 @@ from __future__ import annotations
 import hmac
 import os
 
-from fastapi import Header, HTTPException, Query, WebSocket, status
+from fastapi import Header, HTTPException, WebSocket, status
 
 _SESSION_TOKEN = ""
 
@@ -32,7 +32,9 @@ def require_token(
     if authorization and authorization.lower().startswith("bearer "):
         candidate = authorization[7:]
     if not candidate or not hmac.compare_digest(candidate, session_token()):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Midgard session token")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Midgard session token"
+        )
 
 
 async def accept_authenticated_websocket(websocket: WebSocket) -> bool:

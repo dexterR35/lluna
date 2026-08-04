@@ -52,6 +52,21 @@ export async function api(path, options = {}) {
   return response.json();
 }
 
+/** Max images accepted by Load Images / multi-file pickers. */
+export const MAX_BATCH_IMAGES = 10;
+
+/** @param {string} artifactId @param {{maxEdge?: number}} [options] */
+export async function artifactThumbnailUrl(artifactId, options = {}) {
+  const current = await initializeApi();
+  const edge = options.maxEdge || 256;
+  const response = await fetch(
+    `${current.baseUrl}/api/artifacts/${encodeURIComponent(artifactId)}/thumbnail?max_edge=${edge}`,
+    { headers: { "X-Midgard-Token": current.token } },
+  );
+  if (!response.ok) throw new Error("Thumbnail is unavailable");
+  return URL.createObjectURL(await response.blob());
+}
+
 /** @param {string} artifactId */
 export async function artifactObjectUrl(artifactId) {
   const current = await initializeApi();

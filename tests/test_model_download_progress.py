@@ -326,9 +326,7 @@ def test_model_service_serializes_multiple_installs_in_fifo_order(monkeypatch) -
     assert second["jobId"] is not None
     assert second["position"] == 1
     assert not second_started.is_set()
-    assert service.download_queue_snapshot(queue)["pending"][0]["modelId"] == (
-        "realesrgan-x4"
-    )
+    assert service.download_queue_snapshot(queue)["pending"][0]["modelId"] == ("realesrgan-x4")
 
     release_first.set()
     assert second_started.wait(timeout=2)
