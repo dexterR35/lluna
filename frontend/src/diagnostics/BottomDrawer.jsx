@@ -129,14 +129,41 @@ export function BottomDrawer({ issues }) {
           <div className="grid gap-2.5">
             {[...(downloads?.active || []), ...(downloads?.pending || [])].map(
               (item) => (
-                <Card key={`${item.kind}-${item.key}`}>
+                <Card key={item.jobId || `${item.kind}-${item.key}`}>
                   <div className="mb-2 flex justify-between gap-2">
-                    <span className="font-medium text-mg-primary">
-                      {item.key}
-                    </span>
-                    <Badge size="xs">{item.kind}</Badge>
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-mg-primary">
+                        {item.modelId || item.key}
+                      </p>
+                      <p className="text-[9px] text-mg-muted">
+                        {item.state === "queued"
+                          ? item.position === 1
+                            ? "Next in queue"
+                            : `${item.position} installs ahead`
+                          : item.detail || "Preparing download"}
+                      </p>
+                    </div>
+                    <Badge
+                      size="xs"
+                      tone={item.state === "queued" ? "accent" : "running"}
+                    >
+                      {item.state === "queued"
+                        ? `Queued · ${item.position}`
+                        : "Installing"}
+                    </Badge>
                   </div>
-                  <ProgressBar value={item.progress || 0} />
+                  <ProgressBar
+                    value={item.state === "queued" ? 0 : item.progress}
+                    indeterminate={
+                      item.state !== "queued" && item.progress == null
+                    }
+                    label={
+                      item.state === "queued"
+                        ? `Queue position ${item.position}`
+                        : item.detail || "Model download"
+                    }
+                    showLabel
+                  />
                 </Card>
               ),
             )}

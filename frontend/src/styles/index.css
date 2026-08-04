@@ -71,6 +71,7 @@ body {
 }
 button, input, textarea, select { font: inherit; }
 button { -webkit-tap-highlight-color: transparent; }
+button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer; }
 ::selection { background: color-mix(in srgb, var(--mg-accent) 35%, transparent); }
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
@@ -79,6 +80,15 @@ button { -webkit-tap-highlight-color: transparent; }
   border: 2px solid transparent;
   border-radius: 999px;
   background-clip: content-box;
+}
+
+@keyframes progress-indeterminate {
+  from { transform: translateX(-110%); }
+  to { transform: translateX(290%); }
+}
+.ui-progress-indeterminate {
+  width: 34%;
+  animation: progress-indeterminate 1.15s ease-in-out infinite;
 }
 
 @layer components {

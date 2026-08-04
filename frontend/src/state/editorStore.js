@@ -303,6 +303,11 @@ const createEditorState = (set, get) => ({
         valid: false,
         reason: `${sourcePort.type} cannot connect to ${targetPort.type}.`,
       };
+    if (sourcePort.multiple && !targetPort.multiple)
+      return {
+        valid: false,
+        reason: `${targetPort.label} accepts one item, but this output contains a queue.`,
+      };
     if (
       state.edges.some(
         (edge) =>

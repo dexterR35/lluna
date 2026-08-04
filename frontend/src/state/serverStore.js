@@ -28,6 +28,11 @@ const createServerState = (set, get) => ({
     set({ models });
     return models;
   },
+  async refreshDownloads() {
+    const downloads = await api("/api/downloads");
+    set({ downloads });
+    return downloads;
+  },
   setModelLifecycleState(modelId, patch) {
     set((state) => ({
       models: state.models.map((model) =>
@@ -39,7 +44,28 @@ const createServerState = (set, get) => ({
   async resetSettings(section) { set({ settings: await api(`/api/settings/reset/${section}`, { method: "POST" }) }); },
   handleEvent(event) {
     if (event.type === "settings.changed") void get().bootstrap();
-    if (event.type.startsWith("download.") || event.type === "model.changed") void get().refreshModels();
+    if (event.type === "download.queue.updated") {
+      set({
+        downloads: {
+          active: event.payload.active || [],
+          pending: event.payload.pending || [],
+        },
+      });
+      return;
+    }
+    if (event.type === "download.queued") void get().refreshDownloads();
+    if (
+      [
+        "download.completed",
+        "download.failed",
+        "download.cancelled",
+        "model.changed",
+        "model.action.failed",
+      ].includes(event.type)
+    ) {
+      void get().refreshModels();
+      void get().refreshDownloads();
+    }
   },
 });
 

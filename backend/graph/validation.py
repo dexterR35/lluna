@@ -235,6 +235,19 @@ def validate_workflow(
             continue
         if not ports_compatible(PortType(source_port.type), PortType(target_port.type)):
             issues.append(ValidationIssue(severity="error", code="INCOMPATIBLE_PORTS", message=f"{source_port.label} ({source_port.type}) cannot connect to {target_port.label} ({target_port.type}).", edge_id=edge.id))
+        if source_port.multiple and not target_port.multiple:
+            issues.append(
+                ValidationIssue(
+                    severity="error",
+                    code="BATCH_TO_SCALAR",
+                    message=(
+                        f"{source_port.label} contains a queue, but "
+                        f"{target_port.label} accepts only one item."
+                    ),
+                    edge_id=edge.id,
+                    action="Connect to a batch-capable node or select one item first.",
+                )
+            )
         key = (target.id, target_port.id)
         connected_inputs[key] += 1
         if connected_inputs[key] > 1 and not target_port.multiple:

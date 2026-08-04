@@ -3,8 +3,12 @@
 from fastapi import APIRouter, Depends, HTTPException, Response
 
 from backend.api.auth import require_token
-from backend.models.service import list_models, start_model_action
-from backend.tools.model_download_registry import ModelDownloadRegistry
+from backend.models.service import (
+    download_queue_snapshot,
+    list_models,
+    start_model_action,
+)
+from backend.tools.model_download_queue import ModelDownloadQueue
 
 router = APIRouter(prefix="/api", dependencies=[Depends(require_token)])
 
@@ -16,7 +20,11 @@ def models() -> list[dict]:
 
 def action(model_id: str, operation: str) -> dict:
     try:
-        return {"actionId": start_model_action(model_id, operation), "modelId": model_id, "operation": operation}
+        return {
+            **start_model_action(model_id, operation),
+            "modelId": model_id,
+            "operation": operation,
+        }
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Unknown model") from exc
 
@@ -43,14 +51,15 @@ def remove(model_id: str) -> dict:
 
 @router.get("/downloads")
 def downloads() -> dict:
-    registry = ModelDownloadRegistry.instance()
-    return {
-        "active": [{"kind": item.kind, "key": item.key} for item in registry.list_active()],
-        "pending": [{"kind": item.kind, "key": item.key} for item in registry.list_pending()],
-    }
+    return download_queue_snapshot()
 
 
 @router.post("/downloads/{download_id}/cancel", status_code=202)
 def cancel_download(download_id: str) -> dict:
-    ModelDownloadRegistry.instance().request_cancel()
+    try:
+        job_id = int(download_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid download job ID") from exc
+    if not ModelDownloadQueue.instance().stop_job(job_id):
+        raise HTTPException(status_code=404, detail="Download job not found")
     return {"downloadId": download_id, "cancelRequested": True}

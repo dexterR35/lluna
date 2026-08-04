@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Monitor, RotateCcw, Settings2 } from "lucide-react";
-import { Button, Card, Dialog, NumberField, Switch, TextField } from "../components";
+import { Button, Dialog, NumberField, Switch, TextField } from "../components";
 import { useDesktopStore } from "../state/desktopStore";
 import { useServerStore } from "../state/serverStore";
 
@@ -22,12 +22,10 @@ function SettingsSection({ section, values }) {
   }
 
   return (
-    <div className="grid gap-2.5">
+    <div className="grid gap-3">
       {Object.entries(draft).map(([key, value]) =>
         typeof value === "boolean" ? (
-          <Card key={key} className="bg-mg-app/45 px-3 py-1" padded={false}>
-            <Switch label={title(key)} checked={value} onChange={(next) => void commit(key, next)} />
-          </Card>
+          <Switch key={key} label={title(key)} checked={value} onChange={(next) => void commit(key, next)} />
         ) : typeof value === "number" ? (
           <NumberField
             key={key}
@@ -60,11 +58,9 @@ function EditorSettings({ onReset }) {
   const minimapVisible = useDesktopStore((store) => store.minimapVisible);
   const set = useDesktopStore((store) => store.setValue);
   return (
-    <div className="grid gap-2.5">
-      <Card className="bg-mg-app/45 px-3 py-1" padded={false}>
-        <Switch label="Show minimap" checked={minimapVisible} onChange={(value) => set("minimapVisible", value)} />
-      </Card>
-      <Card className="flex items-center justify-between gap-3 bg-mg-app/45">
+    <div className="grid gap-3">
+      <Switch label="Show minimap" checked={minimapVisible} onChange={(value) => set("minimapVisible", value)} />
+      <div className="flex items-center justify-between gap-3 border-t border-mg-border pt-3">
         <div>
           <p className="text-[11px] font-medium text-mg-primary">Reset workspace layout</p>
           <p className="mt-0.5 text-[10px] text-mg-muted">Restore panel sizes and visibility.</p>
@@ -72,7 +68,7 @@ function EditorSettings({ onReset }) {
         <Button variant="secondary" className="min-h-7 shrink-0 px-2.5 text-[10px]" onClick={onReset}>
           Reset
         </Button>
-      </Card>
+      </div>
     </div>
   );
 }
@@ -100,11 +96,12 @@ export function SettingsDialog() {
       onClose={() => set("settingsOpen", false)}
       title="Settings"
       description="Application and local processing preferences"
-      className="max-w-xl"
+      wide
+      className="!max-w-3xl"
       bodyClassName="!max-h-none !p-0"
     >
-      <div className="grid h-[28rem] grid-cols-[9.5rem_minmax(0,1fr)]">
-        <nav aria-label="Settings sections" className="min-h-0 overflow-y-auto border-r border-mg-border bg-mg-app/40 p-2.5">
+      <div className="grid h-[32rem] grid-cols-[11rem_minmax(0,1fr)]">
+        <nav aria-label="Settings sections" className="min-h-0 overflow-y-auto border-r border-mg-border p-2.5">
           <button
             type="button"
             onClick={() => setActiveId("editor")}
@@ -125,7 +122,7 @@ export function SettingsDialog() {
             </button>
           ))}
         </nav>
-        <section className="min-h-0 overflow-y-auto p-4">
+        <section className="min-h-0 overflow-y-auto p-5">
           <header className="mb-3 border-b border-mg-border pb-3">
             <h3 className="text-[12px] font-semibold tracking-tight text-mg-primary">{active?.label || "Editor"}</h3>
             <p className="mt-1 text-[10px] text-mg-muted">

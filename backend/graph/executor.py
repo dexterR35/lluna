@@ -76,6 +76,21 @@ class ExecutionFailure(RuntimeError):
         self.retryable = retryable
 
 
+def _artifact_values(value: Any) -> list[ArtifactRecord]:
+    """Flatten an execution value while preserving its artifact order."""
+    if isinstance(value, ArtifactRecord):
+        return [value]
+    if isinstance(value, dict):
+        return [
+            artifact
+            for item in value.values()
+            for artifact in _artifact_values(item)
+        ]
+    if isinstance(value, (list, tuple)):
+        return [artifact for item in value for artifact in _artifact_values(item)]
+    return []
+
+
 class _RunControl:
     def __init__(
         self,
@@ -254,9 +269,21 @@ class RunManager:
                     for port_id, source in incoming.get(node.id, {}).items()
                     if source in values
                 }
-                input_artifacts = [value for value in input_values.values() if isinstance(value, ArtifactRecord)]
-                cache_key = build_cache_key(node, [item.content_hash for item in input_artifacts])
-                cached_id = self._cache.get(cache_key) if definition.cache_policy == "content-addressed" else None
+                input_artifacts = _artifact_values(input_values)
+                cache_key = build_cache_key(
+                    node,
+                    [item.content_hash for item in input_artifacts],
+                )
+                has_batch_input = any(
+                    isinstance(value, (list, tuple))
+                    for value in input_values.values()
+                )
+                cached_id = (
+                    self._cache.get(cache_key)
+                    if definition.cache_policy == "content-addressed"
+                    and not has_batch_input
+                    else None
+                )
                 if cached_id:
                     try:
                         artifact = self._artifacts.get(cached_id)
@@ -276,10 +303,16 @@ class RunManager:
                 elif output_ports and result is not None:
                     for port in output_ports:
                         values[(node.id, port.id)] = result
-                if isinstance(result, ArtifactRecord):
+                result_artifacts = _artifact_values(result)
+                if result_artifacts:
                     with control.lock:
-                        snapshot.artifact_ids.append(result.artifact_id)
-                    if definition.cache_policy == "content-addressed":
+                        snapshot.artifact_ids.extend(
+                            artifact.artifact_id for artifact in result_artifacts
+                        )
+                    if (
+                        isinstance(result, ArtifactRecord)
+                        and definition.cache_policy == "content-addressed"
+                    ):
                         with self._cache_lock:
                             self._cache[cache_key] = result.artifact_id
                             self._save_cache()
@@ -352,7 +385,23 @@ class RunManager:
                     artifact_ids = result.get("artifactIds") or result.get("artifact_ids") or []
                     if artifact_ids:
                         try:
-                            value = self._artifacts.get(artifact_ids[-1])
+                            source_port = next(
+                                (
+                                    port
+                                    for port in definition.outputs
+                                    if port.id == edge.source_port_id
+                                ),
+                                None,
+                            )
+                            artifacts = [
+                                self._artifacts.get(str(artifact_id))
+                                for artifact_id in artifact_ids
+                            ]
+                            value = (
+                                artifacts
+                                if source_port and source_port.multiple
+                                else artifacts[-1]
+                            )
                         except (KeyError, FileNotFoundError) as exc:
                             raise ExecutionFailure(
                                 "BOUNDARY_INPUT_UNAVAILABLE",
@@ -387,7 +436,9 @@ class RunManager:
         run_id = control.snapshot.run_id
         self._node_state(control, node.id, "RUNNING", 0)
         self._events.publish("node.started", run_id=run_id, node_id=node.id, payload={"schemaId": node.schema_id})
-        if definition.adapter in {"load_image", "load_video", "load_mask"}:
+        if definition.adapter == "load_images":
+            result = self._load_granted_media_batch(node)
+        elif definition.adapter in {"load_image", "load_video", "load_mask"}:
             result = self._load_granted_media(node)
         elif definition.adapter == "literal":
             result = {definition.outputs[0].id: node.parameters.get("value")}
@@ -395,14 +446,126 @@ class RunManager:
             result = next(iter(inputs.values()))
         elif definition.adapter == "save":
             result = self._save_output(node, next(iter(inputs.values())))
+        elif any(isinstance(value, (list, tuple)) for value in inputs.values()):
+            result = self._run_batch_node(control, node, inputs)
+        elif definition.adapter == "composite":
+            result = self._composite_images(
+                control,
+                node,
+                inputs,
+                input_artifacts,
+                cache_key,
+            )
         else:
             result = self._run_inference(control, node, inputs, input_artifacts, cache_key)
         self._node_state(control, node.id, "SUCCEEDED", 100)
-        artifact_ids = [result.artifact_id] if isinstance(result, ArtifactRecord) else []
+        artifact_ids = [
+            artifact.artifact_id for artifact in _artifact_values(result)
+        ]
         with control.lock:
             control.snapshot.nodes[node.id].artifact_ids = artifact_ids
         self._events.publish("node.completed", run_id=run_id, node_id=node.id, payload={"artifactIds": artifact_ids})
         return result
+
+    def _run_batch_node(
+        self,
+        control: _RunControl,
+        node: WorkflowNode,
+        inputs: dict[str, Any],
+    ) -> list[ArtifactRecord]:
+        """Map a batch-capable node over ordered inputs using ZIP semantics."""
+        lists = {
+            name: list(value)
+            for name, value in inputs.items()
+            if isinstance(value, (list, tuple))
+        }
+        lengths = {len(value) for value in lists.values()}
+        if not lengths or 0 in lengths:
+            raise ExecutionFailure("EMPTY_BATCH", "The image queue is empty.")
+        if len(lengths) != 1:
+            raise ExecutionFailure(
+                "BATCH_LENGTH_MISMATCH",
+                "Connected image queues must contain the same number of items.",
+            )
+        count = lengths.pop()
+        outputs: list[ArtifactRecord] = []
+        definition = NODE_REGISTRY[node.schema_id]
+        for index in range(count):
+            self._wait_if_paused(control)
+            if control.cancel.is_set():
+                raise ExecutionFailure("CANCELLED", "Run cancelled.")
+            scalar_inputs = {
+                name: lists[name][index] if name in lists else value
+                for name, value in inputs.items()
+            }
+            scalar_artifacts = _artifact_values(scalar_inputs)
+            input_signatures = [
+                f"{name}:{artifact.content_hash}"
+                for name, value in scalar_inputs.items()
+                for artifact in _artifact_values(value)
+            ]
+            item_cache_key = build_cache_key(node, input_signatures)
+            artifact = None
+            if definition.cache_policy == "content-addressed":
+                cached_id = self._cache.get(item_cache_key)
+                if cached_id:
+                    try:
+                        artifact = self._artifacts.get(cached_id)
+                    except (KeyError, FileNotFoundError):
+                        artifact = None
+            if artifact is None:
+                progress_offset = int(index * 100 / count)
+                progress_span = 100 / count
+                if definition.adapter == "composite":
+                    artifact = self._composite_images(
+                        control,
+                        node,
+                        scalar_inputs,
+                        scalar_artifacts,
+                        item_cache_key,
+                        progress_offset=progress_offset,
+                        progress_span=progress_span,
+                        item_index=index,
+                        item_count=count,
+                    )
+                else:
+                    artifact = self._run_inference(
+                        control,
+                        node,
+                        scalar_inputs,
+                        scalar_artifacts,
+                        item_cache_key,
+                        progress_offset=progress_offset,
+                        progress_span=progress_span,
+                        item_index=index,
+                        item_count=count,
+                    )
+                if definition.cache_policy == "content-addressed":
+                    with self._cache_lock:
+                        self._cache[item_cache_key] = artifact.artifact_id
+                        self._save_cache()
+            else:
+                progress = int((index + 1) * 100 / count)
+                self._node_state(
+                    control,
+                    node.id,
+                    "RUNNING",
+                    progress,
+                    f"Item {index + 1} of {count} loaded from cache",
+                )
+                self._events.publish(
+                    "node.progress",
+                    run_id=control.snapshot.run_id,
+                    node_id=node.id,
+                    payload={
+                        "progress": progress,
+                        "itemIndex": index,
+                        "itemCount": count,
+                        "cached": True,
+                    },
+                )
+            outputs.append(artifact)
+        return outputs
 
     def _resolve_grant(self, grant_id: str, *, mode: str, empty_message: str) -> Path:
         if not grant_id:
@@ -446,6 +609,44 @@ class RunManager:
             return persisted
         raise ExecutionFailure("MISSING_INPUT", "Choose a local file for this node.")
 
+    def _load_granted_media_batch(self, node: WorkflowNode) -> list[ArtifactRecord]:
+        persisted_ids = (
+            (node.result or {}).get("artifactIds")
+            or (node.result or {}).get("artifact_ids")
+            or []
+        )
+        persisted: list[ArtifactRecord] = []
+        for artifact_id in persisted_ids:
+            try:
+                persisted.append(self._artifacts.get(str(artifact_id)))
+            except (KeyError, FileNotFoundError):
+                persisted = []
+                break
+
+        grant_ids = node.parameters.get("pathGrantIds") or []
+        if not isinstance(grant_ids, list):
+            raise ExecutionFailure(
+                "INVALID_BATCH",
+                "Load Images expects an ordered list of desktop file grants.",
+            )
+        if grant_ids:
+            artifacts: list[ArtifactRecord] = []
+            try:
+                for grant_id in grant_ids:
+                    path = self._grants.resolve(str(grant_id), mode="read")
+                    artifacts.append(self._artifacts.register_source(path))
+                return artifacts
+            except (PermissionError, FileNotFoundError) as exc:
+                if persisted:
+                    return persisted
+                raise ExecutionFailure(
+                    "EXPIRED_GRANT",
+                    "One or more selected files expired after restart. Choose the files again.",
+                ) from exc
+        if persisted:
+            return persisted
+        raise ExecutionFailure("EMPTY_BATCH", "Choose one or more local images.")
+
     def _save_output(self, node: WorkflowNode, value: Any) -> ArtifactRecord:
         if not isinstance(value, ArtifactRecord):
             raise ExecutionFailure("MISSING_INPUT", "Save node needs an artifact.")
@@ -460,9 +661,133 @@ class RunManager:
         temporary.replace(destination)
         return self._artifacts.register_source(destination, media_type=value.media_type)
 
-    def _run_inference(self, control: _RunControl, node: WorkflowNode, inputs: dict[str, Any], input_artifacts: list[ArtifactRecord], cache_key: str) -> ArtifactRecord:
+    def _composite_images(
+        self,
+        control: _RunControl,
+        node: WorkflowNode,
+        inputs: dict[str, Any],
+        input_artifacts: list[ArtifactRecord],
+        cache_key: str,
+        *,
+        progress_offset: int = 0,
+        progress_span: float = 100,
+        item_index: int = 0,
+        item_count: int = 1,
+    ) -> ArtifactRecord:
+        foreground = inputs.get("foreground")
+        background = inputs.get("background")
+        if not isinstance(foreground, ArtifactRecord) or not isinstance(
+            background, ArtifactRecord
+        ):
+            raise ExecutionFailure(
+                "MISSING_INPUT",
+                "Composite Background needs foreground and background images.",
+            )
+        try:
+            from PIL import Image, ImageOps
+
+            with Image.open(foreground.path) as source_foreground:
+                foreground_image = source_foreground.convert("RGBA")
+            with Image.open(background.path) as source_background:
+                background_image = source_background.convert("RGBA")
+            size = foreground_image.size
+            fit = str(node.parameters.get("fit") or "cover")
+            if fit == "stretch":
+                prepared_background = background_image.resize(
+                    size,
+                    Image.Resampling.LANCZOS,
+                )
+            elif fit == "contain":
+                prepared_background = Image.new("RGBA", size, (0, 0, 0, 0))
+                contained = ImageOps.contain(
+                    background_image,
+                    size,
+                    Image.Resampling.LANCZOS,
+                )
+                prepared_background.alpha_composite(
+                    contained,
+                    ((size[0] - contained.width) // 2, (size[1] - contained.height) // 2),
+                )
+            else:
+                prepared_background = ImageOps.fit(
+                    background_image,
+                    size,
+                    Image.Resampling.LANCZOS,
+                )
+            result = Image.alpha_composite(prepared_background, foreground_image)
+            fd, output_raw = tempfile.mkstemp(
+                prefix="midgard-composite-",
+                suffix=".png",
+            )
+            os.close(fd)
+            result.save(output_raw, format="PNG")
+        except (OSError, ValueError) as exc:
+            raise ExecutionFailure(
+                "COMPOSITE_FAILED",
+                f"Could not composite these images: {exc}",
+            ) from exc
+        artifact = self._artifacts.commit(
+            output_raw,
+            run_id=control.snapshot.run_id,
+            node_id=node.id,
+            inputs=input_artifacts,
+            parameters_hash=cache_key,
+        )
+        Path(output_raw).unlink(missing_ok=True)
+        progress = min(100, int(progress_offset + progress_span))
+        self._node_state(
+            control,
+            node.id,
+            "RUNNING",
+            progress,
+            f"Composited item {item_index + 1} of {item_count}",
+        )
+        self._events.publish(
+            "artifact.created",
+            run_id=control.snapshot.run_id,
+            node_id=node.id,
+            payload={
+                "artifactId": artifact.artifact_id,
+                "itemIndex": item_index,
+                "itemCount": item_count,
+            },
+        )
+        self._events.publish(
+            "node.progress",
+            run_id=control.snapshot.run_id,
+            node_id=node.id,
+            payload={
+                "progress": progress,
+                "itemIndex": item_index,
+                "itemCount": item_count,
+            },
+        )
+        return artifact
+
+    def _run_inference(
+        self,
+        control: _RunControl,
+        node: WorkflowNode,
+        inputs: dict[str, Any],
+        input_artifacts: list[ArtifactRecord],
+        cache_key: str,
+        *,
+        progress_offset: int = 0,
+        progress_span: float = 100,
+        item_index: int = 0,
+        item_count: int = 1,
+    ) -> ArtifactRecord:
         if os.environ.get("MIDGARD_FAKE_WORKER") == "1":
-            return self._fake_inference(control, node, input_artifacts, cache_key)
+            return self._fake_inference(
+                control,
+                node,
+                input_artifacts,
+                cache_key,
+                progress_offset=progress_offset,
+                progress_span=progress_span,
+                item_index=item_index,
+                item_count=item_count,
+            )
         settings = get_settings()
         adapter = NODE_REGISTRY[node.schema_id].adapter
         job_types = {
@@ -503,17 +828,63 @@ class RunManager:
         elif adapter == "subtitle":
             source = artifact_path("video") or artifact_path("image")
             payload.update(video_path=source, options=params.get("options") or {}, config=settings.subtitle.to_payload())
-        return self._invoke_worker(control, node, job_type, payload, output_raw, input_artifacts, cache_key)
+        return self._invoke_worker(
+            control,
+            node,
+            job_type,
+            payload,
+            output_raw,
+            input_artifacts,
+            cache_key,
+            progress_offset=progress_offset,
+            progress_span=progress_span,
+            item_index=item_index,
+            item_count=item_count,
+        )
 
-    def _invoke_worker(self, control: _RunControl, node: WorkflowNode, job_type: JobType, payload: dict[str, Any], output_path: str, input_artifacts: list[ArtifactRecord], cache_key: str) -> ArtifactRecord:
+    def _invoke_worker(
+        self,
+        control: _RunControl,
+        node: WorkflowNode,
+        job_type: JobType,
+        payload: dict[str, Any],
+        output_path: str,
+        input_artifacts: list[ArtifactRecord],
+        cache_key: str,
+        *,
+        progress_offset: int = 0,
+        progress_span: float = 100,
+        item_index: int = 0,
+        item_count: int = 1,
+    ) -> ArtifactRecord:
         from backend.tools.infer_client import InferClient
         done = threading.Event()
         result_path: list[str] = []
         error: list[str] = []
         run_id = control.snapshot.run_id
         def progress(value: int) -> None:
-            self._node_state(control, node.id, "RUNNING", int(value))
-            self._events.publish("node.progress", run_id=run_id, node_id=node.id, payload={"progress": int(value)})
+            aggregate = min(
+                100,
+                int(progress_offset + progress_span * int(value) / 100),
+            )
+            self._node_state(
+                control,
+                node.id,
+                "RUNNING",
+                aggregate,
+                f"Processing item {item_index + 1} of {item_count}",
+            )
+            self._events.publish(
+                "node.progress",
+                run_id=run_id,
+                node_id=node.id,
+                payload={
+                    "progress": aggregate,
+                    "itemProgress": int(value),
+                    "itemIndex": item_index,
+                    "itemCount": item_count,
+                },
+            )
         def log(message: str) -> None:
             self._events.publish("node.log", run_id=run_id, node_id=node.id, payload={"message": str(message)})
         def result(path: str) -> None:
@@ -536,15 +907,55 @@ class RunManager:
         final_path = result_path[-1] if result_path else output_path
         artifact = self._artifacts.commit(final_path, run_id=run_id, node_id=node.id, inputs=input_artifacts, parameters_hash=cache_key)
         Path(output_path).unlink(missing_ok=True)
-        self._events.publish("artifact.created", run_id=run_id, node_id=node.id, payload={"artifactId": artifact.artifact_id})
+        self._events.publish(
+            "artifact.created",
+            run_id=run_id,
+            node_id=node.id,
+            payload={
+                "artifactId": artifact.artifact_id,
+                "itemIndex": item_index,
+                "itemCount": item_count,
+            },
+        )
         return artifact
 
-    def _fake_inference(self, control: _RunControl, node: WorkflowNode, inputs: list[ArtifactRecord], cache_key: str) -> ArtifactRecord:
+    def _fake_inference(
+        self,
+        control: _RunControl,
+        node: WorkflowNode,
+        inputs: list[ArtifactRecord],
+        cache_key: str,
+        *,
+        progress_offset: int = 0,
+        progress_span: float = 100,
+        item_index: int = 0,
+        item_count: int = 1,
+    ) -> ArtifactRecord:
         for progress in (10, 40, 75, 100):
             if control.cancel.is_set():
                 raise ExecutionFailure("CANCELLED", "Run cancelled.")
-            self._node_state(control, node.id, "RUNNING", progress)
-            self._events.publish("node.progress", run_id=control.snapshot.run_id, node_id=node.id, payload={"progress": progress})
+            aggregate = min(
+                100,
+                int(progress_offset + progress_span * progress / 100),
+            )
+            self._node_state(
+                control,
+                node.id,
+                "RUNNING",
+                aggregate,
+                f"Processing item {item_index + 1} of {item_count}",
+            )
+            self._events.publish(
+                "node.progress",
+                run_id=control.snapshot.run_id,
+                node_id=node.id,
+                payload={
+                    "progress": aggregate,
+                    "itemProgress": progress,
+                    "itemIndex": item_index,
+                    "itemCount": item_count,
+                },
+            )
         fd, raw = tempfile.mkstemp(prefix="midgard-fake-", suffix=".png")
         os.close(fd)
         if inputs and Path(inputs[0].path).suffix.lower() in {".png", ".jpg", ".jpeg", ".webp"}:
@@ -554,5 +965,14 @@ class RunManager:
             Path(raw).write_bytes(png)
         artifact = self._artifacts.commit(raw, run_id=control.snapshot.run_id, node_id=node.id, inputs=inputs, parameters_hash=cache_key)
         Path(raw).unlink(missing_ok=True)
-        self._events.publish("artifact.created", run_id=control.snapshot.run_id, node_id=node.id, payload={"artifactId": artifact.artifact_id})
+        self._events.publish(
+            "artifact.created",
+            run_id=control.snapshot.run_id,
+            node_id=node.id,
+            payload={
+                "artifactId": artifact.artifact_id,
+                "itemIndex": item_index,
+                "itemCount": item_count,
+            },
+        )
         return artifact

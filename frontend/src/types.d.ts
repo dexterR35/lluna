@@ -48,6 +48,29 @@ export interface ModelInventory extends Record<string, unknown> {
   can_toggle: boolean;
 }
 
+export interface DownloadJob {
+  jobId: number;
+  kind: string;
+  key: string;
+  modelId?: string | null;
+  operation: string;
+  state: "active" | "stopping" | "queued";
+  position: number;
+  progress?: number | null;
+  detail?: string;
+  error?: string;
+  downloadedBytes?: number | null;
+  totalBytes?: number | null;
+  bytesPerSecond?: number | null;
+  elapsedSeconds?: number;
+  etaSeconds?: number | null;
+}
+
+export interface DownloadQueueState {
+  active: DownloadJob[];
+  pending: DownloadJob[];
+}
+
 export interface NodeDefinition {
   schemaId: string;
   schemaVersion: number;
@@ -311,6 +334,7 @@ export interface RunState {
 
 export interface DesktopValues {
   libraryVisible: boolean;
+  libraryCollapsed: boolean;
   drawerVisible: boolean;
   minimapVisible: boolean;
   settingsOpen: boolean;
@@ -332,11 +356,12 @@ export interface ServerState {
   models: ModelInventory[];
   capabilities: Record<string, any> | null;
   diagnostics: Record<string, any> | null;
-  downloads: {active: Array<Record<string, any>>; pending: Array<Record<string, any>>};
+  downloads: DownloadQueueState;
   loading: boolean;
   error: string | null;
   bootstrap(): Promise<void>;
   refreshModels(): Promise<ModelInventory[]>;
+  refreshDownloads(): Promise<DownloadQueueState>;
   setModelLifecycleState(id: string, patch: Partial<ModelInventory>): void;
   updateSettings(patch: Record<string, any>): Promise<void>;
   resetSettings(section: string): Promise<void>;

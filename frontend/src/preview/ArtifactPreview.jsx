@@ -215,12 +215,11 @@ export function ArtifactThumbnail({
   );
 }
 
-/** @param {{artifactId?: string, effect?: string, compact?: boolean, className?: string}} props */
+/** @param {{artifactId?: string, effect?: string, compact?: boolean}} props */
 export function ArtifactPreview({
   artifactId,
   effect = "none",
   compact = false,
-  className = "",
 }) {
   const state = useArtifact(artifactId);
   const save = useArtifactSaver(artifactId, state);
@@ -245,26 +244,24 @@ export function ArtifactPreview({
   if (!state.url) return <LoadingState label="Loading preview" />;
 
   return (
-    <div className={`flex min-h-0 flex-col ${className}`}>
-      <div className="mb-2 flex min-h-0 items-center gap-2">
-        <FileImage className="size-3.5 text-mg-muted" />
-        <span className="text-[11px] font-medium text-mg-secondary">
-          Preview and metadata
-        </span>
+    <div className="overflow-hidden rounded-2xl border border-mg-border bg-mg-app">
+      <div className="flex h-9 items-center gap-2 border-b border-mg-border bg-mg-elevated/80 px-2.5">
+ 
+     
         <span className="flex-1" />
         <PreviewMeta metadata={state.metadata} />
       </div>
       <div
-        className={`checkerboard relative grid min-h-0 flex-1 place-items-center overflow-hidden ${compact ? "min-h-28 max-h-52" : "min-h-44"}`}
+        className={`checkerboard relative grid place-items-center overflow-hidden ${compact ? "min-h-28 max-h-52" : "min-h-44 max-h-[26rem]"}`}
       >
         <ArtifactMedia
           state={state}
           alt="Completed output preview"
           effect={effect}
-          className={`${compact ? "max-h-52" : "max-h-full"} max-w-full`}
+          className={`${compact ? "max-h-52" : "max-h-[26rem]"} max-w-full`}
         />
       </div>
-      <div className="mt-2 flex min-h-9 items-center gap-2">
+      <div className="flex min-h-9 items-center gap-2 border-t border-mg-border bg-mg-elevated/50 px-2">
         <span className="size-1.5 rounded-full bg-mg-success" />
         <span className="min-w-0 flex-1 truncate text-[9px] text-mg-muted">
           Stored locally

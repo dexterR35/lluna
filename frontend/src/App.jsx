@@ -348,7 +348,7 @@ function EditorApp() {
       <main
         className="grid min-h-0"
         style={{
-          gridTemplateColumns: `${layout.libraryVisible ? `${layout.libraryWidth}px` : "0px"} minmax(0,1fr)`,
+          gridTemplateColumns: `${layout.libraryVisible ? `${layout.libraryCollapsed ? 52 : layout.libraryWidth}px` : "0px"} minmax(0,1fr)`,
           gridTemplateRows: `minmax(0,1fr) ${layout.drawerVisible ? `${layout.drawerHeight}px` : "0px"}`,
         }}
       >

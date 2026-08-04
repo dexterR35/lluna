@@ -3,6 +3,7 @@ import { create } from "zustand";
 /** @type {import("../types").DesktopValues} */
 const defaults = {
   libraryVisible: true,
+  libraryCollapsed: false,
   drawerVisible: true,
   minimapVisible: true,
   settingsOpen: false,

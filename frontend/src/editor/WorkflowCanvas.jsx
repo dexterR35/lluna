@@ -260,28 +260,61 @@ function CanvasBody({
         try {
           const grants =
             await window.midgardDesktop.registerDroppedFiles(files);
-          grants.forEach((grant, index) => {
-            const video =
+          const videoGrants = grants.filter(
+            (grant) =>
               grant.mediaType?.startsWith("video/") ||
-              /\.(mp4|mov|mkv|webm|avi)$/i.test(grant.name);
+              /\.(mp4|mov|mkv|webm|avi)$/i.test(grant.name),
+          );
+          const imageGrants = grants.filter(
+            (grant) => !videoGrants.includes(grant),
+          );
+          let offset = 0;
+          if (imageGrants.length) {
+            const batch = imageGrants.length > 1;
             const id = addNode(
-              video ? "midgard.input.video" : "midgard.input.image",
-              { x: position.x + index * 28, y: position.y + index * 28 },
+              batch ? "midgard.input.images" : "midgard.input.image",
+              { x: position.x, y: position.y },
             );
             if (id) {
               useRunStore.getState().clearNodeResult(id);
               useEditorStore
                 .getState()
                 .updateNode(id, {
-                  parameters: { pathGrantId: grant.grantId },
+                  parameters: batch
+                    ? {
+                        pathGrantIds: imageGrants.map((grant) => grant.grantId),
+                      }
+                    : { pathGrantId: imageGrants[0].grantId },
                   result: {
                     status: "READY",
-                    artifactIds: grant.artifactId ? [grant.artifactId] : [],
-                    sourceName: grant.name,
+                    artifactIds: imageGrants.flatMap((grant) =>
+                      grant.artifactId ? [grant.artifactId] : [],
+                    ),
+                    sourceName: batch
+                      ? `${imageGrants.length} images`
+                      : imageGrants[0].name,
                     completedAt: new Date().toISOString(),
                   },
                 });
             }
+            offset += 1;
+          }
+          videoGrants.forEach((grant, index) => {
+            const id = addNode("midgard.input.video", {
+              x: position.x + (offset + index) * 28,
+              y: position.y + (offset + index) * 28,
+            });
+            if (!id) return;
+            useRunStore.getState().clearNodeResult(id);
+            useEditorStore.getState().updateNode(id, {
+              parameters: { pathGrantId: grant.grantId },
+              result: {
+                status: "READY",
+                artifactIds: grant.artifactId ? [grant.artifactId] : [],
+                sourceName: grant.name,
+                completedAt: new Date().toISOString(),
+              },
+            });
           });
         } catch (error) {
           toast.push(

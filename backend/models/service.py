@@ -2,21 +2,77 @@
 
 from __future__ import annotations
 
-import threading
 import json
 import os
+import threading
 from dataclasses import asdict
 from pathlib import Path
-from typing import Callable
 
 from backend.api.events import EventBroker
 from backend.configuration.service import get_settings
+from backend.core.atomic import atomic_write_json
 from backend.core.paths import PATHS
 from backend.models.registry import MODEL_REGISTRY
-from backend.core.atomic import atomic_write_json
+from backend.tools.model_download_queue import ModelDownloadQueue
 
 _GENERATION_REGISTRY_IDS = {"flux", "flux2-dev", "flux2-klein-9b-fp8", "qwen-image"}
 _STATE_LOCK = threading.RLock()
+_QUEUE_EVENT_LOCK = threading.Lock()
+_QUEUE_EVENT_SOURCE: ModelDownloadQueue | None = None
+_QUEUE_EVENT_LISTENER = None
+
+
+def _download_job_payload(job) -> dict:
+    return {
+        "jobId": job.job_id,
+        "kind": job.kind,
+        "key": job.key,
+        "modelId": job.key if job.kind == "model" else None,
+        "operation": job.operation,
+        "state": job.state,
+        "position": job.position,
+        "progress": job.progress,
+        "detail": job.detail,
+        "error": job.error,
+        "downloadedBytes": job.downloaded_bytes,
+        "totalBytes": job.total_bytes,
+        "bytesPerSecond": job.bytes_per_second,
+        "elapsedSeconds": job.elapsed_seconds,
+        "etaSeconds": job.eta_seconds,
+    }
+
+
+def download_queue_snapshot(
+    queue: ModelDownloadQueue | None = None,
+) -> dict:
+    source = queue or ModelDownloadQueue.instance()
+    jobs = [
+        _download_job_payload(job)
+        for job in source.jobs(include_finished=False)
+    ]
+    return {
+        "active": [job for job in jobs if job["state"] in {"active", "stopping"}],
+        "pending": [job for job in jobs if job["state"] == "queued"],
+    }
+
+
+def _ensure_queue_events(queue: ModelDownloadQueue) -> None:
+    global _QUEUE_EVENT_LISTENER, _QUEUE_EVENT_SOURCE
+    with _QUEUE_EVENT_LOCK:
+        if _QUEUE_EVENT_SOURCE is queue:
+            return
+        if _QUEUE_EVENT_SOURCE is not None and _QUEUE_EVENT_LISTENER is not None:
+            _QUEUE_EVENT_SOURCE.remove_listener(_QUEUE_EVENT_LISTENER)
+
+        def publish() -> None:
+            EventBroker.instance().publish(
+                "download.queue.updated",
+                payload=download_queue_snapshot(queue),
+            )
+
+        queue.add_listener(publish)
+        _QUEUE_EVENT_SOURCE = queue
+        _QUEUE_EVENT_LISTENER = publish
 
 
 def _state_path() -> Path:
@@ -219,17 +275,86 @@ def _action(model_id: str, operation: str) -> None:
         raise PermissionError("This runtime is supplied by the Midgard installation")
 
 
-def start_model_action(model_id: str, operation: str) -> str:
+def start_model_action(model_id: str, operation: str) -> dict:
     if model_id not in known_model_ids():
         raise KeyError(model_id)
     action_id = f"{operation}:{model_id}"
     events = EventBroker.instance()
+
+    if operation == "install":
+        queue = ModelDownloadQueue.instance()
+        _ensure_queue_events(queue)
+
+        def work() -> None:
+            queue.report_current_progress(0, detail="Preparing download")
+            _action(model_id, operation)
+
+        def done(error: BaseException | None) -> None:
+            if error is None:
+                event_type = "download.completed"
+                payload = {
+                    "downloadId": action_id,
+                    "modelId": model_id,
+                    "operation": operation,
+                }
+            else:
+                cancelled = type(error).__name__ == "DownloadCancelled"
+                event_type = (
+                    "download.cancelled" if cancelled else "download.failed"
+                )
+                payload = {
+                    "downloadId": action_id,
+                    "modelId": model_id,
+                    "operation": operation,
+                    "message": str(error),
+                }
+            events.publish(event_type, payload=payload)
+
+        position = queue.enqueue(
+            "model",
+            model_id,
+            work,
+            done,
+            operation="install",
+        )
+        job = next(
+            (
+                item
+                for item in queue.jobs()
+                if item.kind == "model"
+                and item.key == model_id
+                and item.operation == "install"
+            ),
+            None,
+        )
+        payload = {
+            "downloadId": action_id,
+            "modelId": model_id,
+            "operation": operation,
+            "jobId": job.job_id if job else None,
+            "position": position,
+        }
+        events.publish("download.queued", payload=payload)
+        return {
+            "actionId": action_id,
+            "jobId": job.job_id if job else None,
+            "position": position,
+        }
+
     def run() -> None:
-        events.publish("download.queued" if operation == "install" else "model.action.started", payload={"downloadId": action_id, "modelId": model_id, "operation": operation})
+        payload = {
+            "downloadId": action_id,
+            "modelId": model_id,
+            "operation": operation,
+        }
+        events.publish("model.action.started", payload=payload)
         try:
             _action(model_id, operation)
-            events.publish("download.completed" if operation == "install" else "model.changed", payload={"downloadId": action_id, "modelId": model_id, "operation": operation})
+            events.publish("model.changed", payload=payload)
         except Exception as exc:
-            events.publish("download.failed", payload={"downloadId": action_id, "modelId": model_id, "operation": operation, "message": str(exc)})
+            events.publish(
+                "model.action.failed",
+                payload={**payload, "message": str(exc)},
+            )
     threading.Thread(target=run, name=f"model-{action_id}", daemon=True).start()
-    return action_id
+    return {"actionId": action_id, "jobId": None, "position": -1}

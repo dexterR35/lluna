@@ -291,3 +291,46 @@ def test_pooch_byte_adapter_updates_active_metrics(monkeypatch) -> None:
     assert job.total_bytes == 100
     release.set()
     _wait_until(lambda: not queue.is_busy())
+
+
+def test_model_service_serializes_multiple_installs_in_fifo_order(monkeypatch) -> None:
+    from backend.models import service
+
+    queue = ModelDownloadQueue()
+    monkeypatch.setattr(ModelDownloadQueue, "_instance", queue)
+    monkeypatch.setattr(service, "_QUEUE_EVENT_SOURCE", None)
+    monkeypatch.setattr(service, "_QUEUE_EVENT_LISTENER", None)
+
+    first_started = threading.Event()
+    release_first = threading.Event()
+    second_started = threading.Event()
+    execution_order: list[str] = []
+
+    def fake_action(model_id: str, operation: str) -> None:
+        assert operation == "install"
+        execution_order.append(model_id)
+        if model_id == "realesrgan-x2":
+            first_started.set()
+            assert release_first.wait(timeout=2)
+        else:
+            second_started.set()
+
+    monkeypatch.setattr(service, "_action", fake_action)
+
+    first = service.start_model_action("realesrgan-x2", "install")
+    assert first_started.wait(timeout=2)
+    second = service.start_model_action("realesrgan-x4", "install")
+
+    assert first["jobId"] is not None
+    assert first["position"] == 0
+    assert second["jobId"] is not None
+    assert second["position"] == 1
+    assert not second_started.is_set()
+    assert service.download_queue_snapshot(queue)["pending"][0]["modelId"] == (
+        "realesrgan-x4"
+    )
+
+    release_first.set()
+    assert second_started.wait(timeout=2)
+    _wait_until(lambda: not queue.is_busy())
+    assert execution_order == ["realesrgan-x2", "realesrgan-x4"]

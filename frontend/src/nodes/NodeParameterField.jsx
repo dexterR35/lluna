@@ -31,7 +31,7 @@ function acceptsFile(file, kind) {
   );
 }
 
-/** @typedef {{definition: import("../types").ParameterDefinition, nodeDefinition?: Pick<import("../types").NodeDefinition, "schemaId">, value?: unknown, selectedName?: string, onChange: (value: unknown, selection?: import("../types").DesktopGrant) => void}} ParameterFieldProps */
+/** @typedef {{definition: import("../types").ParameterDefinition, nodeDefinition?: Pick<import("../types").NodeDefinition, "schemaId">, value?: unknown, selectedName?: string, onChange: (value: unknown, selection?: import("../types").DesktopGrant | import("../types").DesktopGrant[]) => void}} ParameterFieldProps */
 /** @param {ParameterFieldProps} props */
 function FileField({
   definition,
@@ -44,14 +44,23 @@ function FileField({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const kind = mediaKind(nodeDefinition);
+  const multiple = definition.type === "files";
+  const selectedCount = Array.isArray(value) ? value.length : value ? 1 : 0;
 
-  /** @param {() => Promise<import("../types").DesktopGrant | null | undefined>} action */
+  /** @param {() => Promise<import("../types").DesktopGrant | import("../types").DesktopGrant[] | null | undefined>} action */
   async function selectGrant(action) {
     setError("");
     setLoading(true);
     try {
-      const grant = await action();
-      if (grant) onChange(grant.grantId, grant);
+      const selection = await action();
+      const grants = Array.isArray(selection)
+        ? selection
+        : selection
+          ? [selection]
+          : [];
+      if (!grants.length) return;
+      if (multiple) onChange(grants.map((grant) => grant.grantId), grants);
+      else onChange(grants[0].grantId, grants[0]);
     } catch (selectionError) {
       setError(
         selectionError instanceof Error
@@ -73,17 +82,20 @@ function FileField({
     if (kind === "video")
       return selectGrant(async () => (await desktop.selectVideoFiles()).at(0));
     if (kind === "mask") return selectGrant(() => desktop.selectMaskFile());
-    return selectGrant(async () => (await desktop.selectImageFiles()).at(0));
+    return selectGrant(async () => {
+      const grants = await desktop.selectImageFiles();
+      return multiple ? grants : grants.at(0);
+    });
   }
 
   /** @param {import("react").DragEvent<HTMLDivElement>} event */
   async function drop(event) {
     event.preventDefault();
     setDragging(false);
-    const file = [...event.dataTransfer.files].find((item) =>
+    const files = [...event.dataTransfer.files].filter((item) =>
       acceptsFile(item, kind),
     );
-    if (!file) {
+    if (!files.length) {
       setError(
         kind === "video"
           ? "Drop a supported video file."
@@ -96,9 +108,12 @@ function FileField({
       setError("File drop is available in the desktop app.");
       return;
     }
-    await selectGrant(async () =>
-      (await desktop.registerDroppedFiles([file])).at(0),
-    );
+    await selectGrant(async () => {
+      const grants = await desktop.registerDroppedFiles(
+        multiple ? files : files.slice(0, 1),
+      );
+      return multiple ? grants : grants.at(0);
+    });
   }
 
   if (definition.type === "saveFile")
@@ -123,7 +138,7 @@ function FileField({
       <div
         role="button"
         tabIndex={0}
-        aria-label={`Drop ${kind} file`}
+        aria-label={`Drop ${multiple ? `${kind} files` : `${kind} file`}`}
         className={`grid min-h-28 place-items-center rounded-2xl border border-dashed px-4 py-3 text-center transition ${dragging ? "border-mg-accent bg-mg-accent/10" : "border-mg-border bg-mg-app/45 hover:border-mg-secondary/60"}`}
         onDragEnter={(event) => {
           event.preventDefault();
@@ -159,13 +174,19 @@ function FileField({
           </IconTile>
           <strong className="text-[10px] font-semibold text-mg-primary">
             {dragging
-              ? `Drop ${kind} now`
-              : selectedName || `Drop ${kind} here`}
+              ? `Drop ${multiple ? `${kind} files` : kind} now`
+              : multiple && selectedCount
+                ? `${selectedCount} images selected`
+                : selectedName || `Drop ${kind} here`}
           </strong>
           <span className="text-[9px] text-mg-muted">
-            {selectedName
-              ? "Drop another file to replace it"
-              : "or choose a local file"}
+            {selectedCount
+              ? multiple
+                ? "Choose or drop files to replace this queue"
+                : "Drop another file to replace it"
+              : multiple
+                ? "or choose multiple local files"
+                : "or choose a local file"}
           </span>
           <Button
             variant="secondary"
@@ -177,7 +198,11 @@ function FileField({
             disabled={loading}
           >
             <Upload className="size-3" />
-            {value ? "Replace" : "Choose file"}
+            {selectedCount
+              ? "Replace"
+              : multiple
+                ? "Choose files"
+                : "Choose file"}
           </Button>
         </div>
       </div>
@@ -247,7 +272,7 @@ export function NodeParameterField({
         onChange={(event) => onChange(event.target.value)}
       />
     );
-  if (definition.type === "file" || definition.type === "saveFile")
+  if (["file", "files", "saveFile"].includes(definition.type))
     return (
       <FileField
         definition={definition}

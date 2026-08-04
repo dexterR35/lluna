@@ -2,7 +2,7 @@ import { expect, test, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ReactFlowProvider } from "@xyflow/react";
-import { Dialog, Switch } from "../src/components";
+import { Dialog, ProgressBar, Switch } from "../src/components";
 import { MidgardNode } from "../src/nodes/MidgardNode";
 import { NodeParameterField } from "../src/nodes/NodeParameterField";
 import { enabledModelOptions } from "../src/models/modelAvailability";
@@ -40,6 +40,20 @@ test("dialog closes with escape", async () => {
   );
   await user.keyboard("{Escape}");
   expect(closed).toBe(true);
+});
+test("progress bar distinguishes unknown progress from zero percent", () => {
+  const { rerender } = render(
+    <ProgressBar value={null} label="Preparing model" showLabel />,
+  );
+  const progress = screen.getByRole("progressbar", {
+    name: "Preparing model",
+  });
+  expect(progress).not.toHaveAttribute("aria-valuenow");
+  expect(screen.getByText("Working…")).toBeInTheDocument();
+
+  rerender(<ProgressBar value={0} label="Downloading model" showLabel />);
+  expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "0");
+  expect(screen.getByText("0%")).toBeInTheDocument();
 });
 test("image parameter accepts a dropped file and returns its preview artifact", async () => {
   const registerDroppedFiles = vi

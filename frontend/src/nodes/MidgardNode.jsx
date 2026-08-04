@@ -12,6 +12,8 @@ import {
   Film,
   Hash,
   Image as ImageIcon,
+  Images,
+  Layers3,
   LoaderCircle,
   Pause,
   Play,
@@ -72,6 +74,8 @@ const PORT_ICONS = {
 /** @type {Record<string, NodeIcon>} */
 const NODE_ICONS = {
   image: ImageIcon,
+  images: Images,
+  layers: Layers3,
   film: Film,
   sparkles: Sparkles,
   "zoom-in": ZoomIn,
@@ -104,8 +108,8 @@ function PortCircle({ port, side, top, active }) {
       position={output ? XYFlow.Position.Right : XYFlow.Position.Left}
       className={`midgard-port-handle ${active ? "is-active" : ""} ${output ? "is-output" : "is-input"}`}
       style={/** @type {import("react").CSSProperties} */ ({ top, "--port-color": color })}
-      aria-label={`${port.label}, ${port.type}`}
-      title={`${port.label} · ${port.type}`}
+      aria-label={`${port.label}, ${port.type}${port.multiple ? ", queue" : ""}`}
+      title={`${port.label} · ${port.type}${port.multiple ? " queue" : ""}`}
     >
       <Icon aria-hidden className="midgard-port-glyph" style={{ color }} />
     </XYFlow.Handle>
@@ -287,6 +291,11 @@ function MidgardNodeComponent({ id, data, selected }) {
             {status.replaceAll("_", " ")}
           </Badge>
         )}
+        {artifactIds.length > 1 && (
+          <Badge size="xs" tone="accent">
+            {artifactIds.length} items
+          </Badge>
+        )}
       </header>
 
       <div className="midgard-node-body">
@@ -335,7 +344,7 @@ function MidgardNodeComponent({ id, data, selected }) {
         <div className="midgard-node-progress">
           <ProgressBar
             value={state?.progress || 0}
-            label={`${nodeLabel} progress`}
+            label={state?.message || `${nodeLabel} progress`}
           />
         </div>
       )}

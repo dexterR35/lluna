@@ -33,7 +33,7 @@ function ButtonComponent(
       disabled={disabled || loading}
       aria-busy={loading || undefined}
       className={cn(
-        "inline-flex min-h-8 items-center justify-center gap-1.5 rounded-full px-3 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-40",
+        "inline-flex min-h-8 cursor-pointer items-center justify-center gap-1.5 rounded-full px-3 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-40",
         focusRing,
         variants[variant],
         className,

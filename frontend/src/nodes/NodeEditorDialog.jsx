@@ -145,19 +145,30 @@ export function NodeEditorDialog({ nodeId, onClose, onManageModels }) {
   function setParameter(
     /** @type {import("../types").ParameterDefinition | undefined} */ parameter,
     /** @type {unknown} */ value,
-    /** @type {import("../types").DesktopGrant | undefined} */ selection = undefined,
+    /** @type {import("../types").DesktopGrant | import("../types").DesktopGrant[] | undefined} */ selection = undefined,
   ) {
     if (!parameter) return;
     /** @type {Partial<import("../types").WorkflowNodeData>} */
     const changes = {
       parameters: { ...activeNode.data.parameters, [parameter.id]: value },
     };
-    if (selection?.artifactId) {
+    const selections = Array.isArray(selection)
+      ? selection
+      : selection
+        ? [selection]
+        : [];
+    const artifactIds = selections.flatMap((item) =>
+      item.artifactId ? [item.artifactId] : [],
+    );
+    if (artifactIds.length) {
       useRunStore.getState().clearNodeResult(activeNode.id);
       changes.result = {
         status: "READY",
-        artifactIds: [selection.artifactId],
-        sourceName: selection.name,
+        artifactIds,
+        sourceName:
+          selections.length === 1
+            ? selections[0].name
+            : `${selections.length} images`,
         completedAt: new Date().toISOString(),
       };
     }
@@ -171,7 +182,6 @@ export function NodeEditorDialog({ nodeId, onClose, onManageModels }) {
       wide
       className="!max-w-6xl"
       title={definition?.name || node.data.label}
-      description="Node options · choose the model and settings used by this node."
       bodyClassName="!max-h-[72vh] !overflow-hidden !p-0"
       footer={
         <Button variant="secondary" onClick={onClose}>
@@ -282,6 +292,7 @@ export function NodeEditorDialog({ nodeId, onClose, onManageModels }) {
                       parameter.type === "textarea" ||
                       parameter.type === "json" ||
                       parameter.type === "file" ||
+                      parameter.type === "files" ||
                       parameter.type === "saveFile"
                         ? "col-span-2"
                         : ""
@@ -292,7 +303,7 @@ export function NodeEditorDialog({ nodeId, onClose, onManageModels }) {
                       nodeDefinition={definition}
                       value={node.data.parameters?.[parameter.id]}
                       selectedName={
-                        parameter.type === "file"
+                        ["file", "files"].includes(parameter.type)
                           ? node.data.result?.sourceName
                           : undefined
                       }
