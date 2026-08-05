@@ -182,6 +182,10 @@ If a node has an empty model list, install and enable the model shown for that f
   <img src="example/birfet.png" alt="BiRefNet object mask example" width="49%" />
 </p>
 
+<p align="center">
+  <img src="example/bifrent_2.png" alt="BiRefNet foreground and mask output example" width="72%" />
+</p>
+
 #### Image restoration and upscaling
 
 <p align="center">
@@ -207,6 +211,13 @@ Generation models are large, so start with one.
 | **FLUX.2 Klein 9B FP8** | You want a lighter 9B option | About 32 GB RAM and 10 GB VRAM |
 | **FLUX.2 Dev** | You have more memory and want a higher-capacity model | About 64 GB RAM; gated, non-commercial license |
 | **Qwen-Image** | You want an alternative general-purpose model | About 64 GB RAM and 12 GB VRAM |
+
+#### FLUX.2 examples
+
+<p align="center">
+  <img src="example/flux2.avif" alt="FLUX.2 generated image examples" width="49%" />
+  <img src="example/flux22.avif" alt="More FLUX.2 generated image examples" width="49%" />
+</p>
 
 Some models require you to accept an upstream license or gated-model terms before downloading them. Model licenses are separate from Lluna's license, so check the model card before use or redistribution.
 
