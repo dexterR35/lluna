@@ -3,6 +3,9 @@ import {
   AlertTriangle,
   Download,
   Image as ImageIcon,
+  RotateCcw,
+  ZoomIn,
+  ZoomOut,
 } from "../icons";
 import { api, artifactObjectUrl, artifactThumbnailUrl } from "../api/client";
 import { Badge, Button, EmptyState, LoadingState } from "../components";
@@ -257,18 +260,26 @@ export function ArtifactThumbGrid({
   );
 }
 
-/** @param {{artifactId?: string, artifactIds?: string[], schemaId?: string, effect?: string, compact?: boolean}} props */
+/** @param {{artifactId?: string, artifactIds?: string[], schemaId?: string, effect?: string, compact?: boolean, zoomable?: boolean, points?: Array<{x: number, y: number, label?: number}>, onPointAdd?: (point: {x: number, y: number, label: number}) => void}} props */
 export function ArtifactPreview({
   artifactId,
   artifactIds,
   schemaId,
   effect = "none",
   compact = false,
+  zoomable = true,
+  points = [],
+  onPointAdd,
 }) {
   const ids = artifactIds?.length ? artifactIds : artifactId ? [artifactId] : [];
   const primaryId = ids.at(-1);
   const state = useArtifact(primaryId);
   const save = useArtifactSaver(ids, state, schemaId);
+  const mediaWidth = state.metadata?.width || 0;
+  const mediaHeight = state.metadata?.height || 0;
+  const isVideo = Boolean(state.metadata?.mediaType?.startsWith("video/"));
+  const [zoom, setZoom] = useState(1);
+  useEffect(() => setZoom(1), [primaryId]);
   if (!primaryId)
     return (
       <EmptyState
@@ -292,18 +303,99 @@ export function ArtifactPreview({
   return (
     <div className="ui-preview">
       <div className="ui-preview-bar is-header">
-        <span className="flex-1" />
+        {zoomable && (
+          <div className="ui-actions mr-auto" aria-label="Preview zoom controls">
+            <Button
+              variant="ghost"
+              className="min-h-6 px-1.5"
+              aria-label="Zoom out"
+              disabled={zoom <= 0.5}
+              onClick={() => setZoom((value) => Math.max(0.5, value - 0.25))}
+            >
+              <ZoomOut className="ui-icon-sm" />
+            </Button>
+            <span className="min-w-9 text-center text-[9px] tabular-nums text-mg-muted">
+              {Math.round(zoom * 100)}%
+            </span>
+            <Button
+              variant="ghost"
+              className="min-h-6 px-1.5"
+              aria-label="Zoom in"
+              disabled={zoom >= 4}
+              onClick={() => setZoom((value) => Math.min(4, value + 0.25))}
+            >
+              <ZoomIn className="ui-icon-sm" />
+            </Button>
+            <Button
+              variant="ghost"
+              className="min-h-6 px-1.5"
+              aria-label="Reset zoom"
+              disabled={zoom === 1}
+              onClick={() => setZoom(1)}
+            >
+              <RotateCcw className="ui-icon-sm" />
+            </Button>
+          </div>
+        )}
         <PreviewMeta metadata={state.metadata} />
       </div>
       <div
-        className={`ui-preview-stage checkerboard ${compact ? "min-h-28 max-h-52" : "min-h-44 max-h-[26rem]"}`}
+        className={`ui-preview-stage checkerboard overflow-auto ${compact ? "min-h-28 max-h-52" : "min-h-44 max-h-[26rem]"}`}
       >
-        <ArtifactMedia
-          state={state}
-          alt="Completed output preview"
-          effect={effect}
-          className={`${compact ? "max-h-52" : "max-h-[26rem]"} max-w-full`}
-        />
+        <div
+          className={`relative inline-grid place-items-center transition-transform ${onPointAdd ? "cursor-crosshair" : ""}`}
+          style={{ transform: `scale(${zoom})`, transformOrigin: "center" }}
+          onClick={
+            onPointAdd &&
+            mediaWidth &&
+            mediaHeight &&
+            !isVideo
+              ? (event) => {
+                  const bounds = event.currentTarget.getBoundingClientRect();
+                  onPointAdd({
+                    x: Math.max(
+                      0,
+                      Math.min(
+                        mediaWidth,
+                        ((event.clientX - bounds.left) / bounds.width) *
+                          mediaWidth,
+                      ),
+                    ),
+                    y: Math.max(
+                      0,
+                      Math.min(
+                        mediaHeight,
+                        ((event.clientY - bounds.top) / bounds.height) *
+                          mediaHeight,
+                      ),
+                    ),
+                    label: event.shiftKey ? 0 : 1,
+                  });
+                }
+              : undefined
+          }
+        >
+          <ArtifactMedia
+            state={state}
+            alt="Completed output preview"
+            effect={effect}
+            className={`${compact ? "max-h-52" : "max-h-[26rem]"} col-start-1 row-start-1 block max-w-full`}
+          />
+          {mediaWidth > 0 &&
+            mediaHeight > 0 &&
+            points.map((point, index) => (
+              <span
+                key={`${point.x}-${point.y}-${index}`}
+                className={`pointer-events-none absolute grid size-4 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-2 border-white text-[8px] font-bold text-white shadow ${point.label === 0 ? "bg-mg-error" : "bg-mg-success"}`}
+                style={{
+                  left: `${(point.x / mediaWidth) * 100}%`,
+                  top: `${(point.y / mediaHeight) * 100}%`,
+                }}
+              >
+                {point.label === 0 ? "−" : "+"}
+              </span>
+            ))}
+        </div>
       </div>
       <div className="ui-preview-bar is-footer">
         <span className="size-1.5 rounded-full bg-mg-success" />

@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import {
-  AlertTriangle,
   Blocks,
   ChevronDown,
   PanelLeftClose,
@@ -10,7 +9,6 @@ import {
   resolveNodeIcon,
 } from "../icons";
 import {
-  Badge,
   EmptyState,
   IconButton,
   IconTile,
@@ -21,13 +19,12 @@ import { useDesktopStore } from "../state/desktopStore";
 import { useEditorStore } from "../state/editorStore";
 import { isVisibleCatalogNode } from "./catalogVisibility";
 
-/** @param {{node: import("../types").NodeDefinition, onAdd: (schemaId: string) => void}} props */
-function LibraryNode({ node, onAdd }) {
+/** @param {{node: import("../types").NodeDefinition}} props */
+function LibraryNode({ node }) {
   const Icon = resolveNodeIcon(node.icon);
   const color = resolveCategoryColor(node.category);
   return (
-    <button
-      type="button"
+    <div
       draggable
       onDragStart={(event) =>
         event.dataTransfer.setData(
@@ -35,30 +32,21 @@ function LibraryNode({ node, onAdd }) {
           node.schemaId,
         )
       }
-      onClick={() => onAdd(node.schemaId)}
-      title={node.description || node.name}
-      className="ui-row group"
+      title={`Drag ${node.name} onto the canvas${node.description ? ` — ${node.description}` : ""}`}
+      className="ui-row group cursor-grab select-none active:cursor-grabbing"
     >
-      <IconTile
-        className="group-hover:border-mg-secondary/30"
-        style={{ color }}
-      >
-        <Icon className="ui-icon" style={{ color }} />
+      <IconTile style={{ color }}>
+        <Icon className="ui-icon" />
       </IconTile>
       <span className="ui-copy-title min-w-0 flex-1 truncate text-[12px]">
         {node.name}
       </span>
-      {!node.available && (
-        <Badge tone="warning" size="xs">
-          <AlertTriangle className="ui-icon-xs" />
-        </Badge>
-      )}
-    </button>
+    </div>
   );
 }
 
-/** @param {{category: string, nodes: import("../types").NodeDefinition[], closed: boolean, onToggle: () => void, onAdd: (schemaId: string) => void}} props */
-function LibraryGroup({ category, nodes, closed, onToggle, onAdd }) {
+/** @param {{category: string, nodes: import("../types").NodeDefinition[], closed: boolean, onToggle: () => void}} props */
+function LibraryGroup({ category, nodes, closed, onToggle }) {
   return (
     <section className="mb-2">
       <button
@@ -76,7 +64,7 @@ function LibraryGroup({ category, nodes, closed, onToggle, onAdd }) {
       {!closed && (
         <div className="ui-stack-xs py-1">
           {nodes.map((node) => (
-            <LibraryNode key={node.schemaId} node={node} onAdd={onAdd} />
+            <LibraryNode key={node.schemaId} node={node} />
           ))}
         </div>
       )}
@@ -84,9 +72,8 @@ function LibraryGroup({ category, nodes, closed, onToggle, onAdd }) {
   );
 }
 
-/** @param {{onAdd: (schemaId: string) => void, query: string, onQuery: (value: string) => void, groups: [string, import("../types").NodeDefinition[]][], closed: string[], onToggleCategory: (category: string) => void, trailing?: import("react").ReactNode}} props */
+/** @param {{query: string, onQuery: (value: string) => void, groups: [string, import("../types").NodeDefinition[]][], closed: string[], onToggleCategory: (category: string) => void, trailing?: import("react").ReactNode}} props */
 function LibraryBody({
-  onAdd,
   query,
   onQuery,
   groups,
@@ -123,7 +110,6 @@ function LibraryBody({
             nodes={nodes}
             closed={closed.includes(category)}
             onToggle={() => onToggleCategory(category)}
-            onAdd={onAdd}
           />
         ))}
       </div>
@@ -132,8 +118,7 @@ function LibraryBody({
   );
 }
 
-/** @param {{onAdd: (schemaId: string) => void}} props */
-export function NodeLibrary({ onAdd }) {
+export function NodeLibrary() {
   const definitions = useEditorStore((store) => store.definitions);
   const collapsed = useDesktopStore((store) => store.libraryCollapsed);
   const setValue = useDesktopStore((store) => store.setValue);
@@ -242,7 +227,7 @@ export function NodeLibrary({ onAdd }) {
                   }
                   style={active ? { color, borderColor: `${color}66` } : { color }}
                 >
-                  <Icon className="ui-icon" style={{ color }} />
+                  <Icon className="ui-icon" />
                 </IconButton>
               );
             })}
@@ -250,11 +235,10 @@ export function NodeLibrary({ onAdd }) {
         </Panel>
         {preview && (
           <div
-            className="absolute left-full top-0 z-30 flex h-full w-62 flex-col border-r border-mg-border bg-red-500"
+            className="absolute left-full top-0 z-30 flex h-full w-62 flex-col border-r border-mg-border bg-mg-panel"
             onMouseEnter={() => setPreview(true)}
           >
             <LibraryBody
-              onAdd={onAdd}
               query={query}
               onQuery={setQuery}
               groups={previewGroups}
@@ -270,7 +254,6 @@ export function NodeLibrary({ onAdd }) {
   return (
     <Panel className="h-full border-r border-mg-border" bodyClassName="flex flex-col">
       <LibraryBody
-        onAdd={onAdd}
         query={query}
         onQuery={setQuery}
         groups={groups}

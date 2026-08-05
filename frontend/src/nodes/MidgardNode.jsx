@@ -282,6 +282,7 @@ function MidgardNodeComponent({ id, data, selected }) {
   );
   const showLlavaToggle = modelValue === "SUPIR" && Boolean(llavaToggle);
   const isSettingsCard = SETTINGS_CARD_SCHEMAS.has(definition.schemaId);
+  const isSelectObject = definition.schemaId === "midgard.mask.select_object";
   const quantityParam = visibleParameters.find(isQuantityParam);
   const footerParams = visibleParameters.filter((parameter) => {
     if (isSettingsCard) return false;
@@ -307,7 +308,8 @@ function MidgardNodeComponent({ id, data, selected }) {
     (isSettingsCard ||
       definition.kind === "input" ||
       definition.schemaId?.includes("prompt") ||
-      definition.schemaId?.includes("llava"));
+      definition.schemaId?.includes("llava") ||
+      isSelectObject);
   const bodySettings = isSettingsCard
     ? visibleParameters.filter(
         (parameter) =>
@@ -415,9 +417,7 @@ function MidgardNodeComponent({ id, data, selected }) {
             <Plus aria-hidden />
           )}
         </button>
-        {!promptFirst && (
-          <strong className="midgard-node-title">{nodeLabel}</strong>
-        )}
+        <strong className="midgard-node-title">{nodeLabel}</strong>
         {status !== "IDLE" && (
           <Badge size="xs" tone={STATUS_TONE[status] || "neutral"}>
             {status.replaceAll("_", " ")}
@@ -433,6 +433,14 @@ function MidgardNodeComponent({ id, data, selected }) {
       {showNodeBody && (
         <div
           className={`midgard-node-body ${isSettingsCard ? "is-settings" : ""} ${isSaveImage ? "is-save" : ""} ${promptFirst && !showPreview ? "is-prompt" : ""}`}
+          onClick={
+            supportsPreview
+              ? (event) => {
+                  event.stopPropagation();
+                  actions.onPreview?.(id);
+                }
+              : undefined
+          }
         >
           {isSaveImage ? (
             <SaveProgressList items={saveItems} />
@@ -752,7 +760,7 @@ function MidgardNodeComponent({ id, data, selected }) {
         </div>
 
         <div className="midgard-node-footer-actions">
-          {supportsPreview && artifactId && (
+          {supportsPreview && (artifactId || isSelectObject) && (
             <button
               type="button"
               className="nodrag nowheel midgard-node-icon-btn"

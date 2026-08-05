@@ -36,40 +36,73 @@ BACKGROUND_MODELS = [
         "birefnet-general",
         "BiRefNet General",
         "bg-remove:birefnet-general",
-        "Best general-purpose cutouts.",
+        "All-around photo and product cutouts. Best default for most images.",
     ),
     option(
         "birefnet-general-lite",
         "BiRefNet Lite",
         "bg-remove:birefnet-general-lite",
-        "Faster general-purpose removal.",
+        "Faster BiRefNet with less memory. Best when quality must stay high but speed matters.",
     ),
     option(
         "birefnet-portrait",
         "BiRefNet Portrait",
         "bg-remove:birefnet-portrait",
-        "Optimized for people and portraits.",
+        "Tuned for faces and portraits. Best for headshots and people with fine hair edges.",
     ),
     option(
-        "u2net_human_seg", "U²-Net Human", "bg-remove:u2net_human_seg", "Fast human segmentation."
+        "birefnet-massive",
+        "BiRefNet Massive",
+        "bg-remove:birefnet-massive",
+        "Largest BiRefNet for maximum detail. Best when accuracy matters more than speed or VRAM.",
+    ),
+    option(
+        "u2net_human_seg",
+        "U²-Net Human",
+        "bg-remove:u2net_human_seg",
+        "Fast body and person segmentation. Best for quick people cutouts.",
     ),
     option(
         "u2net_cloth_seg",
         "U²-Net Clothing",
         "bg-remove:u2net_cloth_seg",
-        "Separates clothing categories.",
+        "Separates clothing categories. Best for apparel and fashion cutouts.",
     ),
     option(
-        "isnet-anime", "IS-Net Anime", "bg-remove:isnet-anime", "Illustration and anime artwork."
+        "isnet-anime",
+        "IS-Net Anime",
+        "bg-remove:isnet-anime",
+        "Illustration and anime artwork. Best for drawn characters, manga, and stylized art.",
     ),
     option(
         "isnet-general-use",
         "IS-Net General",
         "bg-remove:isnet-general-use",
-        "Balanced classic segmentation.",
+        "Balanced classic segmentation. Best when you want a lighter alternative to BiRefNet.",
     ),
     option(
-        "bria-rmbg", "BRIA RMBG", "bg-remove:bria-rmbg", "High-quality general background removal."
+        "bria-rmbg",
+        "BRIA RMBG",
+        "bg-remove:bria-rmbg",
+        "High-quality general RMBG. Best for clean product and studio-style photos.",
+    ),
+    option(
+        "birefnet-hrsod",
+        "BiRefNet HRSOD",
+        "bg-remove:birefnet-hrsod",
+        "High-resolution salient object detection. Best for small or finely detailed subjects.",
+    ),
+    option(
+        "birefnet-dis",
+        "BiRefNet DIS",
+        "bg-remove:birefnet-dis",
+        "Dichotomous image segmentation. Best for complex edges and high-contrast subjects.",
+    ),
+    option(
+        "birefnet-cod",
+        "BiRefNet COD",
+        "bg-remove:birefnet-cod",
+        "Camouflaged object detection. Best when the subject blends into the background.",
     ),
 ]
 UPSCALE_MODELS = [
@@ -692,8 +725,21 @@ _NODES = [
         inputs=[port("image", "Image", PortType.IMAGE, required=True)],
         outputs=[port("mask", "Mask", PortType.MASK)],
         parameters=[
-            parameter("text", "Object name", "text", ""),
-            parameter("points", "Points", "json", []),
+            parameter(
+                "text",
+                "Object name",
+                "text",
+                "",
+                description="Name the object to find, or leave blank and select it with preview clicks.",
+            ),
+            parameter(
+                "points",
+                "Selection points",
+                "json",
+                [],
+                description="Pixel coordinates selected in the shared preview.",
+            ),
+            parameter("labels", "Point labels", "json", []),
             parameter("moreComplex", "High quality", "boolean", False),
         ],
         required_models=["sam2", "grounding-dino"],

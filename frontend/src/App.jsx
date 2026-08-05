@@ -415,7 +415,7 @@ function EditorApp() {
         }}
       >
         {layout.libraryVisible && (
-          <NodeLibrary onAdd={(schemaId) => editor.addNode(schemaId)} />
+          <NodeLibrary />
         )}
         <WorkflowCanvas
           onAdd={(position) => setSearch({ open: true, query: "", position })}

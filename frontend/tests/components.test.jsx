@@ -6,6 +6,9 @@ import { Dialog, ProgressBar, Switch } from "../src/components";
 import { MidgardNode } from "../src/nodes/MidgardNode";
 import { NodeParameterField } from "../src/nodes/NodeParameterField";
 import { enabledModelOptions } from "../src/models/modelAvailability";
+import { NodeLibrary } from "../src/workflow/NodeLibrary";
+import { useDesktopStore } from "../src/state/desktopStore";
+import { useEditorStore } from "../src/state/editorStore";
 test("switch is keyboard operable and reports state", async () => {
   const user = userEvent.setup();
   let value = false;
@@ -207,4 +210,38 @@ test("model selection is in the node body and reacts to enabled inventory", asyn
   expect(screen.getByRole("option", { name: "Model B" })).toBeEnabled();
   await user.selectOptions(selector, "b");
   expect(onModelChange).toHaveBeenCalledWith("node-1", "b");
+});
+
+test("library nodes use shared icons and can only be added by dragging", () => {
+  useDesktopStore.setState({ libraryCollapsed: false });
+  useEditorStore.setState({
+    definitions: [
+      {
+        schemaId: "test.image",
+        schemaVersion: 1,
+        name: "Image Tool",
+        category: "Image/Test",
+        description: "Test image operation",
+        icon: "image",
+        inputs: [],
+        outputs: [],
+        parameters: [],
+      },
+    ],
+  });
+  const setData = vi.fn();
+  render(<NodeLibrary />);
+
+  const label = screen.getByText("Image Tool");
+  const item = label.closest("[draggable='true']");
+  if (!item) throw new Error("Expected draggable library item");
+  expect(item.tagName).toBe("DIV");
+  expect(item.querySelector("svg")).not.toBeNull();
+  expect(screen.queryByRole("button", { name: "Image Tool" })).toBeNull();
+
+  fireEvent.dragStart(item, { dataTransfer: { setData } });
+  expect(setData).toHaveBeenCalledWith(
+    "application/x-midgard-node",
+    "test.image",
+  );
 });

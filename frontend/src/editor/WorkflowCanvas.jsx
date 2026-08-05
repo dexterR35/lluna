@@ -458,6 +458,7 @@ function CanvasBody({
           gap={24}
           size={1}
           color="#2a2f3a"
+          bgColor="#0a0b0f"
         />
         <Controls showInteractive={false} />
         {minimap && (

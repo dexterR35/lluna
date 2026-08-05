@@ -15,7 +15,6 @@ const SIZES = {
  *   size?: IconTileSize,
  *   className?: string,
  *   as?: "span"|"div"|"button",
- *   active?: boolean,
  * } & import("react").HTMLAttributes<HTMLElement>} props
  */
 export function IconTile({
@@ -23,16 +22,12 @@ export function IconTile({
   size = "md",
   className = "",
   as: Tag = "span",
-  active = false,
   ...props
 }) {
   return (
     <Tag
       className={cn(
-        "grid shrink-0 place-items-center border text-mg-secondary transition",
-        active
-          ? "border-mg-accent/40 bg-mg-accent/10 text-mg-accent"
-          : "border-mg-border bg-mg-app",
+        "grid shrink-0 place-items-center border border-mg-border bg-mg-elevated text-mg-secondary transition",
         SIZES[size] || SIZES.md,
         className,
       )}

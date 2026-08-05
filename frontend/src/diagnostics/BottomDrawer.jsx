@@ -20,6 +20,53 @@ import { useEditorStore } from "../state/editorStore";
 import { useRunStore } from "../state/runStore";
 import { useServerStore } from "../state/serverStore";
 
+/** @param {number | null | undefined} bytes */
+function formatBytes(bytes) {
+  if (!Number.isFinite(bytes) || bytes == null || bytes < 0) return null;
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let value = bytes / 1024;
+  let unit = units[0];
+  for (let index = 1; value >= 1024 && index < units.length; index += 1) {
+    value /= 1024;
+    unit = units[index];
+  }
+  return `${value >= 10 ? value.toFixed(0) : value.toFixed(1)} ${unit}`;
+}
+
+/** @param {number | null | undefined} seconds */
+function formatEta(seconds) {
+  if (!Number.isFinite(seconds) || seconds == null || seconds < 0) return null;
+  const rounded = Math.ceil(seconds);
+  if (rounded < 60) return `${rounded}s remaining`;
+  return `${Math.ceil(rounded / 60)}m remaining`;
+}
+
+/** @param {import("../types").DownloadJob} item */
+function downloadSubtitle(item) {
+  if (item.state === "failed" || item.state === "cancelled") {
+    return item.error || "The model install did not complete.";
+  }
+  if (item.state === "completed") {
+    return item.detail || "Installed";
+  }
+  if (item.state === "queued") {
+    return item.position === 1
+      ? "Next in queue"
+      : `${item.position} installs ahead`;
+  }
+  const downloaded = formatBytes(item.downloadedBytes);
+  const total = formatBytes(item.totalBytes);
+  const speed = formatBytes(item.bytesPerSecond);
+  const eta = formatEta(item.etaSeconds);
+  const parts = [];
+  if (downloaded && total) parts.push(`${downloaded} of ${total}`);
+  else if (downloaded) parts.push(downloaded);
+  if (speed) parts.push(`${speed}/s`);
+  if (eta) parts.push(eta);
+  return parts.join(" · ") || "Preparing download";
+}
+
 /** @param {{issue: import("../types").ValidationIssue, label?: string | null, onFocus: (id: string) => void}} props */
 function ProblemRow({ issue, label, onFocus }) {
   const clickable = Boolean(issue.nodeId);
@@ -230,17 +277,7 @@ export function BottomDrawer({ issues }) {
                     <p className="ui-copy-title truncate text-[11px]">
                       {item.modelId || item.key}
                     </p>
-                    <p className="ui-copy-muted">
-                      {item.state === "failed" || item.state === "cancelled"
-                        ? item.error || "The model install did not complete."
-                        : item.state === "completed"
-                          ? item.detail || "Installed"
-                          : item.state === "queued"
-                            ? item.position === 1
-                              ? "Next in queue"
-                              : `${item.position} installs ahead`
-                            : item.detail || "Preparing download"}
-                    </p>
+                    <p className="ui-copy-muted">{downloadSubtitle(item)}</p>
                   </div>
                   <Badge
                     size="xs"
@@ -276,7 +313,7 @@ export function BottomDrawer({ issues }) {
                     label={
                       item.state === "queued"
                         ? `Queue position ${item.position}`
-                        : item.detail || "Model download"
+                        : ""
                     }
                     showLabel
                   />

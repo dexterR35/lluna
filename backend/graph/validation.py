@@ -324,6 +324,22 @@ def validate_workflow(
                             node_id=node.id,
                         )
                     )
+        if node.schema_id == "midgard.mask.select_object":
+            object_name = str(node.parameters.get("text") or "").strip()
+            points = node.parameters.get("points") or []
+            has_point = isinstance(points, list) and any(
+                isinstance(point, (list, tuple)) and len(point) >= 2 for point in points
+            )
+            if not object_name and not has_point:
+                issues.append(
+                    ValidationIssue(
+                        severity="error",
+                        code="SELECT_OBJECT_INPUT",
+                        message="Select Object needs a preview click or object name.",
+                        node_id=node.id,
+                        action="Enter an object name on the node or click its source image preview.",
+                    )
+                )
         if check_model_availability and os.environ.get("MIDGARD_FAKE_WORKER") != "1":
             from backend.models.service import model_available
 

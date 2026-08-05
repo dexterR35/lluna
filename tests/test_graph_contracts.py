@@ -97,6 +97,34 @@ def test_only_media_nodes_publish_preview_support():
     assert catalog["midgard.output.save_video"].supports_preview is False
 
 
+def test_select_object_requires_a_name_or_preview_point():
+    source = node("midgard.input.image", "source")
+    source.parameters = {"pathGrantId": "test-grant"}
+    select = node("midgard.mask.select_object", "select")
+    workflow = WorkflowDocument(
+        nodes=[source, select],
+        edges=[
+            WorkflowEdge(
+                source_node_id="source",
+                source_port_id="image",
+                target_node_id="select",
+                target_port_id="image",
+            )
+        ],
+    )
+    assert any(
+        issue.code == "SELECT_OBJECT_INPUT" for issue in validate_workflow(workflow).issues
+    )
+    select.parameters = {"text": "person"}
+    assert not any(
+        issue.code == "SELECT_OBJECT_INPUT" for issue in validate_workflow(workflow).issues
+    )
+    select.parameters = {"points": [[12, 18]], "labels": [1]}
+    assert not any(
+        issue.code == "SELECT_OBJECT_INPUT" for issue in validate_workflow(workflow).issues
+    )
+
+
 def test_every_node_model_option_has_a_lifecycle_inventory_entry():
     lifecycle_ids = known_model_ids()
     option_ids = {

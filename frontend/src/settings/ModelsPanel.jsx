@@ -4,7 +4,6 @@ import {
   Clock3,
   Download,
   ExternalLink,
-  ListOrdered,
   Plus,
   RefreshCw,
   Trash2,
@@ -468,7 +467,7 @@ function ModelRow({
               {status.label}
             </Badge>
           </div>
-          <p className="ui-copy-muted mt-0.5 truncate">{purpose}</p>
+          <p className="ui-copy-muted mt-0.5 leading-4">{purpose}</p>
         </div>
         <div className="ui-actions shrink-0 gap-1.5">
           <Switch
@@ -481,7 +480,7 @@ function ModelRow({
           />
           {!model.installed && model.can_install && !job && (
             <CompactButton
-              variant="secondary"
+              variant="primary"
               onClick={() => void onAction(model, "install")}
             >
               {requesting ? (
@@ -506,7 +505,7 @@ function ModelRow({
           )}
           {model.installed && model.can_uninstall && !job && (
             <CompactButton
-              variant="danger"
+              variant="secondary"
               onClick={() => void onAction(model, "remove")}
             >
               <Trash2 className="ui-icon-sm" /> Uninstall
@@ -747,11 +746,6 @@ export function ModelsPanel() {
     }
   }
 
-  const activeJob = downloads.active[0];
-  const activeModel = activeJob
-    ? models.find((model) => model.id === (activeJob.modelId || activeJob.key))
-    : null;
-
   return (
     <div className="ui-stack">
       <HuggingFaceConnection />
@@ -804,34 +798,6 @@ export function ModelsPanel() {
       )}
 
       <AddModelDialog open={addOpen} onClose={() => setAddOpen(false)} />
-
-      {(activeJob || downloads.pending.length > 0) && (
-        <div className="ui-stack-sm">
-          <div className="ui-action-row">
-            <div className="ui-inline min-w-0 gap-2">
-              <ListOrdered className="size-3.5 shrink-0 text-mg-running" />
-              <p className="truncate text-[11px] font-medium text-mg-primary">
-                {activeJob
-                  ? `Installing ${activeModel?.display_name || activeJob.modelId || activeJob.key}`
-                  : "Install queue"}
-              </p>
-            </div>
-            <Badge size="xs" tone="running">
-              {downloads.pending.length
-                ? `${downloads.pending.length} waiting`
-                : "Active"}
-            </Badge>
-          </div>
-          {activeJob && (
-            <ProgressBar
-              value={activeJob.progress}
-              indeterminate={activeJob.progress == null}
-              label={activeJob.detail || "Preparing download"}
-              showLabel
-            />
-          )}
-        </div>
-      )}
 
       {sections.length ? (
         <div className="ui-stack gap-5">

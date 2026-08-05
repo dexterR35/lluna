@@ -1,12 +1,12 @@
 @import "tailwindcss";
 
 @theme {
-  --color-mg-app: #0a0b0f;
+  /* 0a0b0f */
+  --color-mg-app: #12141a;  
   --color-mg-panel: #12141a;
-  --color-mg-elevated: #1a1d25;
+  --color-mg-elevated: #2a2f3a;
   --color-mg-node: #14161c;
   --color-mg-selected: #1a2233;
-  --color-mg-stage: #0c0e13;
   --color-mg-border: #2a2f3a;
   --color-mg-subtle: #1e222b;
   --color-mg-focus: #60a5fa;
@@ -19,6 +19,9 @@
   --color-mg-error: #ef7182;
   --color-mg-running: #38bdf8;
   --color-mg-cached: #b493f5;
+
+
+
 
   --radius-mg-sm: 8px;
   --radius-mg: 12px;
@@ -36,7 +39,6 @@
   --mg-bg-elevated: var(--color-mg-elevated);
   --mg-bg-node: var(--color-mg-node);
   --mg-bg-node-selected: var(--color-mg-selected);
-  --mg-bg-stage: var(--color-mg-stage);
   --mg-border: var(--color-mg-border);
   --mg-border-subtle: var(--color-mg-subtle);
   --mg-border-focus: var(--color-mg-focus);
@@ -122,9 +124,9 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   .ui-search {
     @apply flex h-9 w-full items-center gap-2 rounded-xl border border-mg-border bg-mg-app px-2 text-xs text-mg-primary transition hover:border-mg-secondary/50 focus-within:border-mg-focus focus-within:ring-2 focus-within:ring-mg-focus/20;
   }
-  .ui-search input {
+  /* .ui-search input {
     @apply min-w-0 flex-1 bg-transparent text-xs text-mg-primary outline-none placeholder:text-mg-muted;
-  }
+  } */
   .ui-field-label { @apply grid gap-1.5 text-[11px] font-medium text-mg-secondary; }
   .ui-help { @apply text-[10px] font-normal leading-4 text-mg-muted; }
   .ui-icon { @apply size-3.5 shrink-0; }
@@ -238,7 +240,7 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
 }
 
 .checkerboard {
-  background-color: var(--mg-bg-stage);
+  background-color: var(--mg-bg-app);
   background-image:
     linear-gradient(45deg, rgba(255,255,255,.035) 25%, transparent 25%),
     linear-gradient(-45deg, rgba(255,255,255,.035) 25%, transparent 25%),
@@ -285,7 +287,7 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   place-items: center;
   border: 1px solid #2c313c;
   border-radius: var(--mg-radius-pill);
-  background: #1c1f28;
+  background: var(--mg-bg-elevated);
   color: var(--mg-text-secondary);
   cursor: pointer;
   transition: color .15s ease, background-color .15s ease, border-color .15s ease;
@@ -319,7 +321,7 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   overflow: hidden;
   border: 1px solid var(--mg-border-subtle);
   border-radius: 16px;
-  background: var(--mg-bg-stage);
+  background: var(--mg-bg-app);
 }
 .midgard-node-body.is-prompt {
   min-height: 112px;
@@ -419,7 +421,6 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   font-size: 11px;
   font-weight: 500;
   line-height: 1.45;
-  box-shadow: none;
 }
 .midgard-node-settings-field .ui-input.is-area {
   min-height: 72px;
@@ -455,7 +456,7 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   gap: 4px;
   padding: 6px;
   overflow: hidden;
-  background: var(--mg-bg-stage);
+  background: var(--mg-bg-app);
 }
 .midgard-node-thumb {
   aspect-ratio: 1;
@@ -526,7 +527,7 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   overflow: hidden;
   border: 1px solid #2c313c;
   border-radius: var(--mg-radius-pill);
-  background: #1c1f28;
+  background: var(--mg-bg-elevated);
   color: var(--mg-text-secondary);
   padding: 0 10px 0 12px;
   cursor: pointer;
@@ -561,10 +562,7 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   border: 0;
   background: transparent;
 }
-.midgard-node-pill:has(select:disabled) {
-  cursor: not-allowed;
-  opacity: .45;
-}
+
 .midgard-node-stepper {
   display: inline-flex;
   min-height: 32px;
@@ -572,7 +570,7 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   gap: 2px;
   border: 1px solid #2c313c;
   border-radius: var(--mg-radius-pill);
-  background: #1c1f28;
+  background: var(--mg-bg-elevated);
   color: var(--mg-text-secondary);
   padding: 0 4px;
 }
@@ -612,7 +610,7 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   padding: 0 8px 0 10px;
   border: 1px solid #2c313c;
   border-radius: var(--mg-radius-pill);
-  background: #1c1f28;
+  background: var(--mg-bg-elevated);
 }
 .midgard-node-llava-toggle .ui-switch {
   min-height: 30px;
@@ -640,7 +638,7 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   place-items: center;
   border: 1px solid #2c313c;
   border-radius: var(--mg-radius-pill);
-  background: #1c1f28;
+  background: var(--mg-bg-elevated);
   color: var(--mg-text-secondary);
   cursor: pointer;
   transition: color .15s ease, background-color .15s ease, border-color .15s ease;
@@ -676,20 +674,19 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
 
 .react-flow__handle.midgard-port-handle {
   display: grid;
-  width: 20px !important;
-  height: 20px !important;
+  width: 30px !important;
+  height: 30px !important;
   place-items: center;
   overflow: visible !important;
   border: 1px solid #2c313c !important;
   border-radius: var(--mg-radius-pill) !important;
-  background: #1c1f28 !important;
+  background: var(--mg-bg-elevated) !important;
   outline: none !important;
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--port-color, #9298a7) 24%, transparent);
   opacity: .82;
   transition: opacity .15s ease, border-color .15s ease, background-color .15s ease;
 }
-.react-flow__handle-left.midgard-port-handle { left: -26px !important; }
-.react-flow__handle-right.midgard-port-handle { right: -26px !important; }
+.react-flow__handle-left.midgard-port-handle { left: -7px !important; }
+.react-flow__handle-right.midgard-port-handle { right: -7px !important; }
 .midgard-node.is-ports-open .react-flow__handle.midgard-port-handle,
 .react-flow__handle.midgard-port-handle.is-active,
 .react-flow__handle.midgard-port-handle.connecting,

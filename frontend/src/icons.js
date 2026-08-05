@@ -70,6 +70,7 @@ export {
   Workflow,
   X,
   ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 
 import {

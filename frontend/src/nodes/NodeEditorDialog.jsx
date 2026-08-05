@@ -85,7 +85,14 @@ export function NodeEditorDialog({ nodeId, onClose, onManageModels }) {
     ? [selectedOption.modelId]
     : definition?.requiredModels || [];
   const operationParameters = parametersForCapabilities(
-    parameters.filter((parameter) => parameter.id !== "model"),
+    parameters.filter(
+      (parameter) =>
+        parameter.id !== "model" &&
+        !(
+          definition?.schemaId === "midgard.mask.select_object" &&
+          ["points", "labels"].includes(parameter.id)
+        ),
+    ),
     selectedCapabilities,
     String(currentModel),
   );

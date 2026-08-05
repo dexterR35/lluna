@@ -15,30 +15,107 @@ class BgRemoveModelInfo:
     category: str
     """Recommended / category default (badge only; On/Off still works)."""
     is_default: bool = False
+    # Short "what it's for / best for" line shown in Settings → Models.
+    description: str = ""
 
 
 # Categories + one default each. Others are optional (install + on/off).
 MODEL_CATALOG: List[BgRemoveModelInfo] = [
     # General / quality - BiRefNet General is the app default
-    BgRemoveModelInfo(BgRemoveMode.BIREFNET, "General", True),
-    BgRemoveModelInfo(BgRemoveMode.ISNET, "General", False),
-    BgRemoveModelInfo(BgRemoveMode.U2NET, "General", False),
-    BgRemoveModelInfo(BgRemoveMode.U2NETP, "General", False),
-    BgRemoveModelInfo(BgRemoveMode.SILUETA, "General", False),
-    BgRemoveModelInfo(BgRemoveMode.BIREFNET_LITE, "General", False),
-    BgRemoveModelInfo(BgRemoveMode.BIREFNET_MASSIVE, "General", False),
-    BgRemoveModelInfo(BgRemoveMode.BRIA_RMBG, "General", False),
+    BgRemoveModelInfo(
+        BgRemoveMode.BIREFNET,
+        "General",
+        True,
+        "All-around photo and product cutouts. Best default for most images.",
+    ),
+    BgRemoveModelInfo(
+        BgRemoveMode.ISNET,
+        "General",
+        False,
+        "Balanced classic segmentation. Best when you want a lighter alternative to BiRefNet.",
+    ),
+    BgRemoveModelInfo(
+        BgRemoveMode.U2NET,
+        "General",
+        False,
+        "Fast classic U²-Net cutouts. Best for quick drafts or low-resource machines.",
+    ),
+    BgRemoveModelInfo(
+        BgRemoveMode.U2NETP,
+        "General",
+        False,
+        "Tiny U²-Net variant. Best for speed when quality can be lower.",
+    ),
+    BgRemoveModelInfo(
+        BgRemoveMode.SILUETA,
+        "General",
+        False,
+        "Compact silhouette masks. Best for simple shapes and outlines.",
+    ),
+    BgRemoveModelInfo(
+        BgRemoveMode.BIREFNET_LITE,
+        "General",
+        False,
+        "Faster BiRefNet with less memory. Best when quality must stay high but speed matters.",
+    ),
+    BgRemoveModelInfo(
+        BgRemoveMode.BIREFNET_MASSIVE,
+        "General",
+        False,
+        "Largest BiRefNet for maximum detail. Best when accuracy matters more than speed or VRAM.",
+    ),
+    BgRemoveModelInfo(
+        BgRemoveMode.BRIA_RMBG,
+        "General",
+        False,
+        "High-quality general RMBG. Best for clean product and studio-style photos.",
+    ),
     # People
-    BgRemoveModelInfo(BgRemoveMode.U2NET_HUMAN, "People", True),
-    BgRemoveModelInfo(BgRemoveMode.BIREFNET_PORTRAIT, "People", False),
+    BgRemoveModelInfo(
+        BgRemoveMode.U2NET_HUMAN,
+        "People",
+        True,
+        "Fast body and person segmentation. Best for quick people cutouts.",
+    ),
+    BgRemoveModelInfo(
+        BgRemoveMode.BIREFNET_PORTRAIT,
+        "People",
+        False,
+        "Tuned for faces and portraits. Best for headshots and people with fine hair edges.",
+    ),
     # Anime
-    BgRemoveModelInfo(BgRemoveMode.ISNET_ANIME, "Anime", True),
+    BgRemoveModelInfo(
+        BgRemoveMode.ISNET_ANIME,
+        "Anime",
+        True,
+        "Illustration and anime artwork. Best for drawn characters, manga, and stylized art.",
+    ),
     # Clothes
-    BgRemoveModelInfo(BgRemoveMode.U2NET_CLOTH, "Clothes", True),
+    BgRemoveModelInfo(
+        BgRemoveMode.U2NET_CLOTH,
+        "Clothes",
+        True,
+        "Separates clothing categories. Best for apparel and fashion cutouts.",
+    ),
     # Specialty
-    BgRemoveModelInfo(BgRemoveMode.BIREFNET_DIS, "Specialty", False),
-    BgRemoveModelInfo(BgRemoveMode.BIREFNET_HRSOD, "Specialty", False),
-    BgRemoveModelInfo(BgRemoveMode.BIREFNET_COD, "Specialty", False),
+    BgRemoveModelInfo(
+        BgRemoveMode.BIREFNET_DIS,
+        "Specialty",
+        False,
+        "Dichotomous image segmentation. Best for complex edges and high-contrast subjects.",
+    ),
+    BgRemoveModelInfo(
+        BgRemoveMode.BIREFNET_HRSOD,
+        "Specialty",
+        False,
+        "High-resolution salient object detection. Best for small or finely detailed subjects.",
+    ),
+    BgRemoveModelInfo(
+        BgRemoveMode.BIREFNET_COD,
+        "Specialty",
+        False,
+        "Camouflaged object detection. Best when the subject blends into the background.",
+    ),
 ]
 
 _CATALOG_BY_MODE: Dict[BgRemoveMode, BgRemoveModelInfo] = {m.mode: m for m in MODEL_CATALOG}
