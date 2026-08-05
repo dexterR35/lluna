@@ -173,6 +173,29 @@ If a node has an empty model list, install and enable the model shown for that f
 | Generate an image | One **FLUX** or **Qwen-Image** model | Optional; large models that generally need CUDA |
 | Composite a foreground and background | None | Uses image inputs already loaded in the graph |
 
+### Model examples
+
+#### Background removal with BiRefNet
+
+<p align="center">
+  <img src="example/birefnet_ex2.png" alt="BiRefNet foreground and mask segmentation examples" width="49%" />
+  <img src="example/birfet.png" alt="BiRefNet object mask example" width="49%" />
+</p>
+
+#### Image restoration and upscaling
+
+<p align="center">
+  <img src="example/images_supir.jpeg" alt="SUPIR image restoration before and after example" width="49%" />
+  <img src="example/real_ergan.png" alt="Real-ESRGAN image upscaling before and after example" width="49%" />
+</p>
+
+#### SeedVR2 image and video upscaling
+
+<p align="center">
+  <img src="example/seed_vr2_image_upscale.png" alt="SeedVR2 image upscaling example" width="49%" />
+  <img src="example/seed_vr2_video_upscale.png" alt="SeedVR2 video upscaling example" width="49%" />
+</p>
+
 ## Choosing a generation model
 
 Generation models are large, so start with one.
