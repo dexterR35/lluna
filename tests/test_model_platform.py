@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import os
+import sys
 import threading
 from pathlib import Path
 from types import SimpleNamespace
@@ -15,9 +17,9 @@ from backend.core.paths import AppPaths
 from backend.graph.registry import list_nodes
 from backend.graph.schema import WorkflowDocument, WorkflowNode
 from backend.graph.validation import validate_workflow
-from backend.models.reference.capabilities import reviewed_huggingface_contract
 from backend.models.dynamic_registry import DynamicModelRegistry
 from backend.models.importer import analyze_huggingface, configure_manifest, import_local
+from backend.models.reference.capabilities import reviewed_huggingface_contract
 from backend.models.reference.manifest import MANIFEST_FILENAME, ManifestError, ModelManifest
 
 
@@ -223,8 +225,8 @@ def test_supir_reviewed_contract_and_checkpoint_import(tmp_path, monkeypatch) ->
 
 
 def test_supir_checkpoint_download_is_revision_and_hash_pinned(tmp_path, monkeypatch) -> None:
-    from backend.tools.shared import huggingface as hf_auth
     from backend.tools.installers import supir as supir_models
+    from backend.tools.shared import huggingface as hf_auth
 
     checkpoint = b"small deterministic SUPIR fixture"
     monkeypatch.setattr(supir_models, "supir_root", lambda: tmp_path / "supir")
@@ -264,6 +266,7 @@ def test_supir_checkpoint_download_is_revision_and_hash_pinned(tmp_path, monkeyp
     assert not (tmp_path / "supir" / ".downloads" / "Q").exists()
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Uses a POSIX shell fixture")
 def test_supir_finds_uv_python_when_desktop_path_is_minimal(tmp_path, monkeypatch) -> None:
     from backend.tools.installers import supir as supir_models
 
@@ -282,9 +285,12 @@ def test_supir_finds_uv_python_when_desktop_path_is_minimal(tmp_path, monkeypatc
 def test_supir_rejects_configured_unsupported_python(tmp_path, monkeypatch) -> None:
     from backend.tools.installers import supir as supir_models
 
-    python = tmp_path / "python3.12"
-    python.write_text("#!/bin/sh\nprintf '3.12\\n'\n", encoding="utf-8")
-    python.chmod(0o755)
+    if os.name == "nt":
+        python = Path(sys.executable)
+    else:
+        python = tmp_path / "python3.12"
+        python.write_text("#!/bin/sh\nprintf '3.12\\n'\n", encoding="utf-8")
+        python.chmod(0o755)
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("PATH", "")
     monkeypatch.setenv("LLUNA_SUPIR_PYTHON", str(python))
@@ -339,8 +345,8 @@ def test_supir_install_fetches_both_variants_and_official_sdxl(monkeypatch) -> N
 
 
 def test_supir_dependencies_use_resumable_managed_downloads(tmp_path, monkeypatch) -> None:
-    from backend.tools.shared import huggingface as hf_auth
     from backend.tools.installers import supir as supir_models
+    from backend.tools.shared import huggingface as hf_auth
 
     monkeypatch.setattr(supir_models, "supir_root", lambda: tmp_path / "supir")
     partial = supir_models.dependency_dir("llava-v1.5-13b")

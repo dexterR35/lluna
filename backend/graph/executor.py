@@ -1254,7 +1254,9 @@ class RunManager:
         item_index: int = 0,
         item_count: int = 1,
     ) -> ArtifactRecord:
-        if os.environ.get("LLUNA_FAKE_WORKER") == "1":
+        # Keep direct payload-construction tests able to exercise this method
+        # with a stubbed worker even when CI enables the fake worker globally.
+        if os.environ.get("LLUNA_FAKE_WORKER") == "1" and control is not None:
             return self._fake_inference(
                 control,
                 node,

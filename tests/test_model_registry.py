@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import hashlib
 
-from backend.models.reference.metadata import ExpectedFile, ModelState
 from backend.models.reference.catalog import MODEL_REGISTRY
+from backend.models.reference.metadata import ExpectedFile, ModelState
 from backend.models.verifier import verify_file
 
 

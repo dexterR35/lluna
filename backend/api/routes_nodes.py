@@ -17,6 +17,6 @@ def nodes() -> list[dict]:
 def node(schema_id: str) -> dict:
     try:
         definition = get_node(schema_id)
-    except KeyError:
-        raise HTTPException(status_code=404, detail="Unknown node schema")
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Unknown node schema") from exc
     return definition.model_dump(mode="json", by_alias=True)

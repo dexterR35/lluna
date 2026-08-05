@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import pytest
 
-from backend.tools.shared.constants import GenerateMode
 from backend.tools.installers.generate import (
     MODEL_CATALOG,
     _validate_download_snapshot,
@@ -17,6 +16,7 @@ from backend.tools.options.generate import (
     step_presets_for_mode,
     validate_steps_for_mode,
 )
+from backend.tools.shared.constants import GenerateMode
 
 
 @pytest.mark.parametrize(

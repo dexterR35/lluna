@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from backend.settings.metadata import SettingsLevel
+from backend.settings.presets import Preset, ResolutionContext, resolve
 from backend.settings.schemas.model import (
     GenerateSettings,
     LowLightSettings,
@@ -11,7 +12,6 @@ from backend.settings.schemas.model import (
     STTNSettings,
     UpscaleSettings,
 )
-from backend.settings.presets import Preset, ResolutionContext, resolve
 from tests.fakes.hardware import CPU_ONLY, CUDA, DIRECTML, MPS, profile
 
 

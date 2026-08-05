@@ -8,7 +8,6 @@ from pydantic import BaseModel, Field
 from backend.api.auth import require_token
 from backend.models.service import (
     download_queue_snapshot,
-    ensure_download_queue_events,
     list_models,
     start_model_action,
 )

@@ -3,11 +3,11 @@ from __future__ import annotations
 import os
 import sys
 
-from backend.hardware import providers
 from backend.ai.runtimes.paddle import (
     disable_paddle_background_services,
     preferred_paddle_device,
 )
+from backend.hardware import providers
 
 
 def test_paddle_capability_probe_does_not_import_runtime(monkeypatch) -> None:

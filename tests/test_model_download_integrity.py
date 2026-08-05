@@ -8,12 +8,12 @@ from backend.models.artifacts import (
     ArtifactVerificationError,
     promote_verified_artifact,
 )
-from backend.models.reference.metadata import ExpectedFile
 from backend.models.reference.catalog import MODEL_REGISTRY
+from backend.models.reference.metadata import ExpectedFile
 from backend.tools.installers import enhance as enhance_models
-from backend.tools.shared.constants import EnhanceMode
 from backend.tools.installers.enhance import catalog_info
 from backend.tools.installers.select_object import MODEL_CATALOG as SELECT_OBJECT_CATALOG
+from backend.tools.shared.constants import EnhanceMode
 
 
 def test_verified_artifact_replaces_destination_only_after_validation(tmp_path) -> None:

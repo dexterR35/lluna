@@ -5,9 +5,9 @@ import threading
 import time
 
 from backend.tools.inference import worker as infer_worker
-from backend.tools.shared.hardware import HardwareAccelerator
 from backend.tools.inference.client import InferClient, _JobCallbacks
 from backend.tools.inference.protocol import EvtMsg, JobType, cancel, result, shutdown, start_job
+from backend.tools.shared.hardware import HardwareAccelerator
 
 
 class FakeHardware:

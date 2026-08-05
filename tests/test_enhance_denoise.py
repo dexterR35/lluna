@@ -7,15 +7,15 @@ import threading
 import numpy as np
 import pytest
 
-from backend.tools.shared.constants import DenoiseStrength
+from backend.ai.runtimes.realesrgan import EnhanceCancelled, _preprocess_rgb
 from backend.tools.media.cutout import decontaminate_rgb_fringe
-from backend.tools.options.enhance import EnhanceOptions
 from backend.tools.media.denoise import (
     denoise_rgb,
     estimate_noise_variance,
     verify_rgb,
 )
-from backend.ai.runtimes.realesrgan import EnhanceCancelled, _preprocess_rgb
+from backend.tools.options.enhance import EnhanceOptions
+from backend.tools.shared.constants import DenoiseStrength
 
 
 def _soft_edge_rgba(size: int = 64) -> tuple[np.ndarray, np.ndarray]:

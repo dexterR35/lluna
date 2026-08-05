@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 import socket
 from pathlib import Path
 
@@ -32,9 +33,30 @@ def isolated_runtime(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, request):
         yield
         return
 
-    def blocked_connection(*args, **kwargs):
+    real_create_connection = socket.create_connection
+    real_socket_connect = socket.socket.connect
+
+    def is_loopback(address) -> bool:
+        if not isinstance(address, tuple) or not address:
+            return False
+        host = address[0]
+        if isinstance(host, str) and host.lower() == "localhost":
+            return True
+        try:
+            return ipaddress.ip_address(host).is_loopback
+        except ValueError:
+            return False
+
+    def blocked_create_connection(address, *args, **kwargs):
+        if is_loopback(address):
+            return real_create_connection(address, *args, **kwargs)
         raise AssertionError("Network access is blocked in standard tests")
 
-    monkeypatch.setattr(socket, "create_connection", blocked_connection)
-    monkeypatch.setattr(socket.socket, "connect", blocked_connection)
+    def blocked_socket_connect(sock, address):
+        if is_loopback(address):
+            return real_socket_connect(sock, address)
+        raise AssertionError("Network access is blocked in standard tests")
+
+    monkeypatch.setattr(socket, "create_connection", blocked_create_connection)
+    monkeypatch.setattr(socket.socket, "connect", blocked_socket_connect)
     yield
