@@ -1,70 +1,90 @@
 <p align="center">
-  <img src="frontend/assets/app-icon/lluna.png" alt="Lluna" width="96" height="96" />
+  <img src="frontend/assets/app-icon/lluna.png" alt="Lluna logo" width="112" height="112" />
 </p>
 
-# Lluna
+<h1 align="center">Lluna</h1>
 
-Local node editor for image and video work. Drag nodes on a canvas, wire them together, run the graph. Models and media stay on your machine — nothing is uploaded to a cloud API.
+<p align="center">
+  A local-first, node-based workspace for image and video AI.
+</p>
+
+<p align="center">
+  Build visual workflows, run them on your own hardware, and keep your media and models on your machine.
+</p>
 
 <p align="center">
   <img alt="Linux" src="https://img.shields.io/badge/Linux-supported-2ea44f?logo=linux&logoColor=white" />
   <img alt="Windows" src="https://img.shields.io/badge/Windows-supported-0078D6?logo=windows&logoColor=white" />
   <img alt="macOS" src="https://img.shields.io/badge/macOS-supported-000000?logo=apple&logoColor=white" />
   <img alt="Python" src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" />
-  <img alt="Node" src="https://img.shields.io/badge/Node.js-22%2B-339933?logo=nodedotjs&logoColor=white" />
+  <img alt="Node.js" src="https://img.shields.io/badge/Node.js-22%2B-339933?logo=nodedotjs&logoColor=white" />
 </p>
 
----
+## Purpose
 
-## What you can do
+Lluna is a desktop application for practical, local AI-assisted media work. It turns common image and video operations into reusable visual workflows:
 
-| | |
-|---|---|
-| 🖼️ | Load one image or a batch (up to 10) |
-| 🎬 | Load video |
-| 🧽 | Remove burned-in subtitles / text from images and video |
-| ⬆️ | Upscale with Real-ESRGAN |
-| 🌙 | Fix low-light shots |
-| ✨ | Generate images from a prompt (FLUX / Qwen, optional installs) |
-| 🎯 | Select objects (SAM2 + Grounding DINO) |
-| 💾 | Preview and save results locally |
-| 🔗 | Chain steps into reusable workflows (`.lluna.json`) |
+- remove subtitles, watermarks, and other burned-in text;
+- upscale and restore images or video;
+- improve low-light images;
+- remove or composite backgrounds;
+- select objects with clicks or natural-language descriptions; and
+- generate images from prompts with locally installed diffusion models.
 
-Build left → right, hit **Run**. Progress shows in the Activity panel.
 
----
+## Nodebase
 
-## Platforms
+ Connect nodes from left to right to describe the processing pipeline, then run the graph.
 
-| OS | Notes |
-|---|---|
-| **Linux** | Primary development target. NVIDIA GPU optional but recommended for generation / heavy models. |
-| **Windows** | Same install flow via `install.bat`. CUDA or DirectML when available. |
-| **macOS** | Supported; Apple Silicon can use MPS where the stack allows. |
+```text
+Load Image  →  Select Object  →  Remove Background  →  Preview Image  →  Save Image
+Load Video  →  Remove Text    →  Preview Video     →  Save Video
+Prompt      →  Generate Image →  Upscale Image     →  Save Image
+```
 
-You need:
+The main node groups are:
 
-- **Python 3.12** (64-bit)
-- **Node.js 22+** and **npm 10+**
-- Disk space for models (optional models are large — install only what you use)
-- GPU drivers if you want CUDA / DirectML / MPS acceleration (no separate CUDA Toolkit install)
+| Group | Examples |
+| --- | --- |
+| **Input** | Load Image, Load Images, Load Video, Load Mask, Prompt |
+| **Process** | Generate Image, Upscale, Fix Low Light, Select Object, Remove Text, Remove Background, Composite |
+| **Output** | Preview Image, Preview Video, Preview Mask, Preview Alpha, Save Image, Save Video |
 
----
+Workflows are saved as `*.lluna.json` files. `Load Images` supports ordered batches of up to 10 images.
 
-## Install (first time)
+## Requirements
 
-### 1. Get the repo
+For running Lluna from source, install:
+
+- **64-bit Python 3.12**;
+- **Node.js 22 or newer** and **npm 10 or newer**;
+- an internet connection for the initial dependency and model downloads; and
+- enough free disk space for the models you select.
+
+GPU acceleration is optional. Current drivers are required for GPU backends;
+
+| Platform | Runtime profile | Acceleration |
+| --- | --- | --- |
+| Linux | CPU or CUDA | NVIDIA CUDA when an NVIDIA driver is available |
+| Windows | CPU, CUDA, or DirectML | NVIDIA CUDA or DirectML-compatible hardware |
+| macOS | CPU or MPS | Apple Silicon/Metal through PyTorch MPS where supported |
+
+Large restoration and generation models are hardware-dependent. 
+
+## First-time installation
+
+### 1. Clone the repository
 
 ```bash
-git clone <your-lluna-repo-url>
+git clone https://github.com/dexterR35/lluna.git
 cd lluna
 ```
 
-### 2. Install the Python runtime + deps
+### 2. Install Lluna
 
-This creates the env, picks CPU/CUDA/DirectML/MPS, and verifies bundled pieces.
+The installer creates the `llunaEnv` Python environment, installs the correct dependency profile, validates the bundled assets, and installs the desktop dependencies.
 
-**Linux / macOS**
+**Linux or macOS**
 
 ```bash
 ./install.sh --mode auto
@@ -76,178 +96,133 @@ This creates the env, picks CPU/CUDA/DirectML/MPS, and verifies bundled pieces.
 install.bat
 ```
 
-Useful modes if you already know your hardware:
+Use an explicit profile when needed:
 
 ```bash
-./install.sh --mode cpu
-./install.sh --mode cuda --yes
-./install.sh --mode directml --yes   # Windows
-./install.sh --mode mps --yes        # macOS
+./install.sh --mode cpu                 # CPU only
+./install.sh --mode cuda --yes          # NVIDIA CUDA
+./install.sh --mode directml --yes      # Windows DirectML
+./install.sh --mode mps --yes           # macOS Metal/MPS
 ```
 
-### 3. Install the desktop UI
+On Windows, the equivalent command is `install.bat --mode cuda --yes`, for example. `--yes` makes the selection non-interactive. With `--mode auto`, the installer detects the available hardware and chooses a suitable profile.
+
+The installer runs `npm install` for the desktop UI automatically. If you are developing the UI separately, you can refresh its dependencies with:
 
 ```bash
 npm install --allow-git=all
 ```
 
-That’s the first-time setup. Models you install later live outside the app folder and survive upgrades.
-
----
-
-## Open the app
-
-From the project root:
+### 3. Start Lluna
 
 ```bash
 npm run dev
 ```
 
-Electron starts, then boots the local Python backend on a loopback port. No separate server step.
 
-First session tip:
+## Installing models
 
-1. Open **Settings → Local model manager**
-2. Install a model needed by the workflow you want to run
-3. Enable it so it shows up in node dropdowns
-4. Drop nodes from the library, connect them, press **Run**
+Lluna separates application installation from model installation. This keeps the initial setup smaller and lets you install only the capabilities you need.
 
-Example graph:
+1. Open **Settings → Models** (or **Settings → Local model manager**).
+2. Select a model and choose **Install**.
+3. Wait for the download queue to finish in **Activity → Downloads**.
+4. Enable the model if it is not enabled automatically.
+5. Reopen the node and select the model in its model dropdown.
 
-`Load Images` → `Upscale Image` → `Preview Image` → `Save Image`
+The default installer does not download optional models. To schedule the recommended starter set during installation, run:
 
----
+```bash
+./install.sh --mode auto --schedule-default-models
+```
 
-## Update
+The starter set is Real-ESRGAN x2, MIRNet LOL, and the fast SAM2 + Grounding DINO selection pair. Models, settings, and workflows are stored in Lluna's user data area and survive application updates.
 
-Models, settings, and workflows are stored outside the packaged app resources. Updating the code does not wipe them.
+## Which models do I need?
+
+The following matrix maps each capability to its required models. **Bundled** models are included in the repository/package. **Optional** models are downloaded from Settings when you enable the corresponding feature.
+
+| Capability / node | Required models | Status and notes |
+| --- | --- | --- |
+| Retouch a masked image | **LaMa** | Bundled; CPU-compatible |
+| Remove text from an image | **PaddleOCR Server** + **LaMa** | Bundled; detects text, then inpaints it |
+| Remove subtitles/text from video | **PaddleOCR Server** + **STTN Auto** | Bundled; preserves source timing and audio when possible |
+| Upscale an image | **Real-ESRGAN x2** or **x4** | Optional; a good lightweight starting point |
+| High-quality image restoration | **SUPIR v0** | Optional; CUDA only, about 75 GB, roughly 32 GB RAM and 12 GB VRAM minimum |
+| One-step image/video restoration | **SeedVR2 3B** or **7B** | Optional; CUDA only; about 14.6 GB/66.9 GB and 24 GB/48 GB VRAM minimum |
+| Fix low-light images | **MIRNet LOL** | Optional; CPU, CUDA, DirectML, or MPS |
+| Select an object | **SAM2** + **Grounding DINO** | Optional; install the fast pair first, or the large/base pair for higher quality |
+| Remove an image/video background | **BiRefNet** variant | Optional; variants include standard, Dynamic, HR, HR Matting, Lite 2K, and Matting |
+| Generate an image | One **FLUX** or **Qwen-Image** model | Optional; generation models are large and generally require CUDA |
+| Composite foreground and background | None | Uses already available image inputs |
+
+### Generation model choices
+
+Install only one generation model to begin with:
+
+| Model | Best for | Approximate requirement |
+| --- | --- | --- |
+| **FLUX.2 Klein Base 4B** | Recommended starting point | About 16 GB RAM and 12 GB VRAM |
+| **FLUX.2 Klein 4B / 9B** | General image generation | More memory as model size increases |
+| **FLUX.2 Klein 9B FP8** | Lower-weight 9B option | About 32 GB RAM and 10 GB VRAM |
+| **FLUX.2 Dev** | Higher-capacity generation | About 64 GB RAM; gated, non-commercial license |
+| **Qwen-Image** | Alternative general image generation | About 64 GB RAM and 12 GB VRAM |
+
+Generation models may require accepting the upstream license or gated-model terms. Review the model card before installation and use; model licenses are separate from the Lluna license.
+
+### Custom Hugging Face and local models
+
+From **Settings → Models → Add model**, you can add a reviewed Hugging Face repository, a local model folder, or a supported weight file (`.safetensors`, `.pth`, `.pt`, `.ckpt`, or `.bin`). Lluna checks metadata, compatibility, disk requirements, and the declared capability before enabling a custom model.
+
+Remote repository code is disabled by default, SafeTensors is preferred, and pickle-capable weights require explicit opt-in. A model repository's `requirements.txt` is never installed into Lluna's main environment. See the [model platform guide](backend/models/reference/PLATFORM.md) and [model reference](backend/models/reference/README.md) for the manifest and capability rules.
+
+## Common workflows
+
+```text
+Remove image text:
+Load Image → Remove Text from Image → Preview Image → Save Image
+
+Remove video subtitles:
+Load Video → Remove Text from Video → Preview Video → Save Video
+
+Make a transparent cut-out:
+Load Image → Remove Background → Preview Alpha → Save Image
+
+Generate and upscale:
+Prompt → Generate Image → Upscale Image → Preview Image → Save Image
+
+Select and retouch:
+Load Image → Select Object → LaMa Retouch → Preview Image → Save Image
+```
+
+If a node's model list is empty, install the model listed in the matrix, enable it in Settings, and reopen the node options.
+
+## Development commands
+
+```bash
+npm run build           # Build the production UI bundle
+npm run lint            # Lint the frontend
+npm run check           # Frontend checks and static guards
+npm run test:frontend   # Frontend tests
+npm run test:backend    # Python backend tests
+npm test                # Frontend and backend tests
+```
+
+For frozen sidecars and packaged builds, see [packaging/build.py](packaging/build.py). For the backend layout, see [backend/ARCHITECTURE.md](backend/ARCHITECTURE.md).
+
+## Updating
 
 ```bash
 git pull
-./install.sh --mode auto    # or install.bat on Windows
+./install.sh --mode auto       # Use install.bat on Windows
 npm install --allow-git=all
 npm run dev
 ```
 
-If a dependency group fails after an update, re-run the installer with the same `--mode` you normally use. Check **Activity → Downloads** if a model reinstall fails.
+Updating the source does not remove installed models, settings, or workflows.
 
----
+## Privacy and licensing
 
-## Models — what they’re for
+Lluna uses a loopback API with a per-launch token and a sandboxed Electron renderer. Your media remains local unless you explicitly export or copy it elsewhere. Model downloads go to the upstream providers you select.
 
-Everything below runs **locally**. Check each license before use ([third-party notices](THIRD_PARTY_NOTICES.md)).
-
-### Bundled (ship with the app)
-
-| Model | Job |
-|---|---|
-| **STTN Auto / Detection** | Video text / subtitle inpainting |
-| **LaMa** | Still-image inpainting |
-| **ProPainter** | Motion-aware video inpainting |
-| **PaddleOCR Server / Mobile** | Find text regions for subtitle tools |
-
-### Optional (install from Settings → Local model manager)
-
-| Group | Examples | Job |
-|---|---|---|
-| **Upscale** | Real-ESRGAN ×2 / ×4 | Sharper, larger images |
-| **Low light** | MIRNet | Brighten / clean dark shots |
-| **Generation** | FLUX.2 Klein, FLUX.2 Dev, Qwen-Image | Text → image (needs VRAM + disk) |
-| **Object selection** | SAM2, Grounding DINO | Point / text-driven masks |
-| **Background removal** | BiRefNet, BiRefNet Dynamic, HR, Lite-2K, and matting variants | Transparent images and foreground video |
-
-Install only what you need. One model downloads at a time; the queue is in **Activity → Downloads**.
-
-### Custom models and Hugging Face
-
-Open **Settings → Local model manager → Add model** to:
-
-- paste a Hugging Face repository link;
-- import a local model folder; or
-- import a `.safetensors`, `.pth`, `.pt`, `.ckpt`, or `.bin` weight file.
-
-Lluna analyzes repository metadata, license, download size, runtime, disk, RAM,
-VRAM, and backend compatibility before installation. Hugging Face downloads are
-pinned to the analyzed commit, restricted to reviewed files, staged outside the
-active model directory, verified, and promoted atomically. Fine-grained and
-read-only Hugging Face tokens can be connected from the same panel; supported
-operating systems use their credential store, with a permission-restricted local
-fallback.
-
-Managed user models live under `models/custom/<model-id>/` and use a versioned
-`lluna-model.json`. Folders dropped into `models/custom/` are discovered
-automatically; folders without a manifest appear as **Needs configuration**.
-Each manifest contains a reviewed capability contract. Node controls change with
-the selected model—for example, distilled models expose their smaller step range,
-while guidance, negative prompt, dtype, LoRA, ControlNet, inpainting, and
-upscaler controls appear only when declared. Hugging Face metadata and safe local
-JSON inspection can prefill the review, but unknown facts are never guessed and
-keep the model disabled.
-Remote repository code is disabled, SafeTensors is preferred, and legacy
-pickle-capable weights require explicit opt-in. Repository `requirements.txt`
-files are never installed into Lluna's main environment. See
-[the model platform guide](backend/models/reference/PLATFORM.md),
-[model references](backend/models/reference/README.md), and
-[manifest schema](backend/models/reference/model-manifest.schema.json).
-
----
-
-## Nodes you’ll use most
-
-**Input** — Load Image, Load Images (max 10), Load Video, Load Mask, Prompt  
-
-**Process** — Generate Image, Upscale Image, Fix Low Light, Select Object, Remove Text from Image / Video, Composite Background
-
-**Output** — Preview Image / Video, Save Image / Video  
-
-If a node’s model list is empty: install the model, turn it **Enabled**, then reopen the node options.
-
-### BiRefNet background removal
-
-BiRefNet variants are installed from **Settings → Models**. The image and video
-**Remove Background** nodes expose model choice, inference resolution, alpha
-threshold, edge feathering, transparent/solid output, and custom background
-color. Transparent images are saved as PNG; transparent video is encoded as a
-MOV with an alpha channel, while solid-color video is encoded as MP4 and keeps
-source audio when FFmpeg can mux it.
-
-The image node also exposes separate **Mask** and **Alpha** outputs. The mask is
-the model's raw grayscale segmentation result; alpha is the thresholded and
-optionally feathered channel used by the transparent cut-out. Connect them to
-**Preview Mask** or **Preview Alpha** to inspect them, or to downstream masking
-nodes.
-
-Fine-tuned or privately trained BiRefNet checkpoints can be added through
-**Settings → Models → Add model → Local folder**. Select the BiRefNet adapter,
-review the segmentation capability contract, enable remote-code execution only
-for a checkpoint you trust, and then select the installed custom checkpoint in
-the Remove Background node. The upstream project’s training layout (`im` and
-`gt` folders) and PyTorch 2.5+ training requirements remain applicable.
-
----
-
-## Workflows & settings
-
-- Workflows save as `*.lluna.json` (atomic save + autosave).
-- App preferences and model defaults live under **Settings** (Editor, Runtime, Subtitle, Enhancement, …).
-- Layout (library width, drawer height) is stored in the desktop UI.
-
----
-
-## Dev commands
-
-```bash
-npm run build           # production UI bundle
-npm run test:frontend
-npm run test:backend
-npm run check
-npm run lint
-```
-
-Packaging / frozen sidecar: see `packaging/build.py`.
-
----
-
-## Privacy in one line
-
-Loopback API, per-launch token, sandboxed renderer, path grants for files. Your media does not leave the machine unless you copy it somewhere yourself.
+Source is distributed under the repository [LICENSE](LICENSE). Model weights and third-party components have their own terms; review [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and each model's upstream license before use or redistribution.
