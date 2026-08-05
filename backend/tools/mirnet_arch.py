@@ -5,7 +5,7 @@
 ## https://arxiv.org/abs/2003.06792
 """
 
-# Vendored from swz30/MIRNet (ECCV 2020) for Midgard low-light enhance.
+# Vendored from swz30/MIRNet (ECCV 2020) for Lluna low-light enhance.
 # Antialiased Downsample is inlined via backend.tools._mirnet_antialias.
 
 

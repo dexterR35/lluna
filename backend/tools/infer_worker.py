@@ -228,6 +228,15 @@ def infer_worker_main(cmd_queue, evt_queue, hardware_accel: bool = True) -> None
                     heartbeat_log,
                     job_evt_queue,
                 )
+            elif job_type == JobType.SEEDVR.value:
+                _job_seedvr(
+                    run_id,
+                    payload,
+                    cancel_event,
+                    on_progress,
+                    heartbeat_log,
+                    job_evt_queue,
+                )
             else:
                 _emit(
                     job_evt_queue,
@@ -849,6 +858,29 @@ def _job_birefnet(run_id, payload, cancel_event, on_progress, heartbeat_log, evt
     _emit(evt_queue, result(run_id, output_path))
 
 
+def _job_seedvr(run_id, payload, cancel_event, on_progress, heartbeat_log, evt_queue) -> None:
+    from backend.tools.seedvr_runner import SeedVRCancelled, run_seedvr
+
+    model_id = str(payload.get("model_id") or "seedvr2-3b")
+    heartbeat_log(run_id, f"SeedVR2 model: {model_id}")
+    try:
+        run_seedvr(
+            payload,
+            cancel_event=cancel_event,
+            progress=lambda value: on_progress(run_id, value),
+            log=lambda message: heartbeat_log(run_id, message),
+        )
+    except SeedVRCancelled:
+        _emit(evt_queue, error(run_id, "__cancelled__"))
+        return
+    except Exception as exc:
+        traceback.print_exc()
+        _emit(evt_queue, error(run_id, str(exc)))
+        return
+    on_progress(run_id, 100)
+    _emit(evt_queue, result(run_id, str(payload["output_path"])))
+
+
 def _job_subtitle(run_id, payload, cancel_event, on_progress, heartbeat_log, evt_queue) -> None:
     import cv2
     from dataclasses import replace
@@ -973,6 +1005,6 @@ def _job_subtitle(run_id, payload, cancel_event, on_progress, heartbeat_log, evt
 
 
 def _temp_png(prefix: str) -> str:
-    fd, path = tempfile.mkstemp(prefix=f"midgard_{prefix}_", suffix=".png")
+    fd, path = tempfile.mkstemp(prefix=f"lluna_{prefix}_", suffix=".png")
     os.close(fd)
     return path

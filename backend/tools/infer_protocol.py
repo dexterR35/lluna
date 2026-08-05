@@ -19,6 +19,7 @@ class JobType(str, Enum):
     SELECT_SUBJECT = "select_subject"
     SUBTITLE = "subtitle"
     BIREFNET = "birefnet"
+    SEEDVR = "seedvr"
 
 
 @unique

@@ -2,7 +2,7 @@ import { BaseEdge, getBezierPath } from "@xyflow/react";
 import { resolvePortColor } from "../icons";
 
 /** @param {import("@xyflow/react").EdgeProps} props */
-export function MidgardEdge({
+export function LlunaEdge({
   id,
   sourceX,
   sourceY,

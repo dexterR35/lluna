@@ -149,7 +149,7 @@ def cuda_compatible() -> bool:
 
 
 def _bootstrap_python() -> str:
-    configured = os.environ.get("MIDGARD_SUPIR_PYTHON", "").strip()
+    configured = os.environ.get("LLUNA_SUPIR_PYTHON", "").strip()
     candidates: list[str | Path] = [configured] if configured else []
     versions = ("3.10", "3.9", "3.8")
     candidates.extend(f"python{version}" for version in versions)
@@ -201,7 +201,7 @@ def _bootstrap_python() -> str:
         if result.returncode == 0 and result.stdout.strip() in versions:
             return executable
     raise RuntimeError(
-        "SUPIR requires Python 3.8–3.10. Install Python 3.10 or set MIDGARD_SUPIR_PYTHON."
+        "SUPIR requires Python 3.8–3.10. Install Python 3.10 or set LLUNA_SUPIR_PYTHON."
     )
 
 
@@ -219,7 +219,7 @@ def _install_source() -> None:
     if readiness()["source"]:
         return
     supir_root().mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="midgard-supir-") as raw:
+    with tempfile.TemporaryDirectory(prefix="lluna-supir-") as raw:
         staging = Path(raw)
         archive = staging / "source.zip"
         urllib.request.urlretrieve(SUPIR_SOURCE_URL, archive)  # noqa: S310 - pinned HTTPS URL
@@ -259,7 +259,7 @@ def _install_runtime() -> None:
             "profile": "supir-python",
             "sourceCommit": SUPIR_COMMIT,
             "packages": list(SUPIR_PACKAGES),
-            "managedBy": "midgard",
+            "managedBy": "lluna",
         },
     )
     if target.exists():

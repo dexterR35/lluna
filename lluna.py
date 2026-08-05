@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Midgard Python sidecar entry point."""
+"""Lluna Python sidecar entry point."""
 
 import multiprocessing
 

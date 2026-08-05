@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title description">
+  <title id="title">Lluna</title>
+  <desc id="description">A white letter L with Na lettering on a red rounded square.</desc>
+  <rect width="512" height="512" rx="112" fill="#d62839"/>
+  <path d="M88 112h88v208h224v80H88z" fill="#ffffff"/>
+  <text x="200" y="282" fill="#ffffff" font-family="DejaVu Sans, Arial, sans-serif" font-size="92" font-weight="700" letter-spacing="-4">Na</text>
+</svg>

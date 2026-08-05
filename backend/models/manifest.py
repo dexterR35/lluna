@@ -1,4 +1,4 @@
-"""Versioned manifests for built-in and user-installed Midgard models."""
+"""Versioned manifests for built-in and user-installed Lluna models."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
 
-MANIFEST_FILENAME = "midgard-model.json"
+MANIFEST_FILENAME = "lluna-model.json"
 MANIFEST_SCHEMA_VERSION = 1
 MODEL_FILE_EXTENSIONS = {
     ".safetensors",
@@ -24,8 +24,9 @@ SUPPORTED_ADAPTERS = {
     "transformers",
     "birefnet",
     "paddle",
-    "midgard-native",
+    "lluna-native",
     "supir",
+    "seedvr",
 }
 SUPPORTED_TASKS = {
     "text-to-image",
@@ -577,7 +578,7 @@ def infer_adapter(path: Path) -> tuple[str, str, str]:
     if suffixes & {".pdmodel", ".pdiparams"}:
         return "paddle", "paddle", "custom"
     raise ManifestError(
-        "Midgard could not identify a supported Diffusers, Transformers, or Paddle model."
+        "Lluna could not identify a supported Diffusers, Transformers, or Paddle model."
     )
 
 

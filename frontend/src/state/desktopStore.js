@@ -17,7 +17,7 @@ const defaults = {
 /** @returns {import("../types").DesktopValues} */
 function load() {
   try {
-    return { ...defaults, ...JSON.parse(localStorage.getItem("midgard-layout") || "{}") };
+    return { ...defaults, ...JSON.parse(localStorage.getItem("lluna-layout") || "{}") };
   } catch {
     return defaults;
   }
@@ -29,7 +29,7 @@ const createDesktopState = (set, get) => ({
   setValue: (key, value) => {
     if (get()[key] === value) return;
     set(/** @type {Partial<import("../types").DesktopState>} */ ({ [key]: value }));
-    localStorage.setItem("midgard-layout", JSON.stringify({ ...get(), [key]: value, setValue: undefined, reset: undefined }));
+    localStorage.setItem("lluna-layout", JSON.stringify({ ...get(), [key]: value, setValue: undefined, reset: undefined }));
   },
   toggle: (key) => {
     const current = get()[key];
@@ -37,7 +37,7 @@ const createDesktopState = (set, get) => ({
   },
   reset: () => {
     set(defaults);
-    localStorage.removeItem("midgard-layout");
+    localStorage.removeItem("lluna-layout");
   },
 });
 

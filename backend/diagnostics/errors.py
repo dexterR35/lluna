@@ -15,9 +15,9 @@ class UserError:
     retryable: bool = False
 
 
-class MidgardError(RuntimeError):
-    code = "MIDGARD_ERROR"
-    title = "Midgard could not complete the operation"
+class LlunaError(RuntimeError):
+    code = "LLUNA_ERROR"
+    title = "Lluna could not complete the operation"
     actions: tuple[str, ...] = ()
     retryable = False
 
@@ -32,27 +32,27 @@ class MidgardError(RuntimeError):
         )
 
 
-class ConfigurationError(MidgardError):
+class ConfigurationError(LlunaError):
     code = "CONFIGURATION_ERROR"
     title = "Settings could not be loaded"
 
 
-class DependencyError(MidgardError):
+class DependencyError(LlunaError):
     code = "DEPENDENCY_UNAVAILABLE"
     title = "A required component is unavailable"
 
 
-class HardwareError(MidgardError):
+class HardwareError(LlunaError):
     code = "HARDWARE_ERROR"
     title = "Hardware acceleration is unavailable"
 
 
-class ModelError(MidgardError):
+class ModelError(LlunaError):
     code = "MODEL_ERROR"
     title = "The selected model is unavailable"
 
 
-class InferenceError(MidgardError):
+class InferenceError(LlunaError):
     code = "INFERENCE_ERROR"
     title = "Processing failed"
     retryable = True
@@ -64,29 +64,29 @@ class WorkerStartupError(InferenceError):
     actions = ("Retry startup.", "Open Diagnostics for technical details.")
 
 
-class CancellationError(MidgardError):
+class CancellationError(LlunaError):
     code = "CANCELLED"
     title = "Processing cancelled"
 
 
-class InvalidMediaError(MidgardError):
+class InvalidMediaError(LlunaError):
     code = "INVALID_MEDIA"
     title = "This media file cannot be opened"
     actions = ("Choose another file.", "Check that FFmpeg can read the file.")
 
 
-class OutputWriteError(MidgardError):
+class OutputWriteError(LlunaError):
     code = "OUTPUT_WRITE_ERROR"
     title = "The result could not be saved"
     actions = ("Choose another output folder.", "Check available disk space.")
 
 
-class DownloadError(MidgardError):
+class DownloadError(LlunaError):
     code = "DOWNLOAD_ERROR"
     title = "The model could not be downloaded"
     retryable = True
 
 
-class UpdateError(MidgardError):
+class UpdateError(LlunaError):
     code = "UPDATE_ERROR"
     title = "The update check could not be completed"

@@ -16,7 +16,7 @@ def disable_paddle_background_services() -> None:
 def preferred_paddle_device(paddle, *, acceleration_enabled: bool) -> str:
     """Return GPU 0 when Paddle CUDA is usable, otherwise CPU.
 
-    Paddle does not support Midgard's DirectML or MPS profiles. The caller
+    Paddle does not support Lluna's DirectML or MPS profiles. The caller
     still retries model construction on CPU because a compiled CUDA wheel can
     be present while its native runtime or driver is unavailable.
     """

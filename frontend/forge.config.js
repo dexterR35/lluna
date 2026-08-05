@@ -17,28 +17,28 @@ packagerUnzip.extractElectronZip = async (zipPath, targetDir) => {
 
 module.exports = {
   packagerConfig: {
-    name: "Midgard",
+    name: "Lluna",
     asar: true,
-    executableName: "Midgard",
-    icon: path.resolve(__dirname, "assets", "app-icon", "midgard"),
-    electronZipDir: process.env.MIDGARD_ELECTRON_ZIP_DIR || undefined,
+    executableName: "Lluna",
+    icon: path.resolve(__dirname, "assets", "app-icon", "lluna"),
+    electronZipDir: process.env.LLUNA_ELECTRON_ZIP_DIR || undefined,
     extraResource: [
-      path.resolve(__dirname, "..", "build", "backend-sidecar", "midgard-backend"),
+      path.resolve(__dirname, "..", "build", "backend-sidecar", "lluna-backend"),
       path.resolve(__dirname, "assets", "app-icon"),
     ],
     afterCopyExtraResources: [
       (/** @type {string} */ buildPath, /** @type {string} */ _electronVersion, /** @type {string} */ _platform, /** @type {string} */ _arch, /** @type {(error?: unknown) => void} */ done) => {
         const resourcesPath = path.join(buildPath, "resources");
-        rename(path.join(resourcesPath, "midgard-backend"), path.join(resourcesPath, "backend-sidecar")).then(() => done(), done);
+        rename(path.join(resourcesPath, "lluna-backend"), path.join(resourcesPath, "backend-sidecar")).then(() => done(), done);
       },
     ],
   },
   rebuildConfig: {},
   makers: [
-    { name: "@electron-forge/maker-squirrel", config: { name: "Midgard" } },
+    { name: "@electron-forge/maker-squirrel", config: { name: "Lluna" } },
     { name: "@electron-forge/maker-zip", platforms: ["darwin", "linux", "win32"] },
     { name: "@electron-forge/maker-dmg", config: {} },
-    { name: "@electron-forge/maker-deb", config: { options: { maintainer: "Midgard", homepage: "https://github.com/dexterR35/midgard" } } },
+    { name: "@electron-forge/maker-deb", config: { options: { maintainer: "Lluna", homepage: "https://github.com/dexterR35/lluna" } } },
   ],
   plugins: [
     new VitePlugin({

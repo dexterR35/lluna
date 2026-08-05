@@ -272,7 +272,7 @@ def validate_workflow(
                 None,
             )
             capabilities = selected_option.get("capabilities") if selected_option else None
-            if node.schema_id == "midgard.generate.image":
+            if node.schema_id == "lluna.generate.image":
                 from backend.models.capability_validation import validate_generation_inputs
 
                 capability_issues = (
@@ -324,7 +324,7 @@ def validate_workflow(
                             node_id=node.id,
                         )
                     )
-        if node.schema_id == "midgard.mask.select_object":
+        if node.schema_id == "lluna.mask.select_object":
             object_name = str(node.parameters.get("text") or "").strip()
             points = node.parameters.get("points") or []
             has_point = isinstance(points, list) and any(
@@ -340,7 +340,7 @@ def validate_workflow(
                         action="Enter an object name on the node or click its source image preview.",
                     )
                 )
-        if check_model_availability and os.environ.get("MIDGARD_FAKE_WORKER") != "1":
+        if check_model_availability and os.environ.get("LLUNA_FAKE_WORKER") != "1":
             from backend.models.service import model_available
 
             model_parameter = next(

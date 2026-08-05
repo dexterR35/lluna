@@ -25,11 +25,11 @@ class PreflightReport:
 
 
 def validate_python_runtime() -> None:
-    """Require the single Python runtime supported by Midgard."""
+    """Require the single Python runtime supported by Lluna."""
     bits = struct.calcsize("P") * 8
     if sys.version_info[:2] != (3, 12) or bits != 64:
         raise DependencyError(
-            "Midgard requires 64-bit Python 3.12; received "
+            "Lluna requires 64-bit Python 3.12; received "
             f"{sys.version_info[0]}.{sys.version_info[1]} {bits}-bit."
         )
 
@@ -44,7 +44,7 @@ def _ffmpeg_path(root: Path, target_platform: str) -> Path:
 
 def _probe_writable(directory: Path) -> None:
     directory.mkdir(parents=True, exist_ok=True)
-    descriptor, name = tempfile.mkstemp(prefix=".midgard-write-", dir=directory)
+    descriptor, name = tempfile.mkstemp(prefix=".lluna-write-", dir=directory)
     try:
         os.close(descriptor)
     finally:
@@ -65,7 +65,7 @@ def validate_packaged_runtime(
     try:
         validate_python_runtime()
     except DependencyError as exc:
-        errors.append(str(exc).replace("Midgard requires", "embedded Python must be"))
+        errors.append(str(exc).replace("Lluna requires", "embedded Python must be"))
     else:
         checks.append("embedded Python 3.12 64-bit")
     if selected.profile == "source":
@@ -102,7 +102,7 @@ def validate_packaged_runtime(
 
     log_file = paths.config_dir / "logs" / "install.log"
     lines = [
-        f"[{datetime.now(timezone.utc).isoformat()}] Midgard {VERSION}",
+        f"[{datetime.now(timezone.utc).isoformat()}] Lluna {VERSION}",
         f"platform={platform.platform()}",
         f"target={selected.key}",
         f"python={sys.version.split()[0]} embedded=true",

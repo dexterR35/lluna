@@ -1,4 +1,4 @@
-"""Subprocess bridge from Midgard's inference worker to isolated SUPIR."""
+"""Subprocess bridge from Lluna's inference worker to isolated SUPIR."""
 
 from __future__ import annotations
 

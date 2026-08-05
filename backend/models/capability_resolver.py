@@ -124,6 +124,21 @@ def builtin_contract(model_id: str) -> tuple[ModelVariant, ModelCapabilities]:
             scales=tuple(range(1, 9)),
             tile_size=NumberCapability(512, 128, 1024),
         )
+    if model_id in {"seedvr2-3b", "seedvr2-7b"}:
+        inputs, outputs = _io_for_task("image-upscaling")
+        return ModelVariant(
+            "upscaler",
+            architecture="SeedVR2",
+            base_model=model_id,
+        ), ModelCapabilities(
+            provenance="reviewed-catalog",
+            tasks=("image-upscaling", "image-restoration"),
+            seed=True,
+            inputs=inputs,
+            outputs=outputs,
+            dtypes=("bf16",),
+            scales=(1, 2, 4),
+        )
     task = (
         "image-segmentation"
         if model_id.startswith("birefnet")

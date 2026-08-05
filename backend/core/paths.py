@@ -7,7 +7,6 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-
 def _resolved_override(name: str, default: Path) -> Path:
     raw = os.environ.get(name)
     return Path(raw).expanduser().resolve() if raw else default.resolve()
@@ -30,19 +29,19 @@ class AppPaths:
         frozen = bool(getattr(sys, "frozen", False))
         frozen_root = getattr(sys, "_MEIPASS", None)
         default_root = Path(frozen_root) if frozen_root else Path(__file__).resolve().parents[2]
-        root = _resolved_override("MIDGARD_PROJECT_ROOT", default_root)
+        root = _resolved_override("LLUNA_PROJECT_ROOT", default_root)
         runtime_root = Path(sys.executable).resolve().parent if frozen else root
         user_config, user_data = _user_roots()
         config_dir = _resolved_override(
-            "MIDGARD_CONFIG_DIR",
+            "LLUNA_CONFIG_DIR",
             user_config if frozen else runtime_root / "config",
         )
         data_dir = _resolved_override(
-            "MIDGARD_DATA_DIR",
+            "LLUNA_DATA_DIR",
             user_data if frozen else root,
         )
         models_dir = _resolved_override(
-            "MIDGARD_MODELS_DIR",
+            "LLUNA_MODELS_DIR",
             data_dir / "models" if frozen else root / "backend" / "models",
         )
         return cls(
@@ -55,9 +54,9 @@ class AppPaths:
             shipped_config_file=root / "config" / "defaults.json",
             models_dir=models_dir,
             runtime_file=(
-                config_dir / "midgard_runtime.json"
+                config_dir / "lluna_runtime.json"
                 if frozen
-                else runtime_root / "midgard_runtime.json"
+                else runtime_root / "lluna_runtime.json"
             ),
         )
 
@@ -67,13 +66,13 @@ def _user_roots() -> tuple[Path, Path]:
     home = Path.home()
     if sys.platform == "win32":
         local = Path(os.environ.get("LOCALAPPDATA", home / "AppData" / "Local"))
-        base = local / "Midgard"
+        base = local / "Lluna"
         return base / "config", base
     if sys.platform == "darwin":
-        base = home / "Library" / "Application Support" / "Midgard"
+        base = home / "Library" / "Application Support" / "Lluna"
         return base / "config", base
-    config = Path(os.environ.get("XDG_CONFIG_HOME", home / ".config")) / "midgard"
-    data = Path(os.environ.get("XDG_DATA_HOME", home / ".local" / "share")) / "midgard"
+    config = Path(os.environ.get("XDG_CONFIG_HOME", home / ".config")) / "lluna"
+    data = Path(os.environ.get("XDG_DATA_HOME", home / ".local" / "share")) / "lluna"
     return config, data
 
 

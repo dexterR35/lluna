@@ -51,7 +51,7 @@ def _default_fetch(url: str) -> dict[str, Any]:
 
     response = requests.get(
         url,
-        headers={"User-Agent": "Midgard-source-update-check"},
+        headers={"User-Agent": "Lluna-source-update-check"},
         timeout=5,
         allow_redirects=True,
     )
@@ -70,7 +70,7 @@ class RateLimitError(RuntimeError):
 
 def check_for_update(fetch_json: FetchJson | None = None) -> UpdateResult:
     now = datetime.now(timezone.utc).isoformat()
-    if os.environ.get("MIDGARD_DISABLE_UPDATE_CHECK") == "1":
+    if os.environ.get("LLUNA_DISABLE_UPDATE_CHECK") == "1":
         return UpdateResult(
             UpdateState.DISABLED, BUILD_INFO.version, checked_at=now
         )

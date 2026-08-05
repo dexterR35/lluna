@@ -127,7 +127,7 @@ def test_stopping_current_job_continues_with_next_queued_job(
         ModelDownloadRegistry,
     )
 
-    monkeypatch.setenv("MIDGARD_CONFIG_DIR", str(tmp_path))
+    monkeypatch.setenv("LLUNA_CONFIG_DIR", str(tmp_path))
     registry = ModelDownloadRegistry()
     monkeypatch.setattr(ModelDownloadRegistry, "_instance", registry)
 
@@ -179,7 +179,7 @@ def test_stopping_queued_job_removes_only_that_item(monkeypatch, tmp_path) -> No
         ModelDownloadRegistry,
     )
 
-    monkeypatch.setenv("MIDGARD_CONFIG_DIR", str(tmp_path))
+    monkeypatch.setenv("LLUNA_CONFIG_DIR", str(tmp_path))
     monkeypatch.setattr(
         ModelDownloadRegistry,
         "_instance",

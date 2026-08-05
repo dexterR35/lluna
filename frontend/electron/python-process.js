@@ -33,9 +33,9 @@ function findSourceRoot(startPath) {
 
 /** @param {string} projectRoot @returns {string[]} */
 function installedVenvPython(projectRoot) {
-  let venvName = "midgardEnv";
+  let venvName = "llunaEnv";
   try {
-    const runtime = JSON.parse(fs.readFileSync(path.join(projectRoot, "midgard_runtime.json"), "utf8"));
+    const runtime = JSON.parse(fs.readFileSync(path.join(projectRoot, "lluna_runtime.json"), "utf8"));
     if (typeof runtime?.venv === "string" && runtime.venv) venvName = runtime.venv;
   } catch { /* Fall back to the installer default and .venv. */ }
   return process.platform === "win32"
@@ -51,17 +51,17 @@ function installedVenvPython(projectRoot) {
 
 function resolveBackendCommand() {
   if (app.isPackaged) {
-    const executable = process.platform === "win32" ? "midgard-backend.exe" : "midgard-backend";
+    const executable = process.platform === "win32" ? "lluna-backend.exe" : "lluna-backend";
     return { command: path.join(process.resourcesPath, "backend-sidecar", executable), args: [] };
   }
   const appRoot = app.getAppPath();
   const projectRoot = findSourceRoot(appRoot);
-  if (!projectRoot) throw new Error(`Could not locate the Midgard source root from ${appRoot}`);
+  if (!projectRoot) throw new Error(`Could not locate the Lluna source root from ${appRoot}`);
   const candidates = [
     ...installedVenvPython(projectRoot),
     ...(process.platform === "win32" ? ["python.exe"] : ["python3.12", "python3"]),
   ];
-  const command = process.env.MIDGARD_PYTHON || candidates.find((candidate) => !path.isAbsolute(candidate) || fs.existsSync(candidate)) || candidates.at(-1);
+  const command = process.env.LLUNA_PYTHON || candidates.find((candidate) => !path.isAbsolute(candidate) || fs.existsSync(candidate)) || candidates.at(-1);
   if (!command) throw new Error("Could not resolve a Python executable");
   return { command, args: ["-m", "backend.api.app"], cwd: projectRoot };
 }
@@ -93,10 +93,10 @@ async function startPythonControlPlane() {
     cwd: resolved.cwd || process.resourcesPath,
     env: {
       ...process.env,
-      MIDGARD_SESSION_TOKEN: token,
-      MIDGARD_CONFIG_DIR: path.join(app.getPath("userData"), "config"),
-      MIDGARD_DATA_DIR: app.getPath("userData"),
-      MIDGARD_MODELS_DIR: path.join(app.getPath("userData"), "models"),
+      LLUNA_SESSION_TOKEN: token,
+      LLUNA_CONFIG_DIR: path.join(app.getPath("userData"), "config"),
+      LLUNA_DATA_DIR: app.getPath("userData"),
+      LLUNA_MODELS_DIR: path.join(app.getPath("userData"), "models"),
       PYTHONUNBUFFERED: "1",
     },
     windowsHide: true,

@@ -86,7 +86,7 @@ def prepare_control_plane() -> BootstrapReport:
         cleanup_stale_workspaces()
     except (ImportError, OSError) as exc:
         logger.warning("Stale workspace cleanup skipped: %s", exc)
-    os.environ["MIDGARD_BOOTSTRAPPED"] = "1"
+    os.environ["LLUNA_BOOTSTRAPPED"] = "1"
     elapsed_ms = int((monotonic() - started) * 1000)
     logger.info("Control-plane bootstrap completed in %d ms", elapsed_ms)
     return BootstrapReport(paths, changes, elapsed_ms)

@@ -11,16 +11,16 @@ const executableIn = (directory) =>
     ? path.join(directory, process.platform === "win32" ? "Scripts" : "bin", executableName)
     : null;
 
-let installedEnvironment = "midgardEnv";
+let installedEnvironment = "llunaEnv";
 try {
-  const runtime = JSON.parse(fs.readFileSync(path.join(root, "midgard_runtime.json"), "utf8"));
+  const runtime = JSON.parse(fs.readFileSync(path.join(root, "lluna_runtime.json"), "utf8"));
   if (typeof runtime.venv === "string" && runtime.venv) installedEnvironment = runtime.venv;
 } catch {
   // The runtime manifest is optional in source checkouts.
 }
 
 const localCandidates = [
-  process.env.MIDGARD_PYTHON || null,
+  process.env.LLUNA_PYTHON || null,
   executableIn(process.env.VIRTUAL_ENV),
   executableIn(path.join(root, installedEnvironment)),
   executableIn(path.join(root, ".venv")),

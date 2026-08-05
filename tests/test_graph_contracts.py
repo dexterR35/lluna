@@ -19,7 +19,7 @@ def test_catalog_contains_all_existing_ai_adapters():
         "select_subject",
         "lama_retouch",
     } <= adapters
-    assert not {"midgard.utility.metadata", "midgard.utility.note"} & {
+    assert not {"lluna.utility.metadata", "lluna.utility.note"} & {
         item.schema_id for item in list_nodes()
     }
 
@@ -27,8 +27,8 @@ def test_catalog_contains_all_existing_ai_adapters():
 def test_processing_nodes_publish_explicit_model_choices_and_defaults():
     catalog = {item.schema_id: item for item in list_nodes()}
     expected = {
-        "midgard.image.upscale": "RealESRGAN_x2plus",
-        "midgard.generate.image": "FLUX.2-klein-base-4B",
+        "lluna.image.upscale": "RealESRGAN_x2plus",
+        "lluna.generate.image": "FLUX.2-klein-base-4B",
     }
     for schema_id, default in expected.items():
         model = next(
@@ -40,7 +40,7 @@ def test_processing_nodes_publish_explicit_model_choices_and_defaults():
 
 
 def test_supir_is_a_reviewed_upscale_option_with_model_specific_controls():
-    upscale = next(item for item in list_nodes() if item.schema_id == "midgard.image.upscale")
+    upscale = next(item for item in list_nodes() if item.schema_id == "lluna.image.upscale")
     model = next(item for item in upscale.parameters if item.id == "model")
     supir = next(item for item in model.options if item["value"] == "SUPIR")
     assert supir["modelId"] == "supir"
@@ -56,7 +56,7 @@ def test_supir_is_a_reviewed_upscale_option_with_model_specific_controls():
     assert parameters["useTileVae"].visible_for_models == ["SUPIR"]
     assert "SUPIR" not in parameters["denoise"].visible_for_models
 
-    llava = next(item for item in list_nodes() if item.schema_id == "midgard.input.llava")
+    llava = next(item for item in list_nodes() if item.schema_id == "lluna.input.llava")
     assert llava.description
     assert llava.adapter == "llava_config"
     assert {item.id for item in llava.parameters} == {
@@ -70,9 +70,9 @@ def test_supir_is_a_reviewed_upscale_option_with_model_specific_controls():
 
 def test_image_queue_and_composite_nodes_publish_batch_contracts():
     catalog = {item.schema_id: item for item in list_nodes()}
-    source = catalog["midgard.input.images"]
-    upscale = catalog["midgard.image.upscale"]
-    composite = catalog["midgard.image.composite"]
+    source = catalog["lluna.input.images"]
+    upscale = catalog["lluna.image.upscale"]
+    composite = catalog["lluna.image.composite"]
     assert source.outputs[0].multiple
     assert next(port for port in upscale.inputs if port.id == "image").multiple
     assert all(port.multiple for port in composite.inputs)
@@ -82,22 +82,22 @@ def test_image_queue_and_composite_nodes_publish_batch_contracts():
 def test_only_media_nodes_publish_preview_support():
     catalog = {item.schema_id: item for item in list_nodes()}
     for schema_id in (
-        "midgard.input.image",
-        "midgard.input.images",
-        "midgard.input.video",
-        "midgard.generate.image",
-        "midgard.output.preview_image",
-        "midgard.output.preview_video",
+        "lluna.input.image",
+        "lluna.input.images",
+        "lluna.input.video",
+        "lluna.generate.image",
+        "lluna.output.preview_image",
+        "lluna.output.preview_video",
     ):
         assert catalog[schema_id].supports_preview is True
-    assert catalog["midgard.output.save_image"].supports_preview is False
-    assert catalog["midgard.output.save_video"].supports_preview is False
+    assert catalog["lluna.output.save_image"].supports_preview is False
+    assert catalog["lluna.output.save_video"].supports_preview is False
 
 
 def test_select_object_requires_a_name_or_preview_point():
-    source = node("midgard.input.image", "source")
+    source = node("lluna.input.image", "source")
     source.parameters = {"pathGrantId": "test-grant"}
-    select = node("midgard.mask.select_object", "select")
+    select = node("lluna.mask.select_object", "select")
     workflow = WorkflowDocument(
         nodes=[source, select],
         edges=[
@@ -135,13 +135,13 @@ def test_every_node_model_option_has_a_lifecycle_inventory_entry():
 
 
 def test_legacy_bypass_is_discarded_from_nodes():
-    parsed = WorkflowNode.model_validate({"schemaId": "midgard.input.prompt", "bypass": True})
+    parsed = WorkflowNode.model_validate({"schemaId": "lluna.input.prompt", "bypass": True})
     assert "bypass" not in parsed.model_dump(mode="json", by_alias=True)
 
 
 def test_typed_graph_validates_and_compiles_topologically():
-    source = node("midgard.input.image", "source")
-    preview = node("midgard.output.preview_image", "preview")
+    source = node("lluna.input.image", "source")
+    preview = node("lluna.output.preview_image", "preview")
     source.parameters = {"pathGrantId": "test-grant"}
     workflow = WorkflowDocument(
         nodes=[source, preview],
@@ -160,8 +160,8 @@ def test_typed_graph_validates_and_compiles_topologically():
 
 
 def test_incompatible_connection_and_cycle_are_rejected():
-    prompt = node("midgard.input.prompt", "prompt")
-    preview = node("midgard.output.preview_image", "preview")
+    prompt = node("lluna.input.prompt", "prompt")
+    preview = node("lluna.output.preview_image", "preview")
     workflow = WorkflowDocument(
         nodes=[prompt, preview],
         edges=[
@@ -177,10 +177,10 @@ def test_incompatible_connection_and_cycle_are_rejected():
 
 
 def test_known_batch_can_flow_into_batch_save_output():
-    source = node("midgard.input.images", "source")
+    source = node("lluna.input.images", "source")
     source.parameters = {"pathGrantIds": ["one", "two"]}
-    enhance = node("midgard.image.upscale", "enhance")
-    save = node("midgard.output.save_image", "save")
+    enhance = node("lluna.image.upscale", "enhance")
+    save = node("lluna.output.save_image", "save")
     workflow = WorkflowDocument(
         nodes=[source, enhance, save],
         edges=[
@@ -201,19 +201,19 @@ def test_known_batch_can_flow_into_batch_save_output():
     result = validate_workflow(workflow)
     assert result.valid, result.issues
     catalog = {item.schema_id: item for item in list_nodes()}
-    save_definition = catalog["midgard.output.save_image"]
+    save_definition = catalog["lluna.output.save_image"]
     assert save_definition.inputs[0].multiple
     assert save_definition.outputs[0].multiple
     assert not save_definition.supports_preview
 
 
 def test_repeated_processor_is_rejected_only_inside_the_planned_path():
-    source = node("midgard.input.image", "source")
+    source = node("lluna.input.image", "source")
     source.parameters = {"pathGrantId": "grant"}
-    first_remove = node("midgard.image.upscale", "first-upscale")
-    enhance = node("midgard.image.low_light", "low-light")
-    second_remove = node("midgard.image.upscale", "second-upscale")
-    preview = node("midgard.output.preview_image", "preview")
+    first_remove = node("lluna.image.upscale", "first-upscale")
+    enhance = node("lluna.image.low_light", "low-light")
+    second_remove = node("lluna.image.upscale", "second-upscale")
+    preview = node("lluna.output.preview_image", "preview")
     workflow = WorkflowDocument(
         nodes=[source, first_remove, enhance, second_remove, preview],
         edges=[
@@ -255,11 +255,11 @@ def test_repeated_processor_is_rejected_only_inside_the_planned_path():
 
 
 def test_orphan_nodes_do_not_block_output_chain():
-    source = node("midgard.input.image", "source")
-    enhance = node("midgard.image.upscale", "enhance")
-    preview = node("midgard.output.preview_image", "preview")
-    orphan_generate = node("midgard.generate.image", "orphan-generate")
-    orphan_retouch = node("midgard.image.lama_retouch", "orphan-retouch")
+    source = node("lluna.input.image", "source")
+    enhance = node("lluna.image.upscale", "enhance")
+    preview = node("lluna.output.preview_image", "preview")
+    orphan_generate = node("lluna.generate.image", "orphan-generate")
+    orphan_retouch = node("lluna.image.lama_retouch", "orphan-retouch")
     source.parameters = {"pathGrantId": "test-grant"}
     workflow = WorkflowDocument(
         nodes=[source, enhance, preview, orphan_generate, orphan_retouch],
@@ -289,10 +289,10 @@ def test_orphan_nodes_do_not_block_output_chain():
 
 
 def test_run_modes_reuse_upstream_outputs_without_scheduling_upstream_nodes():
-    source = node("midgard.input.image", "source")
-    remove = node("midgard.image.low_light", "low-light")
-    enhance = node("midgard.image.upscale", "enhance")
-    preview = node("midgard.output.preview_image", "preview")
+    source = node("lluna.input.image", "source")
+    remove = node("lluna.image.low_light", "low-light")
+    enhance = node("lluna.image.upscale", "enhance")
+    preview = node("lluna.output.preview_image", "preview")
     source.parameters = {"pathGrantId": "test-grant"}
     remove.result = {"status": "SUCCEEDED", "artifactIds": ["remove-artifact"]}
     workflow = WorkflowDocument(
@@ -325,15 +325,15 @@ def test_run_modes_reuse_upstream_outputs_without_scheduling_upstream_nodes():
 
 
 def test_run_from_here_requires_stored_side_inputs_without_scheduling_them():
-    source = node("midgard.input.image", "source")
+    source = node("lluna.input.image", "source")
     source.parameters = {"pathGrantId": "image-grant"}
-    mask = node("midgard.input.mask", "mask")
+    mask = node("lluna.input.mask", "mask")
     mask.parameters = {"pathGrantId": "mask-grant"}
     source.result = {"status": "SUCCEEDED", "artifactIds": ["source-artifact"]}
     mask.result = {"status": "SUCCEEDED", "artifactIds": ["mask-artifact"]}
-    enhance = node("midgard.image.upscale", "enhance")
-    retouch = node("midgard.image.lama_retouch", "retouch")
-    preview = node("midgard.output.preview_image", "preview")
+    enhance = node("lluna.image.upscale", "enhance")
+    retouch = node("lluna.image.lama_retouch", "retouch")
+    preview = node("lluna.output.preview_image", "preview")
     workflow = WorkflowDocument(
         nodes=[source, mask, enhance, retouch, preview],
         edges=[
@@ -371,7 +371,7 @@ def test_run_from_here_requires_stored_side_inputs_without_scheduling_them():
 
 
 def test_scoped_validation_ignores_unrelated_invalid_nodes_and_edges():
-    selected = node("midgard.input.prompt", "selected")
+    selected = node("lluna.input.prompt", "selected")
     selected.parameters = {"value": "A castle"}
     unrelated = node("unknown.node.type", "unrelated")
     workflow = WorkflowDocument(
@@ -396,9 +396,9 @@ def test_scoped_validation_ignores_unrelated_invalid_nodes_and_edges():
 
 
 def test_document_validation_keeps_unrelated_errors_for_the_problems_panel():
-    source = node("midgard.input.image", "source")
+    source = node("lluna.input.image", "source")
     source.parameters = {"pathGrantId": "grant"}
-    preview = node("midgard.output.preview_image", "preview")
+    preview = node("lluna.output.preview_image", "preview")
     unrelated = node("unknown.node.type", "unrelated")
     workflow = WorkflowDocument(
         nodes=[source, preview, unrelated],
@@ -422,7 +422,7 @@ def test_document_validation_keeps_unrelated_errors_for_the_problems_panel():
 
 
 def test_scoped_run_requires_a_real_selection():
-    prompt = node("midgard.input.prompt", "prompt")
+    prompt = node("lluna.input.prompt", "prompt")
     workflow = WorkflowDocument(nodes=[prompt])
     result = validate_workflow(workflow, mode="selected", selected_node_ids=[])
     assert not result.valid
@@ -430,8 +430,8 @@ def test_scoped_run_requires_a_real_selection():
 
 
 def test_scoped_validation_reports_missing_required_boundary_output():
-    source = node("midgard.input.image", "source")
-    enhance = node("midgard.image.upscale", "enhance")
+    source = node("lluna.input.image", "source")
+    enhance = node("lluna.image.upscale", "enhance")
     workflow = WorkflowDocument(
         nodes=[source, enhance],
         edges=[

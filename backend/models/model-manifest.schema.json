@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://midgard.local/schemas/model-manifest-v1.json",
-  "title": "Midgard model manifest",
+  "$id": "https://lluna.local/schemas/model-manifest-v1.json",
+  "title": "Lluna model manifest",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema", "id", "name", "task", "adapter", "source", "runtime"],
@@ -21,7 +21,7 @@
       ]
     },
     "adapter": {
-      "enum": ["diffusers", "transformers", "paddle", "midgard-native", "supir"]
+      "enum": ["diffusers", "transformers", "paddle", "lluna-native", "supir"]
     },
     "license": { "type": "string" },
     "gated": { "type": "boolean" },

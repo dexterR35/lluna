@@ -23,7 +23,7 @@ def wait_for_run(manager, run_id, timeout=3):
 
 
 def test_fake_worker_vertical_slice_commits_artifact(monkeypatch, tmp_path):
-    monkeypatch.setenv("MIDGARD_FAKE_WORKER", "1")
+    monkeypatch.setenv("LLUNA_FAKE_WORKER", "1")
     source_path = tmp_path / "input.png"
     Image.new("RGBA", (4, 3), (10, 20, 30, 255)).save(source_path)
     ArtifactStore._instance = ArtifactStore(tmp_path / "artifacts")
@@ -33,12 +33,12 @@ def test_fake_worker_vertical_slice_commits_artifact(monkeypatch, tmp_path):
     RunManager._instance = None
     manager = RunManager.instance()
     source = WorkflowNode(
-        id="load", schema_id="midgard.input.image", parameters={"pathGrantId": grant.grant_id}
+        id="load", schema_id="lluna.input.image", parameters={"pathGrantId": grant.grant_id}
     )
     enhance = WorkflowNode(
-        id="enhance", schema_id="midgard.image.upscale", parameters={"model": "test"}
+        id="enhance", schema_id="lluna.image.upscale", parameters={"model": "test"}
     )
-    preview = WorkflowNode(id="preview", schema_id="midgard.output.preview_image")
+    preview = WorkflowNode(id="preview", schema_id="lluna.output.preview_image")
     workflow = WorkflowDocument(
         nodes=[source, enhance, preview],
         edges=[
@@ -81,7 +81,7 @@ def test_fake_worker_vertical_slice_commits_artifact(monkeypatch, tmp_path):
 
 
 def test_image_queue_saves_lineage_names_and_requires_explicit_replace(monkeypatch, tmp_path):
-    monkeypatch.setenv("MIDGARD_FAKE_WORKER", "1")
+    monkeypatch.setenv("LLUNA_FAKE_WORKER", "1")
     first_path = tmp_path / "portrait.png"
     second_path = tmp_path / "product.jpg"
     Image.new("RGBA", (4, 3), (10, 20, 30, 255)).save(first_path)
@@ -99,22 +99,22 @@ def test_image_queue_saves_lineage_names_and_requires_explicit_replace(monkeypat
 
     source = WorkflowNode(
         id="load",
-        schema_id="midgard.input.images",
+        schema_id="lluna.input.images",
         parameters={"pathGrantIds": [item.grant_id for item in source_grants]},
     )
     low_light = WorkflowNode(
         id="low-light",
-        schema_id="midgard.image.low_light",
+        schema_id="lluna.image.low_light",
         parameters={"model": "test"},
     )
     upscale = WorkflowNode(
         id="upscale",
-        schema_id="midgard.image.upscale",
+        schema_id="lluna.image.upscale",
         parameters={"model": "test"},
     )
     save = WorkflowNode(
         id="save",
-        schema_id="midgard.output.save_image",
+        schema_id="lluna.output.save_image",
         parameters={
             "destinationGrantId": destination_grant.grant_id,
             "conflictPolicy": "ask",
@@ -168,7 +168,7 @@ def test_image_queue_saves_lineage_names_and_requires_explicit_replace(monkeypat
 
 
 def test_multiple_scalar_image_links_share_one_batch_save_input(monkeypatch, tmp_path):
-    monkeypatch.setenv("MIDGARD_FAKE_WORKER", "1")
+    monkeypatch.setenv("LLUNA_FAKE_WORKER", "1")
     first_path = tmp_path / "first.png"
     second_path = tmp_path / "second.png"
     Image.new("RGB", (3, 3), (10, 20, 30)).save(first_path)
@@ -187,17 +187,17 @@ def test_multiple_scalar_image_links_share_one_batch_save_input(monkeypatch, tmp
 
     first = WorkflowNode(
         id="first",
-        schema_id="midgard.input.image",
+        schema_id="lluna.input.image",
         parameters={"pathGrantId": first_grant.grant_id},
     )
     second = WorkflowNode(
         id="second",
-        schema_id="midgard.input.image",
+        schema_id="lluna.input.image",
         parameters={"pathGrantId": second_grant.grant_id},
     )
     save = WorkflowNode(
         id="save",
-        schema_id="midgard.output.save_image",
+        schema_id="lluna.output.save_image",
         parameters={
             "destinationGrantId": destination_grant.grant_id,
             "conflictPolicy": "replace",
@@ -237,7 +237,7 @@ def test_load_image_uses_saved_artifact_when_desktop_grant_has_expired(tmp_path)
     manager = RunManager.instance()
     node = WorkflowNode(
         id="load",
-        schema_id="midgard.input.image",
+        schema_id="lluna.input.image",
         parameters={"pathGrantId": "expired-grant"},
         result={"status": "READY", "artifactIds": [artifact.artifact_id]},
     )
@@ -256,7 +256,7 @@ def test_supir_uses_settings_from_connected_llava_node(monkeypatch):
     monkeypatch.setattr(manager, "_invoke_worker", capture)
     node = WorkflowNode(
         id="supir",
-        schema_id="midgard.image.upscale",
+        schema_id="lluna.image.upscale",
         parameters={"model": "SUPIR", "useLlava": True},
     )
     llava = {
@@ -276,7 +276,7 @@ def test_supir_uses_settings_from_connected_llava_node(monkeypatch):
 
 
 def test_selected_run_reuses_boundary_artifact_without_running_upstream(monkeypatch, tmp_path):
-    monkeypatch.setenv("MIDGARD_FAKE_WORKER", "1")
+    monkeypatch.setenv("LLUNA_FAKE_WORKER", "1")
     source_path = tmp_path / "boundary.png"
     Image.new("RGB", (6, 5), (30, 40, 50)).save(source_path)
     ArtifactStore._instance = ArtifactStore(tmp_path / "artifacts")
@@ -286,11 +286,11 @@ def test_selected_run_reuses_boundary_artifact_without_running_upstream(monkeypa
     manager = RunManager.instance()
     source = WorkflowNode(
         id="source",
-        schema_id="midgard.input.image",
+        schema_id="lluna.input.image",
         result={"status": "SUCCEEDED", "artifactIds": [artifact.artifact_id]},
     )
     enhance = WorkflowNode(
-        id="enhance", schema_id="midgard.image.upscale", parameters={"model": "test"}
+        id="enhance", schema_id="lluna.image.upscale", parameters={"model": "test"}
     )
     workflow = WorkflowDocument(
         nodes=[source, enhance],
@@ -328,12 +328,12 @@ def test_boundary_output_keeps_single_artifacts_scalar_and_batches_ordered(tmp_p
     manager = RunManager.instance()
     scalar = WorkflowNode(
         id="scalar",
-        schema_id="midgard.image.upscale",
+        schema_id="lluna.image.upscale",
         result={"status": "SUCCEEDED", "artifactIds": [first.artifact_id]},
     )
     batch = WorkflowNode(
         id="batch",
-        schema_id="midgard.image.upscale",
+        schema_id="lluna.image.upscale",
         result={
             "status": "SUCCEEDED",
             "artifactIds": [first.artifact_id, second.artifact_id],
@@ -341,11 +341,11 @@ def test_boundary_output_keeps_single_artifacts_scalar_and_batches_ordered(tmp_p
     )
     scalar_target = WorkflowNode(
         id="scalar-target",
-        schema_id="midgard.output.preview_image",
+        schema_id="lluna.output.preview_image",
     )
     batch_target = WorkflowNode(
         id="batch-target",
-        schema_id="midgard.output.preview_image",
+        schema_id="lluna.output.preview_image",
     )
     workflow = WorkflowDocument(
         nodes=[scalar, batch, scalar_target, batch_target],
@@ -387,7 +387,7 @@ def _wait_for_run(manager: RunManager, run_id: str):
 
 
 def test_image_queue_maps_one_processor_over_ordered_artifacts(monkeypatch, tmp_path):
-    monkeypatch.setenv("MIDGARD_FAKE_WORKER", "1")
+    monkeypatch.setenv("LLUNA_FAKE_WORKER", "1")
     ArtifactStore._instance = ArtifactStore(tmp_path / "artifacts")
     DesktopGrantStore._instance = None
     grants = DesktopGrantStore.instance()
@@ -401,15 +401,15 @@ def test_image_queue_maps_one_processor_over_ordered_artifacts(monkeypatch, tmp_
     manager = RunManager.instance()
     source = WorkflowNode(
         id="load-many",
-        schema_id="midgard.input.images",
+        schema_id="lluna.input.images",
         parameters={"pathGrantIds": grant_ids},
     )
     remove = WorkflowNode(
         id="low-light",
-        schema_id="midgard.image.low_light",
+        schema_id="lluna.image.low_light",
         parameters={"model": "test"},
     )
-    preview = WorkflowNode(id="preview", schema_id="midgard.output.preview_image")
+    preview = WorkflowNode(id="preview", schema_id="lluna.output.preview_image")
     workflow = WorkflowDocument(
         nodes=[source, remove, preview],
         edges=[
@@ -456,20 +456,20 @@ def test_composite_broadcasts_one_background_across_foreground_queue(tmp_path):
     manager = RunManager.instance()
     foregrounds = WorkflowNode(
         id="foregrounds",
-        schema_id="midgard.input.images",
+        schema_id="lluna.input.images",
         parameters={"pathGrantIds": foreground_ids},
     )
     background = WorkflowNode(
         id="background",
-        schema_id="midgard.input.image",
+        schema_id="lluna.input.image",
         parameters={"pathGrantId": background_grant.grant_id},
     )
     composite = WorkflowNode(
         id="composite",
-        schema_id="midgard.image.composite",
+        schema_id="lluna.image.composite",
         parameters={"fit": "cover"},
     )
-    preview = WorkflowNode(id="preview", schema_id="midgard.output.preview_image")
+    preview = WorkflowNode(id="preview", schema_id="lluna.output.preview_image")
     workflow = WorkflowDocument(
         nodes=[foregrounds, background, composite, preview],
         edges=[
@@ -527,7 +527,7 @@ def test_workflow_queue_runs_front_priority_before_fifo_items(monkeypatch, tmp_p
         nodes=[
             WorkflowNode(
                 id="prompt",
-                schema_id="midgard.input.prompt",
+                schema_id="lluna.input.prompt",
                 parameters={"value": "queued"},
             )
         ]
@@ -569,7 +569,7 @@ def test_cancelling_queued_run_does_not_execute_it(monkeypatch, tmp_path):
 
     monkeypatch.setattr(manager, "_execute", execute)
     workflow = WorkflowDocument(
-        nodes=[WorkflowNode(id="value", schema_id="midgard.input.number", parameters={"value": 1})]
+        nodes=[WorkflowNode(id="value", schema_id="lluna.input.number", parameters={"value": 1})]
     )
     first = manager.start(workflow)
     assert started.wait(timeout=2)

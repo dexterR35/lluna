@@ -12,7 +12,7 @@ import re
 from pathlib import Path
 
 _ASSET = re.compile(
-    r"^Midgard-(?P<version>\d+\.\d+\.\d+)-"
+    r"^Lluna-(?P<version>\d+\.\d+\.\d+)-"
     r"(?P<platform>windows|linux|macos)-"
     r"(?P<architecture>x64|arm64)-"
     r"(?P<profile>cpu|cuda|directml|mps)"
@@ -74,7 +74,7 @@ def main() -> int:
     parser.add_argument("--signature-output", type=Path, required=True)
     parser.add_argument(
         "--private-key-env",
-        default="MIDGARD_UPDATE_PRIVATE_KEY_B64",
+        default="LLUNA_UPDATE_PRIVATE_KEY_B64",
     )
     args = parser.parse_args()
     private_key = os.environ.get(args.private_key_env, "")

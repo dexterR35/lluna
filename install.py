@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Midgard installer - detects CUDA vs CPU, lets you choose, then installs deps + verifies models.
+Lluna installer - detects CUDA vs CPU, lets you choose, then installs deps + verifies models.
 
 GPU mode needs NVIDIA drivers (nvidia-smi). You do NOT need the NVIDIA CUDA Toolkit (full SDK) —
 install.py pulls GPU PyTorch/Paddle wheels that bundle the CUDA runtime libs.
@@ -26,8 +26,8 @@ from pathlib import Path
 from typing import Optional
 
 ROOT = Path(__file__).resolve().parent
-VENV_NAME = "midgardEnv"
-RUNTIME_FILE = ROOT / "midgard_runtime.json"
+VENV_NAME = "llunaEnv"
+RUNTIME_FILE = ROOT / "lluna_runtime.json"
 SUPPORTED_PYTHON = (3, 12)
 
 TORCH_VERSION = "2.7.0"
@@ -42,7 +42,7 @@ TORCH_INDEX = {
     "cu126": "https://download.pytorch.org/whl/cu126",
     "cu128": "https://download.pytorch.org/whl/cu128",
 }
-# PyTorch CUDA wheel tags Midgard ships (see TORCH_INDEX). Highest first.
+# PyTorch CUDA wheel tags Lluna ships (see TORCH_INDEX). Highest first.
 TORCH_CUDA_TAGS = ("cu128", "cu126", "cu118")
 _TAG_RANK = {t: i for i, t in enumerate(reversed(TORCH_CUDA_TAGS))}
 
@@ -129,7 +129,7 @@ def find_python() -> str:
         return sys.executable
 
     raise SystemExit(
-        "Midgard requires 64-bit Python 3.12. Install Python 3.12 and rerun this installer."
+        "Lluna requires 64-bit Python 3.12. Install Python 3.12 and rerun this installer."
     )
 
 
@@ -154,7 +154,7 @@ def validate_python(python_bin: str | Path) -> None:
     if (major, minor) != SUPPORTED_PYTHON or bits != 64:
         raise SystemExit(
             f"Unsupported interpreter: Python {major}.{minor} {bits}-bit. "
-            "Midgard requires 64-bit Python 3.12."
+            "Lluna requires 64-bit Python 3.12."
         )
 
 
@@ -311,7 +311,7 @@ def driver_max_torch_tag(driver_cuda: str) -> str:
 
 
 def gpu_series_label(cap: float) -> str:
-    """Human label for GeForce/RTX generations Midgard maps."""
+    """Human label for GeForce/RTX generations Lluna maps."""
     if cap >= 12.0:
         return "5xxx (Blackwell)"
     if cap >= 8.9:
@@ -417,14 +417,14 @@ def choose_mode_gui(default_cuda: bool, detect_msg: str) -> str:
     result: dict[str, str] = {"mode": "cuda" if default_cuda else "cpu"}
 
     root = tk.Tk()
-    root.title("Midgard Installer")
+    root.title("Lluna Installer")
     root.resizable(False, False)
     root.attributes("-topmost", True)
 
     frame = ttk.Frame(root, padding=20)
     frame.grid()
 
-    ttk.Label(frame, text="Midgard Installer", font=("Segoe UI", 14, "bold")).grid(
+    ttk.Label(frame, text="Lluna Installer", font=("Segoe UI", 14, "bold")).grid(
         row=0, column=0, columnspan=2, sticky="w", pady=(0, 8)
     )
     ttk.Label(frame, text=detect_msg, wraplength=420).grid(
@@ -779,7 +779,7 @@ def verify_models() -> None:
     missing = [str(p.relative_to(ROOT)) for p in required if not p.exists()]
     if missing:
         raise SystemExit(
-            "Missing model files (copy the full Midgard folder including backend/models):\n  "
+            "Missing model files (copy the full Lluna folder including backend/models):\n  "
             + "\n  ".join(missing)
         )
 
@@ -837,7 +837,7 @@ def write_runtime(
     mode: str, torch_tag: str, gpu_name: str, compute_cap: str = "", total_vram_mb: float = 0.0
 ) -> None:
     data = {
-        "product": "Midgard",
+        "product": "Lluna",
         "accel": mode,
         "torch_cuda_tag": torch_tag or None,
         "gpu_name": gpu_name or None,
@@ -859,7 +859,7 @@ def install_desktop_dependencies() -> None:
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
-        description="Midgard installer (CUDA auto-detect + CPU/CUDA choice)",
+        description="Lluna installer (CUDA auto-detect + CPU/CUDA choice)",
         epilog=_NO_CUDA_TOOLKIT_NOTE,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -898,7 +898,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     log("=" * 60)
-    log("  Midgard Installer")
+    log("  Lluna Installer")
     log("=" * 60)
     log(f"  {_NO_CUDA_TOOLKIT_NOTE}")
     log("")
@@ -955,7 +955,7 @@ def main() -> int:
     install_desktop_dependencies()
 
     log("\n" + "=" * 60)
-    log("  Midgard install complete.")
+    log("  Lluna install complete.")
     log("=" * 60)
     log("  Desktop: npm run dev")
     log("")

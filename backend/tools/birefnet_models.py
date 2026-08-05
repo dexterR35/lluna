@@ -74,7 +74,7 @@ def install_model(model_id: str) -> Path:
         registry.check_cancelled()
         if not is_model_installed_at(staging):
             raise RuntimeError("BiRefNet download is incomplete: config.json and model weights are required.")
-        marker = staging / ".midgard-installed"
+        marker = staging / ".lluna-installed"
         atomic_write_text(marker, f"{MODEL_REPOS[model_id]}\n")
         if target.exists():
             shutil.rmtree(target, ignore_errors=True)

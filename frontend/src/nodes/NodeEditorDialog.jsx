@@ -89,7 +89,7 @@ export function NodeEditorDialog({ nodeId, onClose, onManageModels }) {
       (parameter) =>
         parameter.id !== "model" &&
         !(
-          definition?.schemaId === "midgard.mask.select_object" &&
+          definition?.schemaId === "lluna.mask.select_object" &&
           ["points", "labels"].includes(parameter.id)
         ),
     ),

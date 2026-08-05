@@ -114,7 +114,7 @@ function EditorApp() {
   useEffect(() => {
     if (!server.nodes.length || recoveryChecked.current) return;
     recoveryChecked.current = true;
-    window.midgardDesktop?.recoverWorkflow().then((document) => {
+    window.llunaDesktop?.recoverWorkflow().then((document) => {
       if (document) setPendingRecovery(document);
     });
   }, [server.nodes]);
@@ -122,7 +122,7 @@ function EditorApp() {
     const timer = setInterval(() => {
       const state = useEditorStore.getState();
       if (state.dirty)
-        void window.midgardDesktop?.autosaveWorkflow(state.serialize());
+        void window.llunaDesktop?.autosaveWorkflow(state.serialize());
     }, 30000);
     return () => clearInterval(timer);
   }, []);
@@ -180,7 +180,7 @@ function EditorApp() {
           selectedNodeIds,
           options,
         );
-        window.midgardDesktop?.setRunProgress((run.progress || 0) / 100);
+        window.llunaDesktop?.setRunProgress((run.progress || 0) / 100);
         const desktop = useDesktopStore.getState();
         desktop.setValue("drawerVisible", true);
         desktop.setValue("drawerTab", run.status === "QUEUED" ? "queue" : "logs");
@@ -235,7 +235,7 @@ function EditorApp() {
     [],
   );
   const resetWorkflow = useCallback(async () => {
-    const doc = await window.midgardDesktop?.newWorkflow();
+    const doc = await window.llunaDesktop?.newWorkflow();
     useEditorStore.getState().newWorkflow(doc);
     useRunStore.getState().clearResults();
     setIssues([]);
@@ -249,14 +249,14 @@ function EditorApp() {
       await resetWorkflow();
     },
     openWorkflow: async () => {
-      const result = await window.midgardDesktop?.openWorkflow();
+      const result = await window.llunaDesktop?.openWorkflow();
       if (result) {
         editor.loadWorkflow(result.document);
         useRunStore.getState().hydrateResults(useEditorStore.getState().nodes);
       }
     },
     saveWorkflow: async () => {
-      const result = await window.midgardDesktop?.saveWorkflow(
+      const result = await window.llunaDesktop?.saveWorkflow(
         editor.serialize(),
       );
       if (result) {
@@ -302,7 +302,7 @@ function EditorApp() {
       "workflow:open": actions.openWorkflow,
       "workflow:save": actions.saveWorkflow,
       "workflow:save-as": async () => {
-        const result = await window.midgardDesktop?.saveWorkflowAs(
+        const result = await window.llunaDesktop?.saveWorkflowAs(
           e.serialize(),
         );
         if (result) e.markSaved();
@@ -318,7 +318,7 @@ function EditorApp() {
       "node:group": e.groupSelected,
       "node:auto-layout": e.autoLayout,
       "node:search": () => setSearch({ open: true, query: "", position: null }),
-      "view:fit": () => window.dispatchEvent(new Event("midgard:fit")),
+      "view:fit": () => window.dispatchEvent(new Event("lluna:fit")),
       "view:library": () => d.toggle("libraryVisible"),
       "view:minimap": () => d.toggle("minimapVisible"),
       "view:logs": () => d.toggle("drawerVisible"),
@@ -356,7 +356,7 @@ function EditorApp() {
   };
   useEffect(
     () =>
-      window.midgardDesktop?.onMenuCommand((command) =>
+      window.llunaDesktop?.onMenuCommand((command) =>
         executeRef.current?.(command),
       ),
     [],
@@ -374,7 +374,7 @@ function EditorApp() {
         setSearch({ open: true, query: "", position: null });
       }
       if (event.key.toLowerCase() === "f")
-        window.dispatchEvent(new Event("midgard:fit"));
+        window.dispatchEvent(new Event("lluna:fit"));
       if (event.ctrlKey && event.altKey && event.key === "Enter") {
         event.preventDefault();
         executeRef.current?.("run:stop");
@@ -387,7 +387,7 @@ function EditorApp() {
     return () => window.removeEventListener("keydown", key);
   }, []);
   if (server.loading && !server.nodes.length)
-    return <LoadingState label="Connecting to Midgard control plane…" />;
+    return <LoadingState label="Connecting to Lluna control plane…" />;
   if (server.error)
     return (
       <EmptyState
@@ -485,10 +485,10 @@ function EditorApp() {
         open={Boolean(pendingRecovery)}
         onClose={() => {
           setPendingRecovery(null);
-          void window.midgardDesktop?.clearRecovery();
+          void window.llunaDesktop?.clearRecovery();
         }}
         title="Recover autosaved workflow?"
-        description="Midgard found an autosave from the last session. Restore it, or discard and start fresh."
+        description="Lluna found an autosave from the last session. Restore it, or discard and start fresh."
         bodyClassName="!hidden"
         footer={
           <>
@@ -496,7 +496,7 @@ function EditorApp() {
               variant="secondary"
               onClick={() => {
                 setPendingRecovery(null);
-                void window.midgardDesktop?.clearRecovery();
+                void window.llunaDesktop?.clearRecovery();
               }}
             >
               Discard

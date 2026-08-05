@@ -29,7 +29,7 @@ def test_configuration_precedence_and_legacy_migration(tmp_path) -> None:
         shipped_file=shipped,
         user_file=user,
         legacy_file=legacy,
-        environ={"MIDGARD_INPAINT_MODE": "lama"},
+        environ={"LLUNA_INPAINT_MODE": "lama"},
         overrides={"subtitle": {"sttn_max_load_num": 40}},
     )
 
@@ -85,7 +85,7 @@ def test_invalid_environment_override_is_rejected(tmp_path) -> None:
             shipped_file=tmp_path / "missing-defaults.json",
             user_file=tmp_path / "missing-user.json",
             legacy_file=tmp_path / "missing-legacy.json",
-            environ={"MIDGARD_HARDWARE_ACCELERATION": "sometimes"},
+            environ={"LLUNA_HARDWARE_ACCELERATION": "sometimes"},
         )
 
 

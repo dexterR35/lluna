@@ -211,7 +211,7 @@ const createRunState = (set, get) => ({
                 values.length,
             )
           : 0;
-        window.midgardDesktop?.setRunProgress(overall / 100);
+        window.llunaDesktop?.setRunProgress(overall / 100);
         return {
           nodeStates,
           run: state.run ? { ...state.run, progress: overall } : state.run,
@@ -269,7 +269,7 @@ const createRunState = (set, get) => ({
             : state.run,
         };
       });
-      if (terminal.has(status)) window.midgardDesktop?.setRunProgress(-1);
+      if (terminal.has(status)) window.llunaDesktop?.setRunProgress(-1);
     }
   },
 });

@@ -1,4 +1,4 @@
-"""Backend-owned catalog of Midgard workflow nodes."""
+"""Backend-owned catalog of Lluna workflow nodes."""
 
 from __future__ import annotations
 
@@ -49,6 +49,18 @@ UPSCALE_MODELS = [
         "SUPIR · diffusion restoration",
         "supir",
         "Professional photo-realistic restoration with quality/fidelity tuning (CUDA).",
+    ),
+    option(
+        "SeedVR2_3B",
+        "SeedVR2 · 3B",
+        "seedvr2-3b",
+        "Official one-step image/video restoration with a lower-memory 3B transformer (CUDA).",
+    ),
+    option(
+        "SeedVR2_7B",
+        "SeedVR2 · 7B",
+        "seedvr2-7b",
+        "Higher-capacity one-step image/video restoration (CUDA, very high VRAM).",
     ),
 ]
 BIREFNET_MODELS = [
@@ -115,7 +127,7 @@ def node(schema_id: str, name: str, category: str, description: str, **kwargs) -
 
 _NODES = [
     node(
-        "midgard.input.image",
+        "lluna.input.image",
         "Load Image",
         "Input/Media",
         "Loads an image through a desktop file grant.",
@@ -127,7 +139,7 @@ _NODES = [
         adapter="load_image",
     ),
     node(
-        "midgard.input.images",
+        "lluna.input.images",
         "Load Images",
         "Input/Media",
         "Loads an ordered image queue through desktop file grants (max 10).",
@@ -139,7 +151,7 @@ _NODES = [
         adapter="load_images",
     ),
     node(
-        "midgard.input.video",
+        "lluna.input.video",
         "Load Video",
         "Input/Media",
         "Loads a video through a desktop file grant.",
@@ -151,7 +163,7 @@ _NODES = [
         adapter="load_video",
     ),
     node(
-        "midgard.input.mask",
+        "lluna.input.mask",
         "Load Mask",
         "Input/Media",
         "Loads a grayscale mask.",
@@ -163,7 +175,7 @@ _NODES = [
         adapter="load_mask",
     ),
     node(
-        "midgard.input.prompt",
+        "lluna.input.prompt",
         "Prompt",
         "Input/Values",
         "Provides a text-to-image prompt.",
@@ -174,7 +186,7 @@ _NODES = [
         adapter="literal",
     ),
     node(
-        "midgard.input.llava",
+        "lluna.input.llava",
         "LLaVA Caption",
         "Input/AI",
         "Configures the automatic LLaVA image description used by SUPIR restoration.",
@@ -222,7 +234,7 @@ _NODES = [
         adapter="llava_config",
     ),
     node(
-        "midgard.input.number",
+        "lluna.input.number",
         "Number",
         "Input/Values",
         "Provides a numeric value.",
@@ -232,7 +244,7 @@ _NODES = [
         adapter="literal",
     ),
     node(
-        "midgard.input.integer",
+        "lluna.input.integer",
         "Integer",
         "Input/Values",
         "Provides an integer value.",
@@ -242,7 +254,7 @@ _NODES = [
         adapter="literal",
     ),
     node(
-        "midgard.input.boolean",
+        "lluna.input.boolean",
         "Boolean",
         "Input/Values",
         "Provides a boolean value.",
@@ -252,7 +264,7 @@ _NODES = [
         adapter="literal",
     ),
     node(
-        "midgard.generate.image",
+        "lluna.generate.image",
         "Generate Image",
         "Image/Generate",
         "Generates an image locally with an installed Diffusers model.",
@@ -296,10 +308,10 @@ _NODES = [
         adapter="generate",
     ),
     node(
-        "midgard.image.upscale",
+        "lluna.image.upscale",
         "Upscale Image",
         "Image/Enhance",
-        "Upscales image queues with Real-ESRGAN or diffusion-based SUPIR restoration.",
+        "Upscales image queues with Real-ESRGAN, SUPIR, or official SeedVR2 restoration.",
         icon="zoom-in",
         inputs=[
             port("image", "Image queue", PortType.IMAGE, required=True, multiple=True),
@@ -308,6 +320,36 @@ _NODES = [
         outputs=[port("image", "Images", PortType.IMAGE, multiple=True)],
         parameters=[
             parameter("model", "Model", "model", "RealESRGAN_x2plus", options=UPSCALE_MODELS),
+            parameter(
+                "seedvrTargetLongEdge",
+                "SeedVR2 target long edge",
+                "integer",
+                2048,
+                minimum=512,
+                maximum=8192,
+                step=16,
+                description="Target output size. SeedVR2 preserves the input aspect ratio.",
+                visible_for_models=["SeedVR2_3B", "SeedVR2_7B"],
+            ),
+            parameter(
+                "seedvrSpSize",
+                "SeedVR2 GPU group size",
+                "integer",
+                1,
+                minimum=1,
+                maximum=8,
+                description="Use one process per GPU for long videos; keep 1 for images.",
+                visible_for_models=["SeedVR2_3B", "SeedVR2_7B"],
+            ),
+            parameter(
+                "seedvrSeed",
+                "SeedVR2 seed",
+                "integer",
+                666,
+                minimum=-1,
+                maximum=2147483647,
+                visible_for_models=["SeedVR2_3B", "SeedVR2_7B"],
+            ),
             parameter(
                 "denoise",
                 "Pre-denoise",
@@ -574,12 +616,60 @@ _NODES = [
             ),
         ],
         capabilities=["pytorch"],
-        required_models=["realesrgan-x2"],
+        required_models=[],
         supports_preview=True,
         adapter="enhance",
     ),
     node(
-        "midgard.image.remove_background",
+        "lluna.video.upscale",
+        "Upscale Video",
+        "Video/Enhance",
+        "Restores and upscales video with official SeedVR2 temporal inference.",
+        icon="film",
+        inputs=[port("video", "Video", PortType.VIDEO, required=True)],
+        outputs=[port("video", "Video", PortType.VIDEO)],
+        parameters=[
+            parameter(
+                "model",
+                "Model",
+                "model",
+                "SeedVR2_3B",
+                options=[item for item in UPSCALE_MODELS if item["value"].startswith("SeedVR2")],
+            ),
+            parameter(
+                "seedvrTargetLongEdge",
+                "Target long edge",
+                "integer",
+                2048,
+                minimum=512,
+                maximum=8192,
+                step=16,
+            ),
+            parameter(
+                "seedvrSpSize",
+                "GPU group size",
+                "integer",
+                1,
+                minimum=1,
+                maximum=8,
+                description="One process per GPU for long videos.",
+            ),
+            parameter(
+                "seedvrSeed",
+                "Seed",
+                "integer",
+                666,
+                minimum=-1,
+                maximum=2147483647,
+            ),
+        ],
+        capabilities=["pytorch"],
+        required_models=[],
+        supports_preview=True,
+        adapter="enhance",
+    ),
+    node(
+        "lluna.image.remove_background",
         "Remove Background",
         "Image/Remove",
         "Creates a transparent foreground using an installed BiRefNet variant.",
@@ -619,7 +709,7 @@ _NODES = [
         adapter="birefnet",
     ),
     node(
-        "midgard.image.low_light",
+        "lluna.image.low_light",
         "Fix Low Light",
         "Image/Enhance",
         "Restores one dark image or an ordered image queue with MIRNet.",
@@ -642,7 +732,7 @@ _NODES = [
         adapter="low_light",
     ),
     node(
-        "midgard.image.composite",
+        "lluna.image.composite",
         "Composite Background",
         "Image/Compose",
         "Places transparent foregrounds over generated or uploaded backgrounds.",
@@ -669,7 +759,7 @@ _NODES = [
         adapter="composite",
     ),
     node(
-        "midgard.mask.select_object",
+        "lluna.mask.select_object",
         "Select Object",
         "Mask/Selection",
         "Creates a mask from clicks or a text description.",
@@ -699,7 +789,7 @@ _NODES = [
         adapter="select_subject",
     ),
     node(
-        "midgard.image.lama_retouch",
+        "lluna.image.lama_retouch",
         "LaMa Retouch",
         "Image/Retouch",
         "Fills a masked region using the bundled LaMa model.",
@@ -714,7 +804,7 @@ _NODES = [
         adapter="lama_retouch",
     ),
     node(
-        "midgard.image.remove_text",
+        "lluna.image.remove_text",
         "Remove Text from Image",
         "Image/Remove",
         "Detects and removes text from an image.",
@@ -725,7 +815,7 @@ _NODES = [
         adapter="subtitle",
     ),
     node(
-        "midgard.video.remove_text",
+        "lluna.video.remove_text",
         "Remove Text from Video",
         "Video/Remove",
         "Removes subtitles or text while preserving source timing and audio.",
@@ -737,7 +827,7 @@ _NODES = [
         adapter="subtitle",
     ),
     node(
-        "midgard.video.remove_background",
+        "lluna.video.remove_background",
         "Remove Background from Video",
         "Video/Remove",
         "Runs BiRefNet on every frame, preserving the source frame rate and audio when possible.",
@@ -772,7 +862,7 @@ _NODES = [
         adapter="birefnet",
     ),
     node(
-        "midgard.output.preview_image",
+        "lluna.output.preview_image",
         "Preview Image",
         "Output/Preview",
         "Shows one image or an ordered image queue on the node.",
@@ -784,7 +874,7 @@ _NODES = [
         adapter="passthrough",
     ),
     node(
-        "midgard.output.preview_mask",
+        "lluna.output.preview_mask",
         "Preview Mask",
         "Output/Preview",
         "Shows a grayscale segmentation mask or image mask on the node.",
@@ -796,7 +886,7 @@ _NODES = [
         adapter="passthrough",
     ),
     node(
-        "midgard.output.preview_alpha",
+        "lluna.output.preview_alpha",
         "Preview Alpha",
         "Output/Preview",
         "Shows the soft alpha channel on the node.",
@@ -808,7 +898,7 @@ _NODES = [
         adapter="passthrough",
     ),
     node(
-        "midgard.output.preview_video",
+        "lluna.output.preview_video",
         "Preview Video",
         "Output/Preview",
         "Shows a proxy video preview.",
@@ -820,7 +910,7 @@ _NODES = [
         adapter="passthrough",
     ),
     node(
-        "midgard.output.save_image",
+        "lluna.output.save_image",
         "Save Image",
         "Output/Save",
         "Saves one image or an image queue to a user-selected folder.",
@@ -847,7 +937,7 @@ _NODES = [
         adapter="save",
     ),
     node(
-        "midgard.output.save_video",
+        "lluna.output.save_video",
         "Save Video",
         "Output/Save",
         "Copies a video artifact to a user-selected destination.",
@@ -907,7 +997,7 @@ def list_nodes() -> list[NodeDefinition]:
             )
             custom.append(model_option)
         if custom:
-            generate = next(item for item in values if item.schema_id == "midgard.generate.image")
+            generate = next(item for item in values if item.schema_id == "lluna.generate.image")
             model_parameter = next(item for item in generate.parameters if item.id == "model")
             model_parameter.options.extend(custom)
     except (ImportError, OSError, ValueError):
@@ -936,7 +1026,7 @@ def list_nodes() -> list[NodeDefinition]:
                 )
                 for record in custom_records
             ]
-            for schema_id in ("midgard.image.remove_background", "midgard.video.remove_background"):
+            for schema_id in ("lluna.image.remove_background", "lluna.video.remove_background"):
                 definition = next(item for item in values if item.schema_id == schema_id)
                 model_parameter = next(item for item in definition.parameters if item.id == "model")
                 model_parameter.options.extend(custom_options)

@@ -15,7 +15,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     environment: release
     timeout-minutes: 120
-    env: {MIDGARD_TESTING: "1", MIDGARD_DISABLE_MODEL_DOWNLOADS: "1", MIDGARD_FAKE_WORKER: "1"}
+    env: {LLUNA_TESTING: "1", LLUNA_DISABLE_MODEL_DOWNLOADS: "1", LLUNA_FAKE_WORKER: "1"}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -27,4 +27,4 @@ jobs:
       - run: python scripts/static_guards.py
       - run: python packaging/build.py --clean --profile ${{ matrix.profile }}
       - uses: actions/upload-artifact@v6
-        with: {name: "midgard-${{ runner.os }}-${{ matrix.profile }}", path: "frontend/out/make/**/*", if-no-files-found: error}
+        with: {name: "lluna-${{ runner.os }}-${{ matrix.profile }}", path: "frontend/out/make/**/*", if-no-files-found: error}

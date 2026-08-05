@@ -344,7 +344,7 @@ function SupirSetup({ model, onChanged }) {
   const setup = model.setup || {};
 
   async function importFile(/** @type {"Q"|"F"|"sdxl"} */ kind) {
-    const desktop = window.midgardDesktop;
+    const desktop = window.llunaDesktop;
     if (!desktop) return;
     setImporting(kind);
     try {
@@ -368,18 +368,18 @@ function SupirSetup({ model, onChanged }) {
       <div>
         <p className="ui-copy-title">Official SUPIR setup</p>
         <p className="ui-help">
-          Non-commercial use only. Midgard uses the pinned official runtime and verifies every
+          Non-commercial use only. Lluna uses the pinned official runtime and verifies every
           downloaded checkpoint before installation.
         </p>
       </div>
       <div className="ui-actions justify-start">
-        <CompactButton variant="secondary" onClick={() => void window.midgardDesktop?.openExternal("supir-downloads")}>
+        <CompactButton variant="secondary" onClick={() => void window.llunaDesktop?.openExternal("supir-downloads")}>
           <ExternalLink className="ui-icon-sm" /> Official weights
         </CompactButton>
-        <CompactButton variant="secondary" onClick={() => void window.midgardDesktop?.openExternal("supir")}>
+        <CompactButton variant="secondary" onClick={() => void window.llunaDesktop?.openExternal("supir")}>
           <ExternalLink className="ui-icon-sm" /> Source & license
         </CompactButton>
-        <CompactButton variant="secondary" onClick={() => void window.midgardDesktop?.openExternal("supir-mirror")}>
+        <CompactButton variant="secondary" onClick={() => void window.llunaDesktop?.openExternal("supir-mirror")}>
           <ExternalLink className="ui-icon-sm" /> HF weight mirror
         </CompactButton>
       </div>

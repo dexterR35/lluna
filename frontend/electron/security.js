@@ -1,10 +1,10 @@
 import { shell, session } from "electron";
 
 const EXTERNAL_URLS = Object.freeze({
-  documentation: "https://github.com/dexterR35/midgard#readme",
-  homepage: "https://github.com/dexterR35/midgard",
-  releases: "https://github.com/dexterR35/midgard/releases",
-  issues: "https://github.com/dexterR35/midgard/issues",
+  documentation: "https://github.com/dexterR35/lluna#readme",
+  homepage: "https://github.com/dexterR35/lluna",
+  releases: "https://github.com/dexterR35/lluna/releases",
+  issues: "https://github.com/dexterR35/lluna/issues",
   supir: "https://github.com/Fanghua-Yu/SUPIR",
   "supir-downloads": "https://drive.google.com/drive/folders/1yELzm5SvAi9e7kPcO_jPp2XkTs4vK6aR",
   "supir-mirror": "https://huggingface.co/XCogni/Supir",

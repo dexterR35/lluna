@@ -24,7 +24,7 @@ const grants = new Map();
 
 function workflowTemplate() {
   const now = new Date().toISOString();
-  return { format: "midgard-workflow", version: 1, projectId: crypto.randomUUID(), name: "Untitled workflow", createdAt: now, updatedAt: now, nodes: [], edges: [], groups: [], projectSettings: {}, viewport: { x: 0, y: 0, zoom: 1 }, metadata: {} };
+  return { format: "lluna-workflow", version: 1, projectId: crypto.randomUUID(), name: "Untitled workflow", createdAt: now, updatedAt: now, nodes: [], edges: [], groups: [], projectSettings: {}, viewport: { x: 0, y: 0, zoom: 1 }, metadata: {} };
 }
 
 /** @param {string} filePath @param {"read" | "write" | "directory"} mode */
@@ -33,7 +33,7 @@ async function registerPathGrant(filePath, mode) {
   if (!activeBackend) throw new Error("Backend is not running");
   const response = await fetch(`${activeBackend.baseUrl}/api/desktop/grants`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "X-Midgard-Token": activeBackend.token },
+    headers: { "Content-Type": "application/json", "X-Lluna-Token": activeBackend.token },
     body: JSON.stringify({ path: filePath, mode }),
   });
   if (!response.ok) throw new Error(`Could not register path grant (${response.status})`);
@@ -66,7 +66,7 @@ function availableExportPath(directoryPath, fileName, reserved = new Set()) {
 
 /** @param {string} filePath @param {Record<string, any>} document */
 async function writeWorkflow(filePath, document) {
-  const normalized = filePath.endsWith(".midgard.json") ? filePath : `${filePath}.midgard.json`;
+  const normalized = filePath.endsWith(".lluna.json") ? filePath : `${filePath}.lluna.json`;
   const temporary = `${normalized}.tmp`;
   await fs.promises.mkdir(path.dirname(normalized), { recursive: true });
   await fs.promises.writeFile(temporary, `${JSON.stringify({ ...document, updatedAt: new Date().toISOString() }, null, 2)}
@@ -80,12 +80,12 @@ async function writeWorkflow(filePath, document) {
 /** @param {Record<string, any>} document */
 async function saveAs(document) {
   if (!mainWindow) throw new Error("Main window is unavailable");
-  const result = await dialog.showSaveDialog(mainWindow, { title: "Save Midgard Workflow", defaultPath: `${document.name || "workflow"}.midgard.json`, filters: [{ name: "Midgard Workflow", extensions: ["midgard.json", "json"] }] });
+  const result = await dialog.showSaveDialog(mainWindow, { title: "Save Lluna Workflow", defaultPath: `${document.name || "workflow"}.lluna.json`, filters: [{ name: "Lluna Workflow", extensions: ["lluna.json", "json"] }] });
   if (result.canceled || !result.filePath) return null;
   return writeWorkflow(result.filePath, document);
 }
 
-function recoveryPath() { return path.join(app.getPath("userData"), "autosave", "last.midgard.json"); }
+function recoveryPath() { return path.join(app.getPath("userData"), "autosave", "last.lluna.json"); }
 async function clearRecovery() { await fs.promises.unlink(recoveryPath()).catch(error => { if (!(error instanceof Error) || !("code" in error) || error.code !== "ENOENT") throw error; }); }
 /** @param {Record<string, any>} document */
 async function writeRecovery(document) { const target = recoveryPath(); await fs.promises.mkdir(path.dirname(target), { recursive: true }); const temporary = `${target}.tmp`; await fs.promises.writeFile(temporary, JSON.stringify(document), { encoding: "utf8", mode: 0o600 }); await fs.promises.rename(temporary, target); return true; }
@@ -97,11 +97,11 @@ function installIpc() {
   ipcMain.handle("workflow:new", async () => { currentWorkflowPath = null; await clearRecovery(); return workflowTemplate(); });
   ipcMain.handle("workflow:open", async () => {
     if (!mainWindow) throw new Error("Main window is unavailable");
-    const result = await dialog.showOpenDialog(mainWindow, { title: "Open Midgard Workflow", properties: ["openFile"], filters: [{ name: "Midgard Workflow", extensions: ["json"] }] });
+    const result = await dialog.showOpenDialog(mainWindow, { title: "Open Lluna Workflow", properties: ["openFile"], filters: [{ name: "Lluna Workflow", extensions: ["json"] }] });
     if (result.canceled || !result.filePaths[0]) return null;
     const filePath = result.filePaths[0];
     const document = JSON.parse(await fs.promises.readFile(filePath, "utf8"));
-    if (document.format !== "midgard-workflow") throw new Error("The selected file is not a Midgard workflow");
+    if (document.format !== "lluna-workflow") throw new Error("The selected file is not a Lluna workflow");
     currentWorkflowPath = filePath;
     return { document, name: path.basename(filePath), displayPath: filePath };
   });
@@ -198,11 +198,11 @@ async function createWindow() {
   const stateStore = createWindowStateStore(app.getPath("userData"));
   const state = stateStore.load();
   const icon = app.isPackaged
-    ? path.join(process.resourcesPath, "app-icon", "midgard.png")
-    : path.join(app.getAppPath(), "assets", "app-icon", "midgard.png");
+    ? path.join(process.resourcesPath, "app-icon", "lluna.png")
+    : path.join(app.getAppPath(), "assets", "app-icon", "lluna.png");
   mainWindow = new BrowserWindow({
     ...state, minWidth: 1100, minHeight: 700, show: false, backgroundColor: "#0b0f14",
-    title: "Midgard", icon, autoHideMenuBar: false,
+    title: "Lluna", icon, autoHideMenuBar: false,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"), nodeIntegration: false,
       contextIsolation: true, sandbox: true, webSecurity: true,
@@ -224,9 +224,9 @@ async function createWindow() {
 
 /** @param {unknown} error */
 async function showStartupError(error) {
-  const detail = "The local processing service did not become ready. Review backend.log in the Midgard logs directory, then restart the application.\n\n"
+  const detail = "The local processing service did not become ready. Review backend.log in the Lluna logs directory, then restart the application.\n\n"
     + String(error instanceof Error ? error.message : error);
-  dialog.showErrorBox("Midgard could not start", detail);
+  dialog.showErrorBox("Lluna could not start", detail);
 }
 
 if (!app.requestSingleInstanceLock()) app.quit();

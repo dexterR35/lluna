@@ -2,10 +2,10 @@ import { api, artifactObjectUrl, saveArtifact } from "../api/client";
 
 /** @type {Record<string, string>} */
 const SCHEMA_SUFFIXES = {
-  "midgard.image.remove_text": "_nosub",
-  "midgard.video.remove_text": "_nosub",
-  "midgard.image.upscale": "_upscale",
-  "midgard.image.low_light": "_lowlight",
+  "lluna.image.remove_text": "_nosub",
+  "lluna.video.remove_text": "_nosub",
+  "lluna.image.upscale": "_upscale",
+  "lluna.image.low_light": "_lowlight",
 };
 
 /** @param {string | undefined} schemaId */
@@ -46,12 +46,12 @@ export function fileStem(value) {
     .trim()
     .split(/[/\\]/)
     .pop();
-  if (!base) return "midgard-output";
+  if (!base) return "lluna-output";
   const stem = base.replace(/\.[^.]+$/, "");
   // Windows filenames forbid ASCII control characters; the range is intentional.
   // eslint-disable-next-line no-control-regex
   const cleaned = stem.replace(/[<>:"|?*\u0000-\u001f]/g, "_").trim();
-  return cleaned || "midgard-output";
+  return cleaned || "lluna-output";
 }
 
 /**
@@ -149,7 +149,7 @@ export async function saveArtifactsExport(artifactIds, options = {}) {
   const ids = [...new Set(artifactIds.filter(Boolean))];
   if (!ids.length) return [];
 
-  const desktop = window.midgardDesktop;
+  const desktop = window.llunaDesktop;
   const usedNames = new Set();
 
   /** @type {{ artifactId: string, fileName: string, metadata: Record<string, any>, url?: string }[]} */
@@ -157,7 +157,7 @@ export async function saveArtifactsExport(artifactIds, options = {}) {
   for (const artifactId of ids) {
     const metadata = await api(`/api/artifacts/${artifactId}/metadata`);
     const linked = await resolveLinkedExportInfo(metadata, options.schemaId);
-    const sourceName = linked.sourceName || "midgard-output";
+    const sourceName = linked.sourceName || "lluna-output";
     const fileName = buildExportFileName({
       sourceName,
       suffix: linked.suffix,

@@ -64,7 +64,7 @@ def detect_vram_and_cap() -> Tuple[float, Optional[str]]:
 
 def apply_soft_defaults_if_needed() -> bool:
     """Apply VRAM-based defaults once without mutating saved configuration."""
-    if os.environ.get("MIDGARD_TESTING") == "1":
+    if os.environ.get("LLUNA_TESTING") == "1":
         return False
     from backend.configuration.service import get_settings, update_settings
 

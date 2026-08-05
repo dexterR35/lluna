@@ -7,9 +7,9 @@ from pathlib import Path
 from backend.media.workspace import cleanup_stale_workspaces
 
 
-def test_cleanup_removes_only_stale_midgard_directories(tmp_path: Path) -> None:
-    stale = tmp_path / "midgard-test-old"
-    fresh = tmp_path / "midgard-test-new"
+def test_cleanup_removes_only_stale_lluna_directories(tmp_path: Path) -> None:
+    stale = tmp_path / "lluna-test-old"
+    fresh = tmp_path / "lluna-test-new"
     unrelated = tmp_path / "other-old"
     for path in (stale, fresh, unrelated):
         path.mkdir()

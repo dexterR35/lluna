@@ -10,7 +10,7 @@ from enum import Enum, unique
 
 from backend.tools.constant import SelectObjectModelId
 
-_MARKER = ".midgard_installed"
+_MARKER = ".lluna_installed"
 
 _SAM2_ALLOW_PATTERNS = (
     "*.json",

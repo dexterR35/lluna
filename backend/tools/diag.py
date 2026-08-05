@@ -1,16 +1,16 @@
 # -*- coding: utf-8 -*-
-"""CLI diagnostic / debug logger for Midgard Studio.
+"""CLI diagnostic / debug logger for Lluna Studio.
 
 Enable (default when stdout is a TTY):
-  MIDGARD_DIAG=1 npm run dev
+  LLUNA_DIAG=1 npm run dev
   npm run dev --diag
 
 Disable:
-  MIDGARD_DIAG=0 npm run dev
+  LLUNA_DIAG=0 npm run dev
   npm run dev --no-diag
 
 Optional noisy UI click log (off by default):
-  MIDGARD_DIAG_CLICKS=1 npm run dev
+  LLUNA_DIAG_CLICKS=1 npm run dev
 """
 
 from __future__ import annotations
@@ -76,7 +76,7 @@ def _env_flag(name: str) -> Optional[bool]:
 def is_enabled() -> bool:
     global _enabled
     if _enabled is None:
-        env = _env_flag("MIDGARD_DIAG")
+        env = _env_flag("LLUNA_DIAG")
         if env is not None:
             _enabled = env
         else:
@@ -217,22 +217,22 @@ def banner() -> None:
         if use_color():
             print(
                 f"\n{_BOLD}{_COLORS[CAT_START]}{line}\n"
-                f"  Midgard Studio - diagnostic CLI log ON\n"
+                f"  Lluna Studio - diagnostic CLI log ON\n"
                 f"  Focus: UPLOAD → MODEL → RUN → WORKER → PROCESS → PROGRESS\n"
                 f"  UI clicks are OFF (no ToolButton spam).\n"
-                f"  Enable clicks: MIDGARD_DIAG_CLICKS=1\n"
-                f"  Disable all:   MIDGARD_DIAG=0  or  --no-diag\n"
+                f"  Enable clicks: LLUNA_DIAG_CLICKS=1\n"
+                f"  Disable all:   LLUNA_DIAG=0  or  --no-diag\n"
                 f"{line}{_RESET}\n",
                 flush=True,
             )
         else:
             print(
                 f"\n{line}\n"
-                f"  Midgard Studio - diagnostic CLI log ON\n"
+                f"  Lluna Studio - diagnostic CLI log ON\n"
                 f"  Focus: UPLOAD → MODEL → RUN → WORKER → PROCESS → PROGRESS\n"
                 f"  UI clicks are OFF (no ToolButton spam).\n"
-                f"  Enable clicks: MIDGARD_DIAG_CLICKS=1\n"
-                f"  Disable all:   MIDGARD_DIAG=0  or  --no-diag\n"
+                f"  Enable clicks: LLUNA_DIAG_CLICKS=1\n"
+                f"  Disable all:   LLUNA_DIAG=0  or  --no-diag\n"
                 f"{line}\n",
                 flush=True,
             )

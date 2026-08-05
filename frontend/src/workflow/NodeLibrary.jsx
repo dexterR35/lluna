@@ -28,7 +28,7 @@ function LibraryNode({ node }) {
       draggable
       onDragStart={(event) =>
         event.dataTransfer.setData(
-          "application/x-midgard-node",
+          "application/x-lluna-node",
           node.schemaId,
         )
       }

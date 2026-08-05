@@ -204,7 +204,7 @@ class DynamicModelRegistry:
         from backend.models.registry import MODEL_REGISTRY
 
         if manifest.id in MODEL_REGISTRY or manifest.id.startswith("generate:"):
-            raise ManifestError(f"Model id {manifest.id!r} is reserved by Midgard.")
+            raise ManifestError(f"Model id {manifest.id!r} is reserved by Lluna.")
         target = self.root / manifest.id
         target.mkdir(parents=True, exist_ok=True)
         atomic_write_json(target / MANIFEST_FILENAME, manifest.to_dict())
@@ -246,7 +246,7 @@ class DynamicModelRegistry:
                         logger.exception("Could not rescan the custom model folder")
 
             self._watcher = threading.Thread(
-                target=watch, name="midgard-model-watcher", daemon=True
+                target=watch, name="lluna-model-watcher", daemon=True
             )
             self._watcher.start()
 
@@ -263,7 +263,7 @@ class DynamicModelRegistry:
 def _is_installed(path: Path, manifest: ModelManifest) -> bool:
     if path.is_file():
         return path.stat().st_size > 0
-    if (path / ".midgard-installed").is_file():
+    if (path / ".lluna-installed").is_file():
         return True
     if manifest.expected_files:
         return all((path / relative).is_file() for relative in manifest.expected_files)
@@ -291,7 +291,7 @@ def _path_stamp(path: Path, expected_files: tuple[str, ...]) -> tuple[int, int]:
         if path.is_file():
             stat = path.stat()
             return stat.st_mtime_ns, stat.st_size
-        watched = [path / MANIFEST_FILENAME, path / ".midgard-installed"]
+        watched = [path / MANIFEST_FILENAME, path / ".lluna-installed"]
         watched.extend(path / relative for relative in expected_files)
         stamps = [item.stat() for item in watched if item.is_file()]
         root = path.stat()

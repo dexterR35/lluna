@@ -85,7 +85,7 @@ function FileField({
   }
 
   async function choose() {
-    const desktop = window.midgardDesktop;
+    const desktop = window.llunaDesktop;
     if (!desktop) return;
     if (definition.type === "directory")
       return selectGrant(() => desktop.selectDirectory());
@@ -119,7 +119,7 @@ function FileField({
     }
     const truncated = multiple && accepted.length > MAX_BATCH_IMAGES;
     const files = accepted.slice(0, multiple ? MAX_BATCH_IMAGES : 1);
-    const desktop = window.midgardDesktop;
+    const desktop = window.llunaDesktop;
     if (!desktop?.registerDroppedFiles) {
       setError("File drop is available in the desktop app.");
       return;

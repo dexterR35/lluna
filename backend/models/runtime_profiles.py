@@ -42,13 +42,13 @@ RUNTIME_PROFILES: dict[str, RuntimeProfile] = {
     profile.id: profile
     for profile in (
         RuntimeProfile(
-            "midgard-native",
-            "Midgard native",
-            "midgard-native",
+            "lluna-native",
+            "Lluna native",
+            "lluna-native",
             (),
             (),
             ("cpu", "cuda", "directml", "mps"),
-            description="Built-in Midgard inference code.",
+            description="Built-in Lluna inference code.",
         ),
         RuntimeProfile(
             "diffusers-torch",
@@ -102,6 +102,17 @@ RUNTIME_PROFILES: dict[str, RuntimeProfile] = {
             experimental=False,
             description="Pinned Python 3.8–3.10 runtime for official SUPIR source.",
         ),
+        RuntimeProfile(
+            "seedvr-python",
+            "SeedVR2 isolated CUDA runtime",
+            "seedvr",
+            (),
+            (),
+            ("cuda",),
+            isolated=True,
+            experimental=False,
+            description="Official SeedVR2 Python 3.9/3.10 runtime with CUDA-only dependencies.",
+        ),
     )
 }
 
@@ -133,7 +144,7 @@ def compatible_backend(manifest: ModelManifest) -> tuple[str, tuple[str, ...], t
     runtime = RUNTIME_PROFILES.get(manifest.runtime.profile)
     if runtime is None:
         reasons.append(f"Unknown runtime profile: {manifest.runtime.profile}")
-    elif runtime.adapter != manifest.adapter and manifest.adapter != "midgard-native":
+    elif runtime.adapter != manifest.adapter and manifest.adapter != "lluna-native":
         reasons.append(
             f"The {runtime.name} runtime does not implement the {manifest.adapter} adapter."
         )

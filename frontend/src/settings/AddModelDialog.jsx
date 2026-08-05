@@ -87,9 +87,9 @@ export function AddModelDialog({ open, onClose }) {
   );
 
   async function chooseLocal() {
-    const desktop = window.midgardDesktop;
+    const desktop = window.llunaDesktop;
     if (!desktop) {
-      setError("Local model selection is available in the Midgard desktop app.");
+      setError("Local model selection is available in the Lluna desktop app.");
       return null;
     }
     const selected =
@@ -131,7 +131,7 @@ export function AddModelDialog({ open, onClose }) {
     const hasSafeWeights = (manifest?.expectedFiles || []).some((/** @type {string} */ name) => name.endsWith(suffix));
     const blockingReasons = sourceType !== "huggingface" ? [] :
       ["diffusers", "transformers"].includes(next) && !hasSafeWeights
-        ? [`This repository does not expose ${suffix} weights that Midgard can load safely.`]
+        ? [`This repository does not expose ${suffix} weights that Lluna can load safely.`]
         : [];
     setAnalysis((current) => current ? { ...current, blockingReasons, installable: !blockingReasons.length } : current);
     setManifest((current) => ({
@@ -224,14 +224,14 @@ export function AddModelDialog({ open, onClose }) {
               value={value}
               onChange={(event) => setValue(event.target.value)}
               placeholder="https://huggingface.co/owner/model"
-              hint="Midgard reads metadata first and pins installation to the analyzed commit."
+              hint="Lluna reads metadata first and pins installation to the analyzed commit."
               autoFocus
             />
           ) : (
             <Card className="ui-action-row">
               <div>
                 <p className="ui-copy-title">{grant?.name || (sourceType === "local-folder" ? "Choose a model folder" : "Choose a model file")}</p>
-                <p className="ui-copy-muted">The source is copied into Midgard's managed custom model directory.</p>
+                <p className="ui-copy-muted">The source is copied into Lluna's managed custom model directory.</p>
               </div>
               <Button variant="secondary" onClick={() => void chooseLocal()}>
                 <FolderOpen className="ui-icon" /> Choose
@@ -281,7 +281,7 @@ export function AddModelDialog({ open, onClose }) {
           {manifest.gated && (
             <Card className="ui-action-row border-mg-warning/50">
               <div><p className="ui-copy-title"><LockKeyhole className="mr-1 inline ui-icon" />Gated repository</p><p className="ui-copy-muted">Accept the model license on Hugging Face before installing.</p></div>
-              <Button variant="secondary" onClick={() => void window.midgardDesktop?.openHuggingFace(analysis.repoUrl)}>
+              <Button variant="secondary" onClick={() => void window.llunaDesktop?.openHuggingFace(analysis.repoUrl)}>
                 Open model card <ExternalLink className="ui-icon-sm" />
               </Button>
             </Card>

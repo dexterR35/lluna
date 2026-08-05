@@ -30,7 +30,7 @@ export function NodePreviewDialog({ nodeId, onClose }) {
       ? store.nodeStates[incomingImageEdge.source]
       : null,
   );
-  const isSelectObject = node?.data.schemaId === "midgard.mask.select_object";
+  const isSelectObject = node?.data.schemaId === "lluna.mask.select_object";
   const persistedResult = node?.data.result;
   const nodeArtifactIds = liveRun?.artifactIds?.length
     ? liveRun.artifactIds

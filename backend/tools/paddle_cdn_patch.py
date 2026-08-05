@@ -1,7 +1,7 @@
-"""Strip PaddleX CDN model-hoster connectivity (Midgard ships PP-OCR locally).
+"""Strip PaddleX CDN model-hoster connectivity (Lluna ships PP-OCR locally).
 
 PaddleX builds ``official_models`` at import time and probes HuggingFace / BOS /
-ModelScope / AIStudio. Midgard always passes ``model_dir`` under
+ModelScope / AIStudio. Lluna always passes ``model_dir`` under
 ``backend/models/V5/``, so that probe is removed - not merely env-disabled.
 """
 
@@ -49,7 +49,7 @@ class _OfficialModelsLoader(importlib.abc.Loader):
         # Defer singleton so we can replace _build_hosters first
         source = source.replace(
             "official_models = _ModelManager()",
-            "official_models = None  # Midgard: created after CDN strip",
+            "official_models = None  # Lluna: created after CDN strip",
             1,
         )
         exec(compile(source, self.origin, "exec"), module.__dict__)

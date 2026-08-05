@@ -6,7 +6,7 @@ ipcRenderer.on("menu:command", (_event, command) => {
   for (const listener of menuListeners) listener(command);
 });
 
-contextBridge.exposeInMainWorld("midgardDesktop", Object.freeze({
+contextBridge.exposeInMainWorld("llunaDesktop", Object.freeze({
   getBackendSession: () => ipcRenderer.invoke("backend:session"),
   newWorkflow: () => ipcRenderer.invoke("workflow:new"),
   openWorkflow: () => ipcRenderer.invoke("workflow:open"),

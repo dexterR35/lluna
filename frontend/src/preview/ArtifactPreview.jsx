@@ -241,11 +241,11 @@ export function ArtifactThumbGrid({
   if (!ids.length) return null;
   return (
     <div
-      className="midgard-node-thumbs"
+      className="lluna-node-thumbs"
       aria-label={`${label} thumbnails`}
     >
       {ids.map((id, index) => (
-        <div key={id} className="midgard-node-thumb">
+        <div key={id} className="lluna-node-thumb">
           <ArtifactThumbnail
             artifactId={id}
             schemaId={schemaId}

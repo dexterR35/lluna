@@ -45,7 +45,7 @@ def _load(model_id: str, model_path: str | None = None, precision: str = "auto")
     except ImportError as exc:
         raise RuntimeError(
             "BiRefNet needs PyTorch, Transformers, timm, kornia, and torchvision. "
-            "Install the BiRefNet runtime from the Midgard installer."
+            "Install the BiRefNet runtime from the Lluna installer."
         ) from exc
     device = _device(torch)
     requested = str(precision or "auto").lower()
@@ -215,7 +215,7 @@ def process_video(
         raise RuntimeError("Video has invalid dimensions.")
     transparent = output_mode == "transparent"
     raw_suffix = ".mov" if transparent else ".mp4"
-    with tempfile.TemporaryDirectory(prefix="midgard-birefnet-video-") as temp_dir:
+    with tempfile.TemporaryDirectory(prefix="lluna-birefnet-video-") as temp_dir:
         raw_path = str(Path(temp_dir) / f"foreground{raw_suffix}")
         pixel_format = "rgba" if transparent else "bgr24"
         codec_args = ["-c:v", "qtrle", "-pix_fmt", "argb"] if transparent else ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18", "-preset", "fast"]

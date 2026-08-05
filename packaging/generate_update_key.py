@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the one-time Ed25519 key pair used for Midgard release manifests."""
+"""Generate the one-time Ed25519 key pair used for Lluna release manifests."""
 
 from __future__ import annotations
 
@@ -44,7 +44,7 @@ def main() -> int:
     print("Public key for backend/core/update_trust.py:")
     print(base64.b64encode(public_raw).decode("ascii"))
     print(f"Private key written to {args.private_output}")
-    print("Store its value as GitHub secret MIDGARD_UPDATE_PRIVATE_KEY_B64.")
+    print("Store its value as GitHub secret LLUNA_UPDATE_PRIVATE_KEY_B64.")
     return 0
 
 

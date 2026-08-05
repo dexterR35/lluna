@@ -5,7 +5,7 @@ import json, re, sys
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 errors=[]
-production_python=[*(ROOT/"backend").rglob("*.py"),ROOT/"install.py",ROOT/"midgard.py",*(ROOT/"packaging").glob("*.py")]
+production_python=[*(ROOT/"backend").rglob("*.py"),ROOT/"install.py",ROOT/"lluna.py",*(ROOT/"packaging").glob("*.py")]
 removed_import=re.compile(r"^\s*(?:from|import)\s+(?:PySide6|PyQt\d*|qfluentwidgets|qframelesswindow|ui|backend\.config|backend\.i18n)\b",re.MULTILINE)
 for path in production_python:
     if "scenedetect" in path.parts: continue

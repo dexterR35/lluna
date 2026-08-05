@@ -1,7 +1,7 @@
 """Binomial low-pass stride-2 downsample used by MIRNet ResidualDownSample.
 
 Same filter family as antialiased-cnns (fixed binomial kernel, no learnable
-params). Written for Midgard so MIRNet LOL checkpoints stay compatible.
+params). Written for Lluna so MIRNet LOL checkpoints stay compatible.
 """
 
 from __future__ import annotations

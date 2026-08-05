@@ -7,7 +7,7 @@ test.beforeAll(async () => {
   electronApp = await electron.launch({
     args: ["--no-sandbox", path.resolve(__dirname, "../.e2e/build/main.js")],
     cwd: path.resolve(__dirname, ".."),
-    env: { ...process.env, MIDGARD_E2E: "1" },
+    env: { ...process.env, LLUNA_E2E: "1" },
     timeout: 30_000,
   });
 });
@@ -18,7 +18,7 @@ test.afterAll(async () => {
 
 test("Electron starts its control plane and renders the backend-owned node catalog", async () => {
   const page = await electronApp.firstWindow();
-  await expect(page).toHaveTitle("Midgard");
+  await expect(page).toHaveTitle("Lluna");
   await expect(page.getByRole("button", { name: "Run" })).toBeVisible();
   await expect(page.getByRole("button", { name: /Load Image/ })).toBeVisible();
   await expect(page.getByRole("button", { name: "Inspector", exact: true })).toHaveCount(0);

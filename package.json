@@ -1,5 +1,5 @@
 {
-  "name": "midgard-desktop",
+  "name": "lluna-desktop",
   "version": "1.4.0",
   "private": true,
   "workspaces": [
@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "npm --workspace frontend run dev",
     "dev:frontend": "npm --workspace frontend run dev:renderer",
-    "dev:backend": "python3 -m backend.api.app --host 127.0.0.1 --port 8765 --token midgard-development-token-000000000000000000",
+    "dev:backend": "python3 -m backend.api.app --host 127.0.0.1 --port 8765 --token lluna-development-token-000000000000000000",
     "lint": "npm --workspace frontend run lint",
     "check": "npm --workspace frontend run check && python3 scripts/static_guards.py",
     "test": "npm run test:frontend && npm run test:backend",

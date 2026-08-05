@@ -893,15 +893,15 @@ class RunManager:
             "_" if character in '<>:"/\\|?*' or ord(character) < 32 else character
             for character in stem
         )
-        return cleaned.strip(" .") or "midgard-output"
+        return cleaned.strip(" .") or "lluna-output"
 
     @staticmethod
     def _operation_suffix(schema_id: str) -> str:
         return {
-            "midgard.image.remove_text": "nosub",
-            "midgard.video.remove_text": "nosub",
-            "midgard.image.upscale": "upscale",
-            "midgard.image.low_light": "lowlight",
+            "lluna.image.remove_text": "nosub",
+            "lluna.video.remove_text": "nosub",
+            "lluna.image.upscale": "upscale",
+            "lluna.image.low_light": "lowlight",
         }.get(schema_id, "")
 
     def _lineage_file_name(
@@ -974,7 +974,7 @@ class RunManager:
             raise ExecutionFailure("MISSING_INPUT", "Save node needs an artifact.")
 
         grant_id = str(node.parameters.get("destinationGrantId") or "")
-        if node.schema_id == "midgard.output.save_video":
+        if node.schema_id == "lluna.output.save_video":
             if len(artifacts) != 1:
                 raise ExecutionFailure("INVALID_BATCH", "Save Video accepts one video.")
             destination = self._resolve_grant(
@@ -1191,7 +1191,7 @@ class RunManager:
                 )
             result = Image.alpha_composite(prepared_background, foreground_image)
             fd, output_raw = tempfile.mkstemp(
-                prefix="midgard-composite-",
+                prefix="lluna-composite-",
                 suffix=".png",
             )
             os.close(fd)
@@ -1254,7 +1254,7 @@ class RunManager:
         item_index: int = 0,
         item_count: int = 1,
     ) -> ArtifactRecord:
-        if os.environ.get("MIDGARD_FAKE_WORKER") == "1":
+        if os.environ.get("LLUNA_FAKE_WORKER") == "1":
             return self._fake_inference(
                 control,
                 node,
@@ -1288,7 +1288,7 @@ class RunManager:
             if "video" in node.schema_id
             else ".png"
         )
-        fd, output_raw = tempfile.mkstemp(prefix="midgard-node-", suffix=output_suffix)
+        fd, output_raw = tempfile.mkstemp(prefix="lluna-node-", suffix=output_suffix)
         os.close(fd)
         Path(output_raw).unlink(missing_ok=True)
 
@@ -1303,7 +1303,24 @@ class RunManager:
         }
         if adapter == "enhance":
             model_value = params.get("model") or settings.enhancement.mode
-            if model_value == "SUPIR":
+            if model_value in {"SeedVR2_3B", "SeedVR2_7B"}:
+                model_parameter = next(
+                    item for item in get_node(node.schema_id).parameters if item.id == "model"
+                )
+                selected_option = next(
+                    (item for item in model_parameter.options if item.get("value") == model_value),
+                    None,
+                )
+                selected_model_id = str((selected_option or {}).get("modelId") or "seedvr2-3b")
+                job_type = JobType.SEEDVR
+                payload.update(
+                    input_path=artifact_path("video" if "video" in node.schema_id else "image"),
+                    model_id=selected_model_id,
+                    target_long_edge=int(params.get("seedvrTargetLongEdge") or 2048),
+                    sp_size=int(params.get("seedvrSpSize") or 1),
+                    seed=int(params.get("seedvrSeed", 666)),
+                )
+            elif model_value == "SUPIR":
                 llava = inputs.get("llava")
                 llava = llava if isinstance(llava, dict) else {}
                 job_type = JobType.SUPIR
@@ -1599,7 +1616,7 @@ class RunManager:
             parameters_hash=cache_key,
         )
         result: Any = artifact
-        if node.schema_id == "midgard.image.remove_background":
+        if node.schema_id == "lluna.image.remove_background":
             auxiliary: dict[str, ArtifactRecord] = {}
             for port_id, suffix in (("mask", ".mask.png"), ("alpha", ".alpha.png")):
                 auxiliary_path = Path(f"{final_path}{suffix}")
@@ -1668,7 +1685,7 @@ class RunManager:
                     "message": f"Processing item {item_index + 1} of {item_count}",
                 },
             )
-        fd, raw = tempfile.mkstemp(prefix="midgard-fake-", suffix=".png")
+        fd, raw = tempfile.mkstemp(prefix="lluna-fake-", suffix=".png")
         os.close(fd)
         if inputs and Path(inputs[0].path).suffix.lower() in {".png", ".jpg", ".jpeg", ".webp"}:
             shutil.copy2(inputs[0].path, raw)

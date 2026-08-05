@@ -1,4 +1,4 @@
-"""Standalone entry point executed inside Midgard's isolated SUPIR environment."""
+"""Standalone entry point executed inside Lluna's isolated SUPIR environment."""
 
 from __future__ import annotations
 

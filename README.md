@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="frontend/assets/app-icon/midgard.png" alt="Midgard" width="96" height="96" />
+  <img src="frontend/assets/app-icon/lluna.png" alt="Lluna" width="96" height="96" />
 </p>
 
-# Midgard
+# Lluna
 
 Local node editor for image and video work. Drag nodes on a canvas, wire them together, run the graph. Models and media stay on your machine — nothing is uploaded to a cloud API.
 
@@ -28,7 +28,7 @@ Local node editor for image and video work. Drag nodes on a canvas, wire them to
 | ✨ | Generate images from a prompt (FLUX / Qwen, optional installs) |
 | 🎯 | Select objects (SAM2 + Grounding DINO) |
 | 💾 | Preview and save results locally |
-| 🔗 | Chain steps into reusable workflows (`.midgard.json`) |
+| 🔗 | Chain steps into reusable workflows (`.lluna.json`) |
 
 Build left → right, hit **Run**. Progress shows in the Activity panel.
 
@@ -56,8 +56,8 @@ You need:
 ### 1. Get the repo
 
 ```bash
-git clone <your-midgard-repo-url>
-cd midgard
+git clone <your-lluna-repo-url>
+cd lluna
 ```
 
 ### 2. Install the Python runtime + deps
@@ -166,7 +166,7 @@ Open **Settings → Local model manager → Add model** to:
 - import a local model folder; or
 - import a `.safetensors`, `.pth`, `.pt`, `.ckpt`, or `.bin` weight file.
 
-Midgard analyzes repository metadata, license, download size, runtime, disk, RAM,
+Lluna analyzes repository metadata, license, download size, runtime, disk, RAM,
 VRAM, and backend compatibility before installation. Hugging Face downloads are
 pinned to the analyzed commit, restricted to reviewed files, staged outside the
 active model directory, verified, and promoted atomically. Fine-grained and
@@ -175,7 +175,7 @@ operating systems use their credential store, with a permission-restricted local
 fallback.
 
 Managed user models live under `models/custom/<model-id>/` and use a versioned
-`midgard-model.json`. Folders dropped into `models/custom/` are discovered
+`lluna-model.json`. Folders dropped into `models/custom/` are discovered
 automatically; folders without a manifest appear as **Needs configuration**.
 Each manifest contains a reviewed capability contract. Node controls change with
 the selected model—for example, distilled models expose their smaller step range,
@@ -185,7 +185,7 @@ JSON inspection can prefill the review, but unknown facts are never guessed and
 keep the model disabled.
 Remote repository code is disabled, SafeTensors is preferred, and legacy
 pickle-capable weights require explicit opt-in. Repository `requirements.txt`
-files are never installed into Midgard's main environment. See
+files are never installed into Lluna's main environment. See
 [the model platform guide](backend/models/PLATFORM.md) and
 [manifest schema](backend/models/model-manifest.schema.json).
 
@@ -227,7 +227,7 @@ the Remove Background node. The upstream project’s training layout (`im` and
 
 ## Workflows & settings
 
-- Workflows save as `*.midgard.json` (atomic save + autosave).
+- Workflows save as `*.lluna.json` (atomic save + autosave).
 - App preferences and model defaults live under **Settings** (Editor, Runtime, Subtitle, Enhancement, …).
 - Layout (library width, drawer height) is stored in the desktop UI.
 

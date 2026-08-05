@@ -20,7 +20,7 @@ function addNode(schemaId = "test.number", position) {
 
 /** @param {string} id @param {string} source @param {string} target @returns {import("../src/types").EditorEdge} */
 function edge(id, source, target) {
-  return { id, source, target, sourceHandle: "value", targetHandle: "value", type: "midgard" };
+  return { id, source, target, sourceHandle: "value", targetHandle: "value", type: "lluna" };
 }
 
 /** @template T @param {T | null | undefined} value @returns {T} */
@@ -57,7 +57,7 @@ test("serialization never copies backend definitions", () => {
 test("SUPIR LLaVA toggle adds and removes its companion node", () => {
   const upscale = /** @type {import("../src/types").NodeDefinition} */ ({
     ...definition,
-    schemaId: "midgard.image.upscale",
+    schemaId: "lluna.image.upscale",
     name: "Upscale Image",
     parameters: [
       {
@@ -80,7 +80,7 @@ test("SUPIR LLaVA toggle adds and removes its companion node", () => {
   });
   const llava = /** @type {import("../src/types").NodeDefinition} */ ({
     ...definition,
-    schemaId: "midgard.input.llava",
+    schemaId: "lluna.input.llava",
     name: "LLaVA Caption",
     kind: "input",
     parameters: [
@@ -478,26 +478,26 @@ test("changing a node model preserves history and marks its output stale", () =>
   expect(changed.data.result?.artifactIds).toEqual(["artifact-1"]);
 });
 test("primitive value nodes stay out of the creation catalog", () => {
-  expect(isVisibleCatalogNode({ schemaId: "midgard.input.boolean" })).toBe(
+  expect(isVisibleCatalogNode({ schemaId: "lluna.input.boolean" })).toBe(
     false,
   );
-  expect(isVisibleCatalogNode({ schemaId: "midgard.input.integer" })).toBe(
+  expect(isVisibleCatalogNode({ schemaId: "lluna.input.integer" })).toBe(
     false,
   );
-  expect(isVisibleCatalogNode({ schemaId: "midgard.input.number" })).toBe(
+  expect(isVisibleCatalogNode({ schemaId: "lluna.input.number" })).toBe(
     false,
   );
-  expect(isVisibleCatalogNode({ schemaId: "midgard.input.llava" })).toBe(
+  expect(isVisibleCatalogNode({ schemaId: "lluna.input.llava" })).toBe(
     false,
   );
-  expect(isVisibleCatalogNode({ schemaId: "midgard.input.prompt" })).toBe(true);
-  expect(isVisibleCatalogNode({ schemaId: "midgard.image.generate" })).toBe(
+  expect(isVisibleCatalogNode({ schemaId: "lluna.input.prompt" })).toBe(true);
+  expect(isVisibleCatalogNode({ schemaId: "lluna.image.generate" })).toBe(
     true,
   );
 });
 test("legacy bypass state is discarded when a workflow is loaded", () => {
   const document = /** @type {any} */ ({
-    format: "midgard-workflow",
+    format: "lluna-workflow",
     version: 1,
     projectId: "project",
     name: "Legacy",

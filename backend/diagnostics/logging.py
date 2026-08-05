@@ -16,10 +16,10 @@ class RedactingFormatter(logging.Formatter):
 
 def initialize_logging(*, diagnostic: bool | None = None) -> None:
     root = logging.getLogger()
-    if getattr(root, "_midgard_configured", False):
+    if getattr(root, "_lluna_configured", False):
         return
     if diagnostic is None:
-        diagnostic = os.environ.get("MIDGARD_DIAG") == "1"
+        diagnostic = os.environ.get("LLUNA_DIAG") == "1"
     handler = logging.StreamHandler(sys.stderr)
     handler.setFormatter(
         RedactingFormatter(
@@ -28,4 +28,4 @@ def initialize_logging(*, diagnostic: bool | None = None) -> None:
     )
     root.addHandler(handler)
     root.setLevel(logging.DEBUG if diagnostic else logging.INFO)
-    root.__dict__["_midgard_configured"] = True
+    root.__dict__["_lluna_configured"] = True

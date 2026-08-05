@@ -9,7 +9,7 @@ def test_semantic_version_comparison() -> None:
 
 
 def test_update_available_uses_canonical_endpoint(monkeypatch) -> None:
-    monkeypatch.delenv("MIDGARD_DISABLE_UPDATE_CHECK", raising=False)
+    monkeypatch.delenv("LLUNA_DISABLE_UPDATE_CHECK", raising=False)
     seen: list[str] = []
 
     def fetch(url: str):
@@ -22,7 +22,7 @@ def test_update_available_uses_canonical_endpoint(monkeypatch) -> None:
 
 
 def test_offline_and_invalid_responses_are_typed(monkeypatch) -> None:
-    monkeypatch.delenv("MIDGARD_DISABLE_UPDATE_CHECK", raising=False)
+    monkeypatch.delenv("LLUNA_DISABLE_UPDATE_CHECK", raising=False)
     offline = check_for_update(lambda url: (_ for _ in ()).throw(OSError("offline")))
     invalid = check_for_update(lambda url: {"tag_name": "not-a-version"})
     assert offline.state is UpdateState.OFFLINE
@@ -30,5 +30,5 @@ def test_offline_and_invalid_responses_are_typed(monkeypatch) -> None:
 
 
 def test_update_check_can_be_disabled(monkeypatch) -> None:
-    monkeypatch.setenv("MIDGARD_DISABLE_UPDATE_CHECK", "1")
+    monkeypatch.setenv("LLUNA_DISABLE_UPDATE_CHECK", "1")
     assert check_for_update().state is UpdateState.DISABLED

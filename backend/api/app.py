@@ -1,4 +1,4 @@
-"""Midgard authenticated loopback control plane."""
+"""Lluna authenticated loopback control plane."""
 
 from __future__ import annotations
 
@@ -48,7 +48,7 @@ def create_app(token: str | None = None) -> FastAPI:
             abort_downloads_on_shutdown()
 
     app = FastAPI(
-        title="Midgard Control Plane",
+        title="Lluna Control Plane",
         version="1.0.0",
         docs_url=None,
         redoc_url=None,
@@ -59,7 +59,7 @@ def create_app(token: str | None = None) -> FastAPI:
         allow_origins=["null"],
         allow_origin_regex=r"^http://(?:localhost|127\.0\.0\.1)(?::\d+)?$",
         allow_methods=["GET", "POST", "PUT", "DELETE"],
-        allow_headers=["Content-Type", "X-Midgard-Token", "Authorization"],
+        allow_headers=["Content-Type", "X-Lluna-Token", "Authorization"],
     )
     for router in (
         health_router,
@@ -109,13 +109,13 @@ def create_app(token: str | None = None) -> FastAPI:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Midgard local control plane")
+    parser = argparse.ArgumentParser(description="Lluna local control plane")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, required=True)
-    parser.add_argument("--token", default=os.environ.get("MIDGARD_SESSION_TOKEN"))
+    parser.add_argument("--token", default=os.environ.get("LLUNA_SESSION_TOKEN"))
     args = parser.parse_args(argv)
     if args.host not in {"127.0.0.1", "localhost"}:
-        parser.error("Midgard control plane may bind only to loopback")
+        parser.error("Lluna control plane may bind only to loopback")
     token = args.token or secrets.token_urlsafe(48)
     app = create_app(token)
     uvicorn.run(app, host="127.0.0.1", port=args.port, access_log=False, log_level="info")

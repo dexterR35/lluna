@@ -18,14 +18,14 @@ import { boundsForNodes, findFlowContainingPoint, useEditorStore } from "../stat
 import { useRunStore } from "../state/runStore";
 import { useServerStore } from "../state/serverStore";
 import { useToast } from "../components/ToastContext";
-import { MidgardEdge } from "./MidgardEdge";
-import { MidgardNode } from "../nodes/MidgardNode";
+import { LlunaEdge } from "./LlunaEdge";
+import { LlunaNode } from "../nodes/LlunaNode";
 /** @typedef {import("../types").EditorNode} EditorNode */
 /** @typedef {{onAdd: (position: {x: number, y: number}) => void, onRunFlow?: (ids: string[]) => void, onRunNode?: (id: string) => void, onOpenNode?: (id: string) => void, onPreviewNode?: (id: string) => void, onViewportChange?: (viewport: import("@xyflow/react").Viewport) => void}} CanvasProps */
 /** @type {import("@xyflow/react").NodeTypes} */
-const nodeTypes = { midgard: MidgardNode };
+const nodeTypes = { lluna: LlunaNode };
 /** @type {import("@xyflow/react").EdgeTypes} */
-const edgeTypes = { midgard: MidgardEdge };
+const edgeTypes = { lluna: LlunaEdge };
 const DEFAULT_VIEWPORT = { x: 0, y: 0, zoom: 0.78 };
 const FIT_VIEW_OPTIONS = {
   padding: 0.3,
@@ -213,11 +213,11 @@ function CanvasBody({
       if (typeof id !== "string") return;
       void flow.fitView({ ...FOCUS_VIEW_OPTIONS, nodes: [{ id }] });
     };
-    window.addEventListener("midgard:fit", fit);
-    window.addEventListener("midgard:focus-node", focus);
+    window.addEventListener("lluna:fit", fit);
+    window.addEventListener("lluna:focus-node", focus);
     return () => {
-      window.removeEventListener("midgard:fit", fit);
-      window.removeEventListener("midgard:focus-node", focus);
+      window.removeEventListener("lluna:fit", fit);
+      window.removeEventListener("lluna:focus-node", focus);
     };
   }, [flow]);
   const changeModel = useCallback(
@@ -285,16 +285,16 @@ function CanvasBody({
         editor.selectedGroupId,
       );
       const flowOptions = targetFlow ? { flowId: targetFlow.id } : undefined;
-      const schemaId = event.dataTransfer.getData("application/x-midgard-node");
+      const schemaId = event.dataTransfer.getData("application/x-lluna-node");
       if (schemaId) {
         addNode(schemaId, position, flowOptions);
         return;
       }
       const files = [...event.dataTransfer.files];
-      if (files.length && window.midgardDesktop?.registerDroppedFiles) {
+      if (files.length && window.llunaDesktop?.registerDroppedFiles) {
         try {
           const grants =
-            await window.midgardDesktop.registerDroppedFiles(files);
+            await window.llunaDesktop.registerDroppedFiles(files);
           const videoGrants = grants.filter(
             (grant) =>
               grant.mediaType?.startsWith("video/") ||
@@ -307,7 +307,7 @@ function CanvasBody({
           if (imageGrants.length) {
             const batch = imageGrants.length > 1;
             const id = addNode(
-              batch ? "midgard.input.images" : "midgard.input.image",
+              batch ? "lluna.input.images" : "lluna.input.image",
               { x: position.x, y: position.y },
               flowOptions,
             );
@@ -337,7 +337,7 @@ function CanvasBody({
           }
           videoGrants.forEach((grant, index) => {
             const id = addNode(
-              "midgard.input.video",
+              "lluna.input.video",
               {
                 x: position.x + (offset + index) * 28,
                 y: position.y + (offset + index) * 28,

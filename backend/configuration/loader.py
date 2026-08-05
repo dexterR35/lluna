@@ -18,28 +18,28 @@ from backend.core.paths import PATHS, AppPaths
 from backend.diagnostics.errors import ConfigurationError
 
 _ENVIRONMENT_KEYS: dict[str, tuple[str, str, type]] = {
-    "MIDGARD_HARDWARE_ACCELERATION": (
+    "LLUNA_HARDWARE_ACCELERATION": (
         "subtitle",
         "hardware_acceleration",
         bool,
     ),
-    "MIDGARD_INPAINT_MODE": ("subtitle", "inpaint_mode", str),
-    "MIDGARD_SUBTITLE_DETECT_MODE": (
+    "LLUNA_INPAINT_MODE": ("subtitle", "inpaint_mode", str),
+    "LLUNA_SUBTITLE_DETECT_MODE": (
         "subtitle",
         "subtitle_detect_mode",
         str,
     ),
-    "MIDGARD_JOB_WATCHDOG_SECONDS": (
+    "LLUNA_JOB_WATCHDOG_SECONDS": (
         "runtime",
         "job_watchdog_seconds",
         float,
     ),
-    "MIDGARD_IDLE_RELEASE_SECONDS": (
+    "LLUNA_IDLE_RELEASE_SECONDS": (
         "runtime",
         "idle_release_seconds",
         float,
     ),
-    "MIDGARD_SAVE_DIRECTORY": ("root", "save_directory", str),
+    "LLUNA_SAVE_DIRECTORY": ("root", "save_directory", str),
 }
 
 

@@ -52,10 +52,10 @@ export const DEFAULT_APPEARANCE = {
 };
 /** @param {NodeDefinition} definition @param {{x: number, y: number}} position @returns {EditorNode} */
 function createNode(definition, position) {
-  const isSettingsCard = definition.schemaId === "midgard.input.llava";
+  const isSettingsCard = definition.schemaId === "lluna.input.llava";
   return {
     id: crypto.randomUUID(),
-    type: "midgard",
+    type: "lluna",
     position,
     data: {
       schemaId: definition.schemaId,
@@ -74,8 +74,8 @@ function createNode(definition, position) {
   };
 }
 
-const UPSCALE_SCHEMA_ID = "midgard.image.upscale";
-const LLAVA_SCHEMA_ID = "midgard.input.llava";
+const UPSCALE_SCHEMA_ID = "lluna.image.upscale";
+const LLAVA_SCHEMA_ID = "lluna.input.llava";
 
 /**
  * Keep the SUPIR LLaVA toggle and its visible companion node in sync.
@@ -123,7 +123,7 @@ function reconcileLlavaCompanion(state, nodes, edges, upscaleId) {
         sourceHandle: "config",
         target: upscaleId,
         targetHandle: "llava",
-        type: "midgard",
+        type: "lluna",
         data: { portType: "MODEL" },
       },
     ];
@@ -158,7 +158,7 @@ function reconcileLlavaCompanion(state, nodes, edges, upscaleId) {
 function projectTemplate() {
   const now = new Date().toISOString();
   return {
-    format: "midgard-workflow",
+    format: "lluna-workflow",
     version: 1,
     projectId: crypto.randomUUID(),
     name: "Untitled workflow",
@@ -310,6 +310,7 @@ function refreshFlowGroups(groups, nodes, edges) {
  * @param {string} targetId
  */
 function absorbConnectedIntoFlows(groups, nodes, edges, sourceId, targetId) {
+  /** @param {string} nodeId */
   const memberFlows = (nodeId) =>
     groups.filter(
       (group) => group.kind === "flow" && group.nodeIds?.includes(nodeId),
@@ -605,7 +606,7 @@ const createEditorState = (set, get) => ({
         {
           ...connection,
           id: crypto.randomUUID(),
-          type: "midgard",
+          type: "lluna",
           data: { portType: sourcePort?.type || "" },
         },
         state.edges,
@@ -705,7 +706,7 @@ const createEditorState = (set, get) => ({
       selectedGroupId: null,
     }));
     window.dispatchEvent(
-      new CustomEvent("midgard:focus-node", { detail: { id } }),
+      new CustomEvent("lluna:focus-node", { detail: { id } }),
     );
   },
   deleteSelected: () =>
@@ -952,7 +953,7 @@ const createEditorState = (set, get) => ({
     /** @type {EditorNode[]} */
     const nodes = document.nodes.map((node) => ({
       id: node.id,
-      type: "midgard",
+      type: "lluna",
       position: node.position,
       data: {
         schemaId: node.schemaId,
@@ -982,7 +983,7 @@ const createEditorState = (set, get) => ({
         sourceHandle: edge.sourcePortId,
         target: edge.targetNodeId,
         targetHandle: edge.targetPortId,
-        type: "midgard",
+        type: "lluna",
         data: { portType: sourcePort?.type || "" },
       };
     });

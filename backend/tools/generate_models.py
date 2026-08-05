@@ -8,7 +8,7 @@ from typing import Dict, Iterable, List, Optional, Set
 
 from backend.tools.constant import GenerateMode
 
-_MARKER = ".midgard_installed"
+_MARKER = ".lluna_installed"
 
 _DIFFUSERS_ALLOW_PATTERNS = (
     "model_index.json",

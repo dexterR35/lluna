@@ -1,5 +1,5 @@
 /**
- * Shared Lucide icon + accent registry for Midgard.
+ * Shared Lucide icon + accent registry for Lluna.
  * Import icons and resolvers from here — not from lucide-react.
  */
 export {

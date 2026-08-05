@@ -21,6 +21,7 @@ KIND_LOW_LIGHT = "low_light"
 KIND_GENERATE = "generate"
 KIND_SELECT_OBJECT = "select_object"
 KIND_BIREFNET = "birefnet"
+KIND_SEEDVR = "seedvr2"
 _progress_context = threading.local()
 
 
@@ -256,6 +257,10 @@ def discard_partial(kind: str, key: str) -> None:
         from backend.tools import birefnet_models as m
 
         m.discard_partial(key)
+    elif kind == KIND_SEEDVR:
+        from backend.tools import seedvr_models as m
+
+        m.discard_partial(key)
     else:
         raise ValueError(f"Unknown download kind: {kind}")
 
@@ -352,7 +357,7 @@ def huggingface_progress_tqdm():
 
     class _ModelDownloadTqdm(tqdm):
         def __init__(self, *args, **kwargs):
-            self._midgard_track_bytes = False
+            self._lluna_track_bytes = False
             progress_name = str(kwargs.pop("name", ""))
             description = str(kwargs.get("desc", ""))
             unit = kwargs.get("unit")
@@ -360,7 +365,7 @@ def huggingface_progress_tqdm():
             # active, but suppress terminal rendering through display()/clear().
             kwargs["disable"] = False
             super().__init__(*args, **kwargs)
-            self._midgard_track_bytes = (
+            self._lluna_track_bytes = (
                 unit == "B"
                 and (
                     progress_name == "huggingface_hub.snapshot_download"
@@ -368,16 +373,16 @@ def huggingface_progress_tqdm():
                     or description.startswith("Reconstructing")
                 )
             )
-            self._report_midgard_progress()
+            self._report_lluna_progress()
 
         def update(self, n=1):
             result = super().update(n)
-            self._report_midgard_progress()
+            self._report_lluna_progress()
             return result
 
         def refresh(self, *args, **kwargs):
             result = super().refresh(*args, **kwargs)
-            self._report_midgard_progress()
+            self._report_lluna_progress()
             return result
 
         def display(self, *args, **kwargs) -> None:
@@ -386,9 +391,9 @@ def huggingface_progress_tqdm():
         def clear(self, *args, **kwargs) -> None:
             return None
 
-        def _report_midgard_progress(self) -> None:
+        def _report_lluna_progress(self) -> None:
             ModelDownloadRegistry.instance().check_cancelled()
-            if not getattr(self, "_midgard_track_bytes", False):
+            if not getattr(self, "_lluna_track_bytes", False):
                 return
             total = getattr(_progress_context, "hf_total_bytes", 0)
             if total <= 0:
@@ -414,16 +419,16 @@ def pooch_progress_tqdm():
         def __init__(self, *args, **kwargs):
             kwargs["disable"] = False
             super().__init__(*args, **kwargs)
-            self._report_midgard_progress()
+            self._report_lluna_progress()
 
         def update(self, n=1):
             result = super().update(n)
-            self._report_midgard_progress()
+            self._report_lluna_progress()
             return result
 
         def refresh(self, *args, **kwargs):
             result = super().refresh(*args, **kwargs)
-            self._report_midgard_progress()
+            self._report_lluna_progress()
             return result
 
         def display(self, *args, **kwargs) -> None:
@@ -432,7 +437,7 @@ def pooch_progress_tqdm():
         def clear(self, *args, **kwargs) -> None:
             return None
 
-        def _report_midgard_progress(self) -> None:
+        def _report_lluna_progress(self) -> None:
             ModelDownloadRegistry.instance().check_cancelled()
             total = int(getattr(self, "total", 0) or 0)
             if total <= 0:

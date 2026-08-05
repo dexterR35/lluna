@@ -117,7 +117,7 @@ class WorkflowGroup(ContractModel):
 
 
 class WorkflowDocument(ContractModel):
-    format: Literal["midgard-workflow"] = "midgard-workflow"
+    format: Literal["lluna-workflow"] = "lluna-workflow"
     version: int = 1
     project_id: str = Field(default_factory=lambda: str(uuid4()))
     name: str = "Untitled workflow"
@@ -129,7 +129,6 @@ class WorkflowDocument(ContractModel):
     project_settings: dict[str, Any] = Field(default_factory=dict)
     viewport: dict[str, float] = Field(default_factory=dict)
     metadata: dict[str, Any] = Field(default_factory=dict)
-
 
 class ValidationIssue(ContractModel):
     severity: Literal["error", "warning"]

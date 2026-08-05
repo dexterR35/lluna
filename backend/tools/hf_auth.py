@@ -11,7 +11,7 @@ from typing import Optional
 from backend.core.atomic import atomic_write_text
 
 _ENV_KEYS = ("HF_TOKEN", "HUGGING_FACE_HUB_TOKEN")
-_KEYRING_SERVICE = "Midgard"
+_KEYRING_SERVICE = "Lluna"
 _KEYRING_USER = "huggingface-token"
 logger = logging.getLogger(__name__)
 
@@ -136,7 +136,7 @@ def hf_auth_status(*, verify: bool = False) -> dict:
 
 
 def hf_download_cache_dir() -> Path:
-    """Private, disposable Hub cache used only while Midgard downloads models."""
+    """Private, disposable Hub cache used only while Lluna downloads models."""
     from backend.core.paths import AppPaths
 
     return (
@@ -148,7 +148,7 @@ def hf_download_cache_dir() -> Path:
 
 
 def _shared_hf_hub_cache_dir() -> Path:
-    """Resolve the Hub cache used by older Midgard releases."""
+    """Resolve the Hub cache used by older Lluna releases."""
     hf_home = os.environ.get("HF_HOME")
     if hf_home:
         default = Path(hf_home).expanduser() / "hub"
@@ -179,7 +179,7 @@ def _repo_cache_folder(repo_id: str) -> str:
 def remove_hf_repo_cache(repo_id: str, *, include_shared: bool = True) -> None:
     """Remove cached download blobs for one model repository.
 
-    Current downloads use Midgard's private cache. ``include_shared`` also
+    Current downloads use Lluna's private cache. ``include_shared`` also
     removes the legacy global-cache copy left by older app versions.
     """
     folder = _repo_cache_folder(repo_id)

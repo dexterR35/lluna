@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ReactFlowProvider } from "@xyflow/react";
 import { Dialog, ProgressBar, Switch } from "../src/components";
-import { MidgardNode } from "../src/nodes/MidgardNode";
+import { LlunaNode } from "../src/nodes/LlunaNode";
 import { NodeParameterField } from "../src/nodes/NodeParameterField";
 import { enabledModelOptions } from "../src/models/modelAvailability";
 import { NodeLibrary } from "../src/workflow/NodeLibrary";
@@ -69,13 +69,13 @@ test("image parameter accepts a dropped file and returns its preview artifact", 
         mediaType: "image/png",
       },
     ]);
-  const previousDesktop = window.midgardDesktop;
-  window.midgardDesktop = /** @type {any} */ ({ registerDroppedFiles });
+  const previousDesktop = window.llunaDesktop;
+  window.llunaDesktop = /** @type {any} */ ({ registerDroppedFiles });
   const onChange = vi.fn();
   render(
     <NodeParameterField
       definition={{ id: "pathGrantId", label: "Image file", type: "file" }}
-      nodeDefinition={{ schemaId: "midgard.input.image" }}
+      nodeDefinition={{ schemaId: "lluna.input.image" }}
       onChange={onChange}
     />,
   );
@@ -93,7 +93,7 @@ test("image parameter accepts a dropped file and returns its preview artifact", 
     ),
   );
   expect(registerDroppedFiles).toHaveBeenCalledWith([file]);
-  window.midgardDesktop = previousDesktop;
+  window.llunaDesktop = previousDesktop;
 });
 test("multi-image parameter preserves the dropped file order", async () => {
   const registerDroppedFiles = vi.fn().mockResolvedValue([
@@ -110,13 +110,13 @@ test("multi-image parameter preserves the dropped file order", async () => {
       mediaType: "image/png",
     },
   ]);
-  const previousDesktop = window.midgardDesktop;
-  window.midgardDesktop = /** @type {any} */ ({ registerDroppedFiles });
+  const previousDesktop = window.llunaDesktop;
+  window.llunaDesktop = /** @type {any} */ ({ registerDroppedFiles });
   const onChange = vi.fn();
   render(
     <NodeParameterField
       definition={{ id: "pathGrantIds", label: "Images", type: "files" }}
-      nodeDefinition={{ schemaId: "midgard.input.images" }}
+      nodeDefinition={{ schemaId: "lluna.input.images" }}
       onChange={onChange}
     />,
   );
@@ -135,7 +135,7 @@ test("multi-image parameter preserves the dropped file order", async () => {
     ),
   );
   expect(registerDroppedFiles).toHaveBeenCalledWith([first, second]);
-  window.midgardDesktop = previousDesktop;
+  window.llunaDesktop = previousDesktop;
 });
 test("node selectors include only installed and enabled models", () => {
   const options = [
@@ -176,9 +176,9 @@ test("model selection is in the node body and reacts to enabled inventory", asyn
   });
   render(
     <ReactFlowProvider>
-      <MidgardNode
+      <LlunaNode
         id="node-1"
-        type="midgard"
+        type="lluna"
         draggable
         dragging={false}
         selectable
@@ -206,7 +206,7 @@ test("model selection is in the node body and reacts to enabled inventory", asyn
   );
   const selector = screen.getByRole("combobox", { name: "Model for Generate" });
   expect(selector.closest("header")).toBeNull();
-  expect(selector.closest(".midgard-node")).not.toBeNull();
+  expect(selector.closest(".lluna-node")).not.toBeNull();
   expect(screen.getByRole("option", { name: "Model B" })).toBeEnabled();
   await user.selectOptions(selector, "b");
   expect(onModelChange).toHaveBeenCalledWith("node-1", "b");
@@ -241,7 +241,7 @@ test("library nodes use shared icons and can only be added by dragging", () => {
 
   fireEvent.dragStart(item, { dataTransfer: { setData } });
   expect(setData).toHaveBeenCalledWith(
-    "application/x-midgard-node",
+    "application/x-lluna-node",
     "test.image",
   );
 });

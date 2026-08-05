@@ -9,7 +9,7 @@ jobs:
   test:
     strategy: {fail-fast: false, matrix: {os: [ubuntu-latest, windows-latest, macos-latest]}}
     runs-on: ${{ matrix.os }}
-    env: {MIDGARD_TESTING: "1", MIDGARD_DISABLE_UPDATE_CHECK: "1", MIDGARD_DISABLE_MODEL_DOWNLOADS: "1", MIDGARD_FAKE_WORKER: "1"}
+    env: {LLUNA_TESTING: "1", LLUNA_DISABLE_UPDATE_CHECK: "1", LLUNA_DISABLE_MODEL_DOWNLOADS: "1", LLUNA_FAKE_WORKER: "1"}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -27,7 +27,7 @@ jobs:
       - name: Removed-stack and dependency guards
         run: python scripts/static_guards.py
       - name: Compile Python
-        run: python -m compileall -q midgard.py install.py backend
+        run: python -m compileall -q lluna.py install.py backend
       - name: Python tests
         run: python -m pytest -q
       - name: Frontend tests

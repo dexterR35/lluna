@@ -1,13 +1,13 @@
-# --- Midgard local / generated ---
-/midgardEnv/
-/midgard_runtime.json
+# --- Lluna local / generated ---
+/llunaEnv/
+/lluna_runtime.json
 /config/config.json
 /config/runtime.json
 /config/pending_model_downloads.json
 /config/model_download_cancel.flag
 /config/model-lifecycle.json
 /model-runtimes/
-/midgard_out/
+/lluna_out/
 /output/
 /local_test/
 /dylib/

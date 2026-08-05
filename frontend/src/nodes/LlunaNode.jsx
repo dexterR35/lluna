@@ -22,7 +22,7 @@ import {
   parametersForCapabilities,
 } from "../models/modelCapabilities";
 
-const SETTINGS_CARD_SCHEMAS = new Set(["midgard.input.llava"]);
+const SETTINGS_CARD_SCHEMAS = new Set(["lluna.input.llava"]);
 
 /** @type {Record<string, "neutral"|"success"|"warning"|"error"|"running"|"cached"|"accent">} */
 const STATUS_TONE = {
@@ -50,14 +50,14 @@ function PortCircle({ port, side, top, active }) {
       id={port.id}
       type={output ? "source" : "target"}
       position={output ? XYFlow.Position.Right : XYFlow.Position.Left}
-      className={`midgard-port-handle ${active ? "is-active" : ""} ${port.multiple ? "is-multiple" : ""} ${output ? "is-output" : "is-input"}`}
+      className={`lluna-port-handle ${active ? "is-active" : ""} ${port.multiple ? "is-multiple" : ""} ${output ? "is-output" : "is-input"}`}
       data-port-type={port.type}
       data-multiple={port.multiple ? "true" : "false"}
       style={/** @type {import("react").CSSProperties} */ ({ top, "--port-color": color })}
       aria-label={`${port.label}, ${port.type}${port.multiple ? ", queue" : ""}`}
       title={`${port.label} · ${port.type}${port.multiple ? " queue" : ""}`}
     >
-      <Icon aria-hidden className="midgard-port-glyph" style={{ color }} />
+      <Icon aria-hidden className="lluna-port-glyph" style={{ color }} />
     </XYFlow.Handle>
   );
 }
@@ -76,9 +76,9 @@ function PortCircle({ port, side, top, active }) {
 function PillSelect({ label, value, disabled, options, onChange, stopPointer }) {
   const selected = options.find((option) => option.value === value);
   return (
-    <label className="midgard-node-pill nodrag nowheel" title={label}>
-      <span className="midgard-node-pill-label">{selected?.label || label}</span>
-      <ChevronDown aria-hidden className="midgard-node-pill-chevron" />
+    <label className="lluna-node-pill nodrag nowheel" title={label}>
+      <span className="lluna-node-pill-label">{selected?.label || label}</span>
+      <ChevronDown aria-hidden className="lluna-node-pill-chevron" />
       <select
         aria-label={label}
         disabled={disabled}
@@ -132,7 +132,7 @@ function QuantityStepper({
     Math.min(max, Math.max(min, next));
   return (
     <div
-      className="midgard-node-stepper nodrag nowheel"
+      className="lluna-node-stepper nodrag nowheel"
       title={label}
       onPointerDown={stopPointer}
     >
@@ -178,7 +178,7 @@ function isQuantityParam(parameter) {
 /** @param {{items: import("../types").SaveProgressItem[]}} props */
 function SaveProgressList({ items }) {
   return (
-    <div className="midgard-save-progress-list">
+    <div className="lluna-save-progress-list">
       {items.map((item, index) => {
         const finished = item.status === "FINISHED";
         const failed = item.status === "FAILED";
@@ -193,13 +193,13 @@ function SaveProgressList({ items }) {
         return (
           <div
             key={`${item.index}-${label}`}
-            className={`midgard-save-progress-item ${finished ? "is-finished" : ""} ${failed ? "is-failed" : ""}`}
+            className={`lluna-save-progress-item ${finished ? "is-finished" : ""} ${failed ? "is-failed" : ""}`}
           >
-            <div className="midgard-save-progress-heading">
+            <div className="lluna-save-progress-heading">
               <span title={label}>{label}</span>
               <strong>
                 {statusLabel}
-                <span className="midgard-save-progress-pct">
+                <span className="lluna-save-progress-pct">
                   {Math.round(item.progress)}%
                 </span>
               </strong>
@@ -216,7 +216,7 @@ function SaveProgressList({ items }) {
 }
 
 /** @param {import("@xyflow/react").NodeProps<import("../types").EditorNode>} props */
-function MidgardNodeComponent({ id, data, selected }) {
+function LlunaNodeComponent({ id, data, selected }) {
   const state = useRunStore((store) => store.nodeStates[id]);
   const [hovered, setHovered] = useState(false);
   /** @type {import("../types").NodeDefinition} */
@@ -282,7 +282,7 @@ function MidgardNodeComponent({ id, data, selected }) {
   );
   const showLlavaToggle = modelValue === "SUPIR" && Boolean(llavaToggle);
   const isSettingsCard = SETTINGS_CARD_SCHEMAS.has(definition.schemaId);
-  const isSelectObject = definition.schemaId === "midgard.mask.select_object";
+  const isSelectObject = definition.schemaId === "lluna.mask.select_object";
   const quantityParam = visibleParameters.find(isQuantityParam);
   const footerParams = visibleParameters.filter((parameter) => {
     if (isSettingsCard) return false;
@@ -321,7 +321,7 @@ function MidgardNodeComponent({ id, data, selected }) {
       )
     : [];
   const supportsPreview = definition.supportsPreview === true;
-  const isSaveImage = definition.schemaId === "midgard.output.save_image";
+  const isSaveImage = definition.schemaId === "lluna.output.save_image";
   const reportedSaveItems = state
     ? state.saveItems || []
     : persistedResult?.saveItems || [];
@@ -369,7 +369,7 @@ function MidgardNodeComponent({ id, data, selected }) {
     <article
       aria-label={`${nodeLabel} node`}
       title="Use the settings button to edit this node"
-      className={`midgard-node ${selected ? "is-selected" : ""} ${data.disabled ? "is-disabled" : ""} ${showPorts ? "is-ports-open" : ""} ${promptFirst ? "is-prompt" : ""} ${isSettingsCard ? "is-settings-card" : ""}`}
+      className={`lluna-node ${selected ? "is-selected" : ""} ${data.disabled ? "is-disabled" : ""} ${showPorts ? "is-ports-open" : ""} ${promptFirst ? "is-prompt" : ""} ${isSettingsCard ? "is-settings-card" : ""}`}
       style={/** @type {import("react").CSSProperties} */ ({ "--node-accent": accent })}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -393,10 +393,10 @@ function MidgardNodeComponent({ id, data, selected }) {
         />
       ))}
 
-      <div className="midgard-node-chrome">
+      <div className="lluna-node-chrome">
         <button
           type="button"
-          className="nodrag nowheel midgard-node-chip"
+          className="nodrag nowheel lluna-node-chip"
           aria-label={
             status !== "IDLE" && status !== "SUCCEEDED"
               ? `${nodeLabel} status ${status.replaceAll("_", " ")}`
@@ -417,7 +417,7 @@ function MidgardNodeComponent({ id, data, selected }) {
             <Plus aria-hidden />
           )}
         </button>
-        <strong className="midgard-node-title">{nodeLabel}</strong>
+        <strong className="lluna-node-title">{nodeLabel}</strong>
         {status !== "IDLE" && (
           <Badge size="xs" tone={STATUS_TONE[status] || "neutral"}>
             {status.replaceAll("_", " ")}
@@ -432,7 +432,7 @@ function MidgardNodeComponent({ id, data, selected }) {
 
       {showNodeBody && (
         <div
-          className={`midgard-node-body ${isSettingsCard ? "is-settings" : ""} ${isSaveImage ? "is-save" : ""} ${promptFirst && !showPreview ? "is-prompt" : ""}`}
+          className={`lluna-node-body ${isSettingsCard ? "is-settings" : ""} ${isSaveImage ? "is-save" : ""} ${promptFirst && !showPreview ? "is-prompt" : ""}`}
           onClick={
             supportsPreview
               ? (event) => {
@@ -445,9 +445,9 @@ function MidgardNodeComponent({ id, data, selected }) {
           {isSaveImage ? (
             <SaveProgressList items={saveItems} />
           ) : isSettingsCard ? (
-          <div className="midgard-node-settings">
+          <div className="lluna-node-settings">
             {showPromptField && promptParam && (
-              <label className="midgard-node-settings-field">
+              <label className="lluna-node-settings-field">
                 <span>{promptParam.label || "Instruction"}</span>
                 <textarea
                   className="ui-input is-area nodrag nowheel"
@@ -480,7 +480,7 @@ function MidgardNodeComponent({ id, data, selected }) {
                 return (
                   <div
                     key={parameter.id}
-                    className="midgard-node-settings-field is-switch"
+                    className="lluna-node-settings-field is-switch"
                     onPointerDown={stopPointer}
                   >
                     <Switch
@@ -504,7 +504,7 @@ function MidgardNodeComponent({ id, data, selected }) {
                 return (
                   <label
                     key={parameter.id}
-                    className="midgard-node-settings-field is-inline"
+                    className="lluna-node-settings-field is-inline"
                   >
                     <span>{parameter.label}</span>
                     <select
@@ -543,7 +543,7 @@ function MidgardNodeComponent({ id, data, selected }) {
               return (
                 <label
                   key={parameter.id}
-                  className="midgard-node-settings-field is-inline"
+                  className="lluna-node-settings-field is-inline"
                 >
                   <span>{parameter.label}</span>
                   <input
@@ -597,16 +597,16 @@ function MidgardNodeComponent({ id, data, selected }) {
                 label={`${nodeLabel} output`}
               />
             ) : showPreview ? (
-              <div className="midgard-node-stage" aria-hidden>
+              <div className="lluna-node-stage" aria-hidden>
                 <HeaderIcon
-                  className="midgard-node-stage-glyph"
+                  className="lluna-node-stage-glyph"
                   style={{ color: accent }}
                 />
               </div>
             ) : null}
 
             {showPromptField && promptParam && (
-              <div className="midgard-node-prompt">
+              <div className="lluna-node-prompt">
                 <textarea
                   className="nodrag nowheel"
                   rows={promptFirst && !showPreview ? 4 : 2}
@@ -634,7 +634,7 @@ function MidgardNodeComponent({ id, data, selected }) {
 
       {!isSaveImage &&
         (status === "RUNNING" || status === "PAUSE_REQUESTED") && (
-        <div className="midgard-node-progress">
+        <div className="lluna-node-progress">
           <ProgressBar
             value={state?.progress || 0}
             label={state?.message || `${nodeLabel} progress`}
@@ -643,8 +643,8 @@ function MidgardNodeComponent({ id, data, selected }) {
         </div>
         )}
 
-      <footer className="midgard-node-footer">
-        <div className="midgard-node-toolbar">
+      <footer className="lluna-node-footer">
+        <div className="lluna-node-toolbar">
           {quantityParam && Number.isFinite(quantityValue) && (
             <QuantityStepper
               label={quantityParam.label}
@@ -739,7 +739,7 @@ function MidgardNodeComponent({ id, data, selected }) {
 
           {showLlavaToggle && llavaToggle && (
             <div
-              className="nodrag nowheel midgard-node-llava-toggle"
+              className="nodrag nowheel lluna-node-llava-toggle"
               title={llavaToggle.description}
               onPointerDown={stopPointer}
               onClick={stopPointer}
@@ -759,11 +759,11 @@ function MidgardNodeComponent({ id, data, selected }) {
           )}
         </div>
 
-        <div className="midgard-node-footer-actions">
+        <div className="lluna-node-footer-actions">
           {supportsPreview && (artifactId || isSelectObject) && (
             <button
               type="button"
-              className="nodrag nowheel midgard-node-icon-btn"
+              className="nodrag nowheel lluna-node-icon-btn"
               aria-label={`Preview ${nodeLabel} image`}
               title="Preview image"
               onPointerDown={stopPointer}
@@ -777,7 +777,7 @@ function MidgardNodeComponent({ id, data, selected }) {
           )}
           <button
             type="button"
-            className="nodrag nowheel midgard-node-icon-btn"
+            className="nodrag nowheel lluna-node-icon-btn"
             aria-label={`Open ${nodeLabel} options`}
             title="Node options"
             onPointerDown={stopPointer}
@@ -790,7 +790,7 @@ function MidgardNodeComponent({ id, data, selected }) {
           </button>
           <button
             type="button"
-            className="nodrag nowheel midgard-node-run"
+            className="nodrag nowheel lluna-node-run"
             aria-label={`${runLabel} ${nodeLabel}`}
             title={runLabel}
             disabled={data.disabled || busy}
@@ -808,4 +808,4 @@ function MidgardNodeComponent({ id, data, selected }) {
   );
 }
 
-export const MidgardNode = memo(MidgardNodeComponent);
+export const LlunaNode = memo(LlunaNodeComponent);

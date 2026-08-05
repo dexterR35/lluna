@@ -32,7 +32,7 @@ def paths(root: Path) -> AppPaths:
         runtime_config_file=config / "runtime.json",
         shipped_config_file=root / "defaults.json",
         models_dir=root / "models",
-        runtime_file=config / "midgard_runtime.json",
+        runtime_file=config / "lluna_runtime.json",
     )
 
 
@@ -102,7 +102,7 @@ def test_local_file_import_is_promoted_into_managed_folder(tmp_path, monkeypatch
     manifest = import_local(source, safetensors_manifest())
     target = registry.root / manifest.id
     assert (target / "model.safetensors").read_bytes() == b"safe-weights"
-    assert (target / ".midgard-installed").is_file()
+    assert (target / ".lluna-installed").is_file()
     assert registry.get(manifest.id).installed
 
 
@@ -174,7 +174,7 @@ def test_enabled_custom_diffusers_model_is_added_to_generate_node(tmp_path, monk
     registry.scan()
     registry.set_enabled("custom-image", True)
 
-    generate = next(node for node in list_nodes() if node.schema_id == "midgard.generate.image")
+    generate = next(node for node in list_nodes() if node.schema_id == "lluna.generate.image")
     model = next(parameter for parameter in generate.parameters if parameter.id == "model")
     assert any(option["value"] == "custom:custom-image" for option in model.options)
 
@@ -273,7 +273,7 @@ def test_supir_finds_uv_python_when_desktop_path_is_minimal(tmp_path, monkeypatc
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("PATH", "")
     monkeypatch.delenv("XDG_DATA_HOME", raising=False)
-    monkeypatch.delenv("MIDGARD_SUPIR_PYTHON", raising=False)
+    monkeypatch.delenv("LLUNA_SUPIR_PYTHON", raising=False)
 
     assert supir_models._bootstrap_python() == str(python.resolve())
 
@@ -286,7 +286,7 @@ def test_supir_rejects_configured_unsupported_python(tmp_path, monkeypatch) -> N
     python.chmod(0o755)
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("PATH", "")
-    monkeypatch.setenv("MIDGARD_SUPIR_PYTHON", str(python))
+    monkeypatch.setenv("LLUNA_SUPIR_PYTHON", str(python))
 
     with pytest.raises(RuntimeError, match="Python 3.8–3.10"):
         supir_models._bootstrap_python()
@@ -365,7 +365,7 @@ def test_graph_rejects_controls_not_supported_by_selected_model() -> None:
         nodes=[
             WorkflowNode(
                 id="generate",
-                schema_id="midgard.generate.image",
+                schema_id="lluna.generate.image",
                 parameters={
                     "model": "FLUX.2-klein-4B",
                     "width": 768,
@@ -395,7 +395,7 @@ def test_local_model_analyze_and_import_api(tmp_path, monkeypatch) -> None:
     (source / "config.json").write_text("{}", encoding="utf-8")
     grant = DesktopGrantStore.instance().issue(source, mode="directory")
     token = "model-platform-test-token-with-at-least-thirty-two-characters"  # noqa: S105
-    headers = {"X-Midgard-Token": token}
+    headers = {"X-Lluna-Token": token}
 
     app = create_app(token)
 

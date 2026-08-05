@@ -165,8 +165,21 @@ class BiRefNetAdapter(RuntimeAdapter):
         raise AdapterError("Custom BiRefNet checkpoints run through the Remove Background workflow nodes.")
 
 
+class SeedVRAdapter(RuntimeAdapter):
+    """Capability marker for the isolated official SeedVR2 worker."""
+
+    id = "seedvr"
+
+    def load(self, record: DynamicModelRecord) -> Any:
+        raise AdapterError("SeedVR2 models run through the Upscale Image workflow node.")
+
+    def run(self, loaded: Any, inputs: dict[str, Any], *, progress: Progress = None, cancel_event: CancelEvent = None) -> Any:
+        raise AdapterError("SeedVR2 models run through the Upscale Image workflow node.")
+
+
 ADAPTERS: dict[str, RuntimeAdapter] = {
-    adapter.id: adapter for adapter in (DiffusersAdapter(), TransformersAdapter(), BiRefNetAdapter())
+    adapter.id: adapter
+    for adapter in (DiffusersAdapter(), TransformersAdapter(), BiRefNetAdapter(), SeedVRAdapter())
 }
 
 

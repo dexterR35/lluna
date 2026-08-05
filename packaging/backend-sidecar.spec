@@ -9,9 +9,11 @@ def data(source, destination):
     return (str(source), destination)
 
 datas = []
-release_metadata = ROOT / "build/release-metadata/midgard_release.json"
+release_metadata = ROOT / "build/release-metadata/lluna_release.json"
 if release_metadata.is_file(): datas.append(data(release_metadata, "."))
 for path in (ROOT / "backend/models/V5").rglob("*"):
+    if path.is_file(): datas.append(data(path, str(path.parent.relative_to(ROOT))))
+for path in (ROOT / "backend/ai/seedvr2").rglob("*"):
     if path.is_file(): datas.append(data(path, str(path.parent.relative_to(ROOT))))
 ffmpeg_roots = {"win32": ROOT / "backend/ffmpeg/win_x64", "darwin": ROOT / "backend/ffmpeg/macos", "linux": ROOT / "backend/ffmpeg/linux_x64"}
 for path in ffmpeg_roots.get(sys.platform, ffmpeg_roots["linux"]).rglob("*"):
@@ -28,7 +30,7 @@ for package in ("paddleocr",):
 hiddenimports = ["uvicorn.logging", "uvicorn.loops.auto", "uvicorn.protocols.http.auto", "uvicorn.protocols.websockets.auto", "uvicorn.lifespan.on"]
 for package in ("diffusers", "accelerate", "transformers", "huggingface_hub", "torch_directml", "keyring"):
     if can_import_module(package): hiddenimports += collect_submodules(package)
-a = Analysis([str(ROOT / "midgard.py")], pathex=[str(ROOT)], binaries=[], datas=datas, hiddenimports=hiddenimports, hookspath=[], hooksconfig={}, runtime_hooks=[], excludes=["PySide6", "qfluentwidgets", "qframelesswindow", "tensorboard", "jupyter", "IPython", "pytest", "fastapi.testclient"], noarchive=False)
+a = Analysis([str(ROOT / "lluna.py")], pathex=[str(ROOT)], binaries=[], datas=datas, hiddenimports=hiddenimports, hookspath=[], hooksconfig={}, runtime_hooks=[], excludes=["PySide6", "qfluentwidgets", "qframelesswindow", "tensorboard", "jupyter", "IPython", "pytest", "fastapi.testclient"], noarchive=False)
 pyz = PYZ(a.pure)
-exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name="midgard-backend", console=False, debug=False, strip=False, upx=False)
-coll = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False, name="midgard-backend")
+exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name="lluna-backend", console=False, debug=False, strip=False, upx=False)
+coll = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False, name="lluna-backend")

@@ -9,7 +9,7 @@ def test_electron_is_the_only_desktop_entrypoint():
 
 
 def test_python_entrypoint_is_control_plane_only():
-    source = Path("midgard.py").read_text(encoding="utf-8")
+    source = Path("lluna.py").read_text(encoding="utf-8")
     assert "backend.api.app" in source
     assert "freeze_support" in source
 

@@ -24,6 +24,7 @@ _BIREFNET_IDS = {
     "birefnet-lite-2k",
     "birefnet-matting",
 }
+_SEEDVR_IDS = {"seedvr2-3b", "seedvr2-7b"}
 _STATE_LOCK = threading.RLock()
 _QUEUE_EVENT_LOCK = threading.Lock()
 _QUEUE_EVENT_SOURCE: ModelDownloadQueue | None = None
@@ -90,7 +91,7 @@ def ensure_download_queue_events(queue: ModelDownloadQueue | None = None) -> Non
 
 
 def _state_path() -> Path:
-    return Path(os.environ.get("MIDGARD_CONFIG_DIR", PATHS.config_dir)) / "model-lifecycle.json"
+    return Path(os.environ.get("LLUNA_CONFIG_DIR", PATHS.config_dir)) / "model-lifecycle.json"
 
 
 def _enabled_overrides() -> dict[str, bool]:
@@ -192,6 +193,10 @@ def _installed(model_id: str) -> bool:
         from backend.tools.birefnet_models import is_model_installed
 
         return is_model_installed(model_id)
+    if model_id in _SEEDVR_IDS:
+        from backend.tools.seedvr_models import is_model_installed
+
+        return is_model_installed(model_id)
     path = _model_path(metadata.local_path)
     if metadata.expected_files:
         return all(
@@ -211,14 +216,18 @@ def list_models() -> list[dict]:
         item["state"] = "installed" if item["installed"] else "not_installed"
         item["enabled"] = _enabled(model_id)
         item["disk_usage_bytes"] = _disk_usage(Path(item["resolved_path"]))
-        lifecycle_managed = model_id.startswith("generate:") or model_id in {
-            "realesrgan-x2",
-            "realesrgan-x4",
-            "supir",
-            "mirnet",
-            "sam2",
-            "grounding-dino",
-        } | _BIREFNET_IDS
+        lifecycle_managed = model_id.startswith("generate:") or model_id in (
+            {
+                "realesrgan-x2",
+                "realesrgan-x4",
+                "supir",
+                "mirnet",
+                "sam2",
+                "grounding-dino",
+            }
+            | _BIREFNET_IDS
+            | _SEEDVR_IDS
+        )
         item["can_install"] = lifecycle_managed
         item["can_uninstall"] = lifecycle_managed
         item["can_toggle"] = True
@@ -238,13 +247,15 @@ def _builtin_platform_fields(model_id: str, item: dict) -> dict:
     if model_id.startswith("generate:"):
         task, adapter, profile = "text-to-image", "diffusers", "diffusers-torch"
     elif model_id.startswith("realesrgan"):
-        task, adapter, profile = "image-upscaling", "midgard-native", "midgard-native"
+        task, adapter, profile = "image-upscaling", "lluna-native", "lluna-native"
     elif model_id == "supir":
         task, adapter, profile = "image-upscaling", "supir", "supir-python"
     elif model_id in _BIREFNET_IDS:
         task, adapter, profile = "image-segmentation", "birefnet", "birefnet-torch"
+    elif model_id in _SEEDVR_IDS:
+        task, adapter, profile = "image-upscaling", "seedvr", "seedvr-python"
     elif model_id == "mirnet":
-        task, adapter, profile = "image-restoration", "midgard-native", "midgard-native"
+        task, adapter, profile = "image-restoration", "lluna-native", "lluna-native"
     elif model_id == "sam2":
         task, adapter, profile = "image-segmentation", "transformers", "transformers-torch"
     elif model_id == "grounding-dino":
@@ -252,7 +263,7 @@ def _builtin_platform_fields(model_id: str, item: dict) -> dict:
     elif model_id.startswith("paddleocr"):
         task, adapter, profile = "text-recognition", "paddle", "paddle"
     else:
-        task, adapter, profile = "inpainting", "midgard-native", "midgard-native"
+        task, adapter, profile = "inpainting", "lluna-native", "lluna-native"
     try:
         from backend.models.runtime_profiles import get_runtime_profile, runtime_installed
 
@@ -283,6 +294,19 @@ def _builtin_platform_fields(model_id: str, item: dict) -> dict:
             runtime_reasons.append("The official SUPIR implementation requires an NVIDIA CUDA GPU.")
         runtime_warnings.append(
             "SUPIR source and checkpoints are restricted to non-commercial use."
+        )
+    elif model_id in _SEEDVR_IDS:
+        from backend.hardware.detector import get_hardware_profile
+        from backend.hardware.policy import select_execution_policy
+        from backend.tools.seedvr_models import SEEDVR_PACKAGES
+
+        runtime_packages = list(SEEDVR_PACKAGES)
+        runtime_isolated = True
+        selected_backend = select_execution_policy(get_hardware_profile()).backend
+        if selected_backend != "cuda":
+            runtime_reasons.append("The official SeedVR2 implementation requires an NVIDIA CUDA GPU.")
+        runtime_warnings.append(
+            "SeedVR2 is a prototype restoration model and can oversharpen lightly degraded inputs."
         )
     manifest = {
         "schema": 1,
@@ -320,12 +344,12 @@ def _builtin_platform_fields(model_id: str, item: dict) -> dict:
         },
         "security": {
             "trustRemoteCode": model_id in _BIREFNET_IDS,
-            "preferSafetensors": model_id != "supir",
-            "allowPickle": model_id == "supir",
+            "preferSafetensors": model_id not in {"supir", *_SEEDVR_IDS},
+            "allowPickle": model_id == "supir" or model_id in _SEEDVR_IDS,
         },
         "variant": variant.to_dict(),
         "capabilities": capabilities.to_dict(task),
-        "managedBy": "midgard",
+        "managedBy": "lluna",
     }
     return {
         "dynamic": False,
@@ -472,6 +496,23 @@ def _action(model_id: str, operation: str) -> None:
         elif operation == "disable":
             _set_enabled_override(model_id, False)
         return
+    if model_id in _SEEDVR_IDS:
+        from backend.tools.seedvr_models import discard_partial, install_model, uninstall_model
+
+        if operation == "install":
+            install_model(model_id)
+            _set_enabled_override(model_id, True)
+        elif operation == "remove":
+            uninstall_model(model_id)
+            discard_partial(model_id)
+            _set_enabled_override(model_id, False)
+        elif operation == "enable":
+            if not _installed(model_id):
+                raise ValueError("SeedVR2 is not fully installed.")
+            _set_enabled_override(model_id, True)
+        elif operation == "disable":
+            _set_enabled_override(model_id, False)
+        return
     if model_id == "supir":
         from backend.tools.supir_models import install_model, uninstall_model
 
@@ -522,7 +563,7 @@ def _action(model_id: str, operation: str) -> None:
     if operation == "remove":
         raise PermissionError("This shipped runtime cannot be uninstalled independently")
     if operation == "install":
-        raise PermissionError("This runtime is supplied by the Midgard installation")
+        raise PermissionError("This runtime is supplied by the Lluna installation")
 
 
 def start_model_action(model_id: str, operation: str) -> dict:

@@ -9,15 +9,15 @@ let session = null;
 
 export async function initializeApi() {
   if (session) return session;
-  const desktop = window.midgardDesktop;
+  const desktop = window.llunaDesktop;
   if (desktop) {
     session = SessionSchema.parse(await desktop.getBackendSession());
   } else {
     session = SessionSchema.parse({
-      baseUrl: import.meta.env.VITE_MIDGARD_API_URL || "http://127.0.0.1:8765",
+      baseUrl: import.meta.env.VITE_LLUNA_API_URL || "http://127.0.0.1:8765",
       token:
-        import.meta.env.VITE_MIDGARD_TOKEN ||
-        "midgard-development-token-000000000000000000",
+        import.meta.env.VITE_LLUNA_TOKEN ||
+        "lluna-development-token-000000000000000000",
     });
   }
   return session;
@@ -31,7 +31,7 @@ export async function api(path, options = {}) {
     ...options,
     headers: {
       "Content-Type": "application/json",
-      "X-Midgard-Token": current.token,
+      "X-Lluna-Token": current.token,
       ...options.headers,
     },
   });
@@ -61,7 +61,7 @@ export async function artifactThumbnailUrl(artifactId, options = {}) {
   const edge = options.maxEdge || 256;
   const response = await fetch(
     `${current.baseUrl}/api/artifacts/${encodeURIComponent(artifactId)}/thumbnail?max_edge=${edge}`,
-    { headers: { "X-Midgard-Token": current.token } },
+    { headers: { "X-Lluna-Token": current.token } },
   );
   if (!response.ok) throw new Error("Thumbnail is unavailable");
   return URL.createObjectURL(await response.blob());
@@ -72,7 +72,7 @@ export async function artifactObjectUrl(artifactId) {
   const current = await initializeApi();
   const response = await fetch(
     `${current.baseUrl}/api/artifacts/${artifactId}`,
-    { headers: { "X-Midgard-Token": current.token } },
+    { headers: { "X-Lluna-Token": current.token } },
   );
   if (!response.ok) throw new Error("Artifact is unavailable");
   return URL.createObjectURL(await response.blob());

@@ -17,7 +17,7 @@ from backend.updates.manifest import (
 def _signed_manifest(tmp_path):
     crypto = pytest.importorskip("cryptography.hazmat.primitives.asymmetric.ed25519")
     serialization = pytest.importorskip("cryptography.hazmat.primitives.serialization")
-    artifact = tmp_path / "Midgard-1.5.0-windows-x64-cpu.exe"
+    artifact = tmp_path / "Lluna-1.5.0-windows-x64-cpu.exe"
     artifact.write_bytes(b"trusted release")
     value = {
         "schema": 1,

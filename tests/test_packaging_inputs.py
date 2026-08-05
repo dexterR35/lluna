@@ -18,14 +18,14 @@ def test_sidecar_spec_excludes_removed_gui_and_user_model_roots():
     assert "backend/models/generate" not in source
     assert "config/config.json" not in source
     assert "hf_token" not in source
-    assert 'name="midgard-backend"' in source
+    assert 'name="lluna-backend"' in source
 
 
 def test_forge_embeds_only_the_frozen_sidecar():
     source = Path("frontend/forge.config.js").read_text(encoding="utf-8")
-    assert '"build", "backend-sidecar", "midgard-backend"' in source
+    assert '"build", "backend-sidecar", "lluna-backend"' in source
     assert (
-        'rename(path.join(resourcesPath, "midgard-backend"), path.join(resourcesPath, "backend-sidecar"))'
+        'rename(path.join(resourcesPath, "lluna-backend"), path.join(resourcesPath, "backend-sidecar"))'
         in source
     )
     assert '"..", "backend"' not in source

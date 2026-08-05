@@ -59,7 +59,7 @@ def _adapter_for(library: str, pipeline: str, filenames: list[str]) -> tuple[str
         }
         return "transformers", "transformers-torch", pipeline if pipeline in known else "custom"
     raise ValueError(
-        "Midgard could not identify a supported Diffusers or Transformers model."
+        "Lluna could not identify a supported Diffusers or Transformers model."
     )
 
 
@@ -101,7 +101,7 @@ def analyze_huggingface(value: str, *, revision: str = "") -> dict:
     blocking_reasons = []
     if adapter in {"diffusers", "transformers"} and not has_safe_weights:
         blocking_reasons.append(
-            f"This repository does not expose {safe_weight_suffix} weights that Midgard can load safely."
+            f"This repository does not expose {safe_weight_suffix} weights that Lluna can load safely."
         )
     size_by_name = {
         str(getattr(item, "rfilename", "")): int(getattr(item, "size", 0) or 0)
@@ -258,7 +258,7 @@ def configure_manifest(raw: Mapping[str, Any]) -> ModelManifest:
         "diffusers-torch": "diffusers",
         "transformers-torch": "transformers",
         "paddle": "paddle",
-        "midgard-native": "midgard-native",
+        "lluna-native": "lluna-native",
     }.get(manifest.runtime.profile)
     if runtime_adapter != manifest.adapter:
         raise ManifestError("The selected runtime profile does not match the model adapter.")
@@ -295,7 +295,7 @@ def import_local(source: Path, raw: Mapping[str, Any]) -> ModelManifest:
             needs_configuration=False,
         )
         atomic_write_json(staging / MANIFEST_FILENAME, local_manifest.to_dict())
-        (staging / ".midgard-installed").write_text("local\n", encoding="utf-8")
+        (staging / ".lluna-installed").write_text("local\n", encoding="utf-8")
         _promote(staging, target)
         registry.scan()
         from backend.configuration.service import get_settings
@@ -314,7 +314,7 @@ def install_huggingface(manifest: ModelManifest) -> Path:
     if manifest.needs_configuration:
         raise ValueError("Configure this model before installation.")
     if manifest.security.trust_remote_code:
-        raise PermissionError("Remote repository code is disabled by Midgard policy.")
+        raise PermissionError("Remote repository code is disabled by Lluna policy.")
     from backend.tools.hf_auth import snapshot_download_with_progress
 
     registry = DynamicModelRegistry.instance()
@@ -338,7 +338,7 @@ def install_huggingface(manifest: ModelManifest) -> Path:
         if cache.exists():
             shutil.rmtree(cache, ignore_errors=True)
         atomic_write_json(staging / MANIFEST_FILENAME, manifest.to_dict())
-        (staging / ".midgard-installed").write_text(
+        (staging / ".lluna-installed").write_text(
             f"{manifest.source.repo}@{manifest.source.revision}\n", encoding="utf-8"
         )
         _promote(staging, target)

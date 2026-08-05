@@ -10,7 +10,7 @@ from dataclasses import dataclass
 
 from backend.core.paths import PATHS
 
-_METADATA_NAME = "midgard_release.json"
+_METADATA_NAME = "lluna_release.json"
 _PROFILES = frozenset({"cpu", "cuda", "directml", "mps", "source"})
 
 
@@ -49,7 +49,7 @@ class ReleaseTarget:
 
     def asset_name(self, version: str) -> str:
         return (
-            f"Midgard-{version}-{self.platform}-{self.architecture}-"
+            f"Lluna-{version}-{self.platform}-{self.architecture}-"
             f"{self.profile}.{self.package_extension}"
         )
 
@@ -69,7 +69,7 @@ def current_release_target() -> ReleaseTarget:
                 return target
         except (OSError, UnicodeError, ValueError, KeyError, TypeError):
             pass
-    profile_name = os.environ.get("MIDGARD_BUILD_PROFILE", "source").lower()
+    profile_name = os.environ.get("LLUNA_BUILD_PROFILE", "source").lower()
     if profile_name not in _PROFILES:
         profile_name = "source"
     return ReleaseTarget(

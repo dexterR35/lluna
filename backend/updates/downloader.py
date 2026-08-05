@@ -43,7 +43,7 @@ def release_download_url(version: str, filename: str) -> str:
 def _get_bytes(url: str) -> bytes:
     response = requests.get(
         url,
-        headers={"User-Agent": "Midgard-packaged-updater"},
+        headers={"User-Agent": "Lluna-packaged-updater"},
         timeout=15,
         allow_redirects=True,
     )
@@ -61,7 +61,7 @@ def _download(
     received = 0
     with requests.get(
         url,
-        headers={"User-Agent": "Midgard-packaged-updater"},
+        headers={"User-Agent": "Lluna-packaged-updater"},
         timeout=(10, 60),
         allow_redirects=True,
         stream=True,
@@ -90,8 +90,8 @@ def prepare_update(
 ) -> PreparedUpdate:
     normalized = version.strip().removeprefix("v")
     selected_target = target or current_release_target()
-    manifest_url = release_download_url(normalized, "midgard-update.json")
-    signature_url = release_download_url(normalized, "midgard-update.json.sig")
+    manifest_url = release_download_url(normalized, "lluna-update.json")
+    signature_url = release_download_url(normalized, "lluna-update.json.sig")
     manifest = parse_verified_manifest(
         fetch_bytes(manifest_url),
         fetch_bytes(signature_url).strip(),

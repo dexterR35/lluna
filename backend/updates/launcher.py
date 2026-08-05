@@ -25,7 +25,7 @@ def _mac_app_root() -> Path:
     for parent in executable.parents:
         if parent.suffix == ".app":
             return parent
-    raise UpdateLaunchError("Could not locate the running Midgard.app bundle.")
+    raise UpdateLaunchError("Could not locate the running Lluna.app bundle.")
 
 
 def _write_linux_updater(update: PreparedUpdate) -> Path:
@@ -40,15 +40,15 @@ while kill -0 "$pid" 2>/dev/null; do sleep 1; done
 parent={q(str(parent))}
 current={q(str(install_root))}
 archive={q(str(update.path))}
-staging="$parent/.midgard-update-{update.version}"
-backup="$parent/.midgard-backup-{update.version}"
+staging="$parent/.lluna-update-{update.version}"
+backup="$parent/.lluna-backup-{update.version}"
 rm -rf "$staging"
 mkdir -p "$staging"
 tar -xzf "$archive" -C "$staging"
 rm -rf "$backup"
 mv "$current" "$backup"
-if mv "$staging/Midgard" "$current"; then
-  "$current/Midgard" >/dev/null 2>&1 &
+if mv "$staging/Lluna" "$current"; then
+  "$current/Lluna" >/dev/null 2>&1 &
 else
   mv "$backup" "$current"
   exit 1
@@ -72,13 +72,13 @@ current={q(str(app_root))}
 dmg={q(str(update.path))}
 parent={q(str(parent))}
 mount="$(mktemp -d)"
-staging="$parent/.Midgard-update-{update.version}.app"
-backup="$parent/.Midgard-backup-{update.version}.app"
+staging="$parent/.Lluna-update-{update.version}.app"
+backup="$parent/.Lluna-backup-{update.version}.app"
 cleanup() {{ hdiutil detach "$mount" -quiet 2>/dev/null || true; rmdir "$mount" 2>/dev/null || true; }}
 trap cleanup EXIT
 hdiutil attach "$dmg" -nobrowse -readonly -mountpoint "$mount" -quiet
 rm -rf "$staging"
-ditto "$mount/Midgard.app" "$staging"
+ditto "$mount/Lluna.app" "$staging"
 codesign --verify --deep --strict "$staging"
 rm -rf "$backup"
 mv "$current" "$backup"

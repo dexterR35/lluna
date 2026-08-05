@@ -108,6 +108,7 @@ class InferClient:
         JobType.LAMA_RETOUCH.value,
         JobType.SELECT_SUBJECT.value,
         JobType.GENERATE.value,
+        JobType.SEEDVR.value,
     }
 
     def __init__(self):
@@ -185,7 +186,7 @@ class InferClient:
         self._process = ctx.Process(
             target=infer_worker_main,
             args=(self._cmd_queue, self._evt_queue, hw),
-            name="midgard-infer-worker",
+            name="lluna-infer-worker",
             daemon=True,
         )
         self._process.start()
@@ -764,7 +765,7 @@ class InferClient:
     @classmethod
     def reset_instance_for_tests(cls) -> None:
         """Release singleton state between repeated isolated application runs."""
-        if os.environ.get("MIDGARD_TESTING") != "1":
+        if os.environ.get("LLUNA_TESTING") != "1":
             raise RuntimeError("InferClient reset is available only in tests")
         with cls._lock:
             instance = cls._instance
@@ -773,7 +774,7 @@ class InferClient:
             instance.shutdown()
 
     def temp_dir(self) -> str:
-        d = os.path.join(tempfile.gettempdir(), "midgard_infer")
+        d = os.path.join(tempfile.gettempdir(), "lluna_infer")
         os.makedirs(d, exist_ok=True)
         return d
 

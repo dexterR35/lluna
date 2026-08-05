@@ -17,7 +17,7 @@ class JobWorkspace:
 
     @classmethod
     def create(cls, prefix: str = "job") -> "JobWorkspace":
-        path = Path(tempfile.mkdtemp(prefix=f"midgard-{prefix}-"))
+        path = Path(tempfile.mkdtemp(prefix=f"lluna-{prefix}-"))
         try:
             path.chmod(0o700)
         except OSError:
@@ -50,11 +50,11 @@ def cleanup_stale_workspaces(
     root: str | Path | None = None,
     older_than_seconds: float = 24 * 60 * 60,
 ) -> tuple[Path, ...]:
-    """Remove only Midgard-owned workspace directories older than the limit."""
+    """Remove only Lluna-owned workspace directories older than the limit."""
     base = Path(root) if root is not None else Path(tempfile.gettempdir())
     cutoff = time.time() - max(0.0, older_than_seconds)
     removed: list[Path] = []
-    for path in base.glob("midgard-*-*"):
+    for path in base.glob("lluna-*-*"):
         try:
             if path.is_dir() and not path.is_symlink() and path.stat().st_mtime < cutoff:
                 shutil.rmtree(path)

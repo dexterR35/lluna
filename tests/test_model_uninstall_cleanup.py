@@ -23,7 +23,7 @@ def _make_repo_cache(root, repo_id: str):
 def test_hf_cache_cleanup_removes_private_and_legacy_copies_only(tmp_path, monkeypatch) -> None:
     models = tmp_path / "models"
     shared = tmp_path / "shared-hf"
-    monkeypatch.setenv("MIDGARD_MODELS_DIR", str(models))
+    monkeypatch.setenv("LLUNA_MODELS_DIR", str(models))
     monkeypatch.setenv("HF_HOME", str(shared))
     monkeypatch.delenv("HF_HUB_CACHE", raising=False)
     monkeypatch.delenv("HUGGINGFACE_HUB_CACHE", raising=False)
@@ -43,7 +43,7 @@ def test_hf_cache_cleanup_removes_private_and_legacy_copies_only(tmp_path, monke
 
 
 def test_snapshot_download_uses_disposable_app_cache(tmp_path, monkeypatch) -> None:
-    monkeypatch.setenv("MIDGARD_MODELS_DIR", str(tmp_path / "models"))
+    monkeypatch.setenv("LLUNA_MODELS_DIR", str(tmp_path / "models"))
     monkeypatch.setattr(hf_auth, "apply_hf_token_to_env", lambda: None)
 
     kwargs = hf_auth.snapshot_download_kwargs()
@@ -57,7 +57,7 @@ def test_select_object_uninstall_removes_model_and_legacy_cache(tmp_path, monkey
     model_root = tmp_path / "models"
     shared = tmp_path / "shared-hf"
     monkeypatch.setattr(select_object_models, "models_root", lambda: model_root)
-    monkeypatch.setenv("MIDGARD_MODELS_DIR", str(tmp_path / "app-models"))
+    monkeypatch.setenv("LLUNA_MODELS_DIR", str(tmp_path / "app-models"))
     monkeypatch.setenv("HF_HOME", str(shared))
     monkeypatch.delenv("HF_HUB_CACHE", raising=False)
     monkeypatch.delenv("HUGGINGFACE_HUB_CACHE", raising=False)

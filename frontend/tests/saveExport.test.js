@@ -8,16 +8,16 @@ import {
 } from "../src/preview/saveExport";
 
 test("export suffixes follow processing schemas", () => {
-  expect(exportSuffixForSchema("midgard.image.remove_text")).toBe("_nosub");
-  expect(exportSuffixForSchema("midgard.video.remove_text")).toBe("_nosub");
-  expect(exportSuffixForSchema("midgard.image.upscale")).toBe("_upscale");
+  expect(exportSuffixForSchema("lluna.image.remove_text")).toBe("_nosub");
+  expect(exportSuffixForSchema("lluna.video.remove_text")).toBe("_nosub");
+  expect(exportSuffixForSchema("lluna.image.upscale")).toBe("_upscale");
   expect(
     exportSuffixForSchemas([
-      "midgard.image.low_light",
-      "midgard.image.upscale",
+      "lluna.image.low_light",
+      "lluna.image.upscale",
     ]),
   ).toBe("_lowlight_upscale");
-  expect(exportSuffixForSchema("midgard.generate.image")).toBe("");
+  expect(exportSuffixForSchema("lluna.generate.image")).toBe("");
 });
 
 test("export file names reuse the linked input stem with effect tags", () => {

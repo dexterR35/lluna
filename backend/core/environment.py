@@ -17,7 +17,7 @@ class EnvironmentChange:
 def initialize_process_environment(
     environ: MutableMapping[str, str] | None = None,
 ) -> tuple[EnvironmentChange, ...]:
-    """Apply Midgard's required runtime variables once and report mutations."""
+    """Apply Lluna's required runtime variables once and report mutations."""
     target = os.environ if environ is None else environ
     changes: list[EnvironmentChange] = []
     required = {

@@ -1,4 +1,4 @@
-"""Safety boundary for the standard Midgard test suite."""
+"""Safety boundary for the standard Lluna test suite."""
 
 from __future__ import annotations
 
@@ -19,13 +19,13 @@ def isolated_runtime(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, request):
     """Keep tests away from user state and external services by default."""
     config_dir = tmp_path / "config"
     config_dir.mkdir()
-    monkeypatch.setenv("MIDGARD_CONFIG_DIR", str(config_dir))
-    monkeypatch.setenv("MIDGARD_TESTING", "1")
+    monkeypatch.setenv("LLUNA_CONFIG_DIR", str(config_dir))
+    monkeypatch.setenv("LLUNA_TESTING", "1")
     monkeypatch.setenv("HF_HOME", str(tmp_path / "hf"))
     monkeypatch.setenv("U2NET_HOME", str(tmp_path / "u2net"))
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
-    monkeypatch.setenv("MIDGARD_DISABLE_UPDATE_CHECK", "1")
-    monkeypatch.setenv("MIDGARD_DISABLE_MODEL_DOWNLOADS", "1")
+    monkeypatch.setenv("LLUNA_DISABLE_UPDATE_CHECK", "1")
+    monkeypatch.setenv("LLUNA_DISABLE_MODEL_DOWNLOADS", "1")
 
     marked = {marker.name for marker in request.node.iter_markers()}
     if marked & _NETWORK_MARKERS:

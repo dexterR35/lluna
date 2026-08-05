@@ -17,8 +17,8 @@ from backend.graph.schema import WorkflowDocument, WorkflowNode
 
 
 def test_health_ready_and_authenticated_catalog(monkeypatch, tmp_path):
-    monkeypatch.setenv("MIDGARD_TESTING", "1")
-    monkeypatch.setenv("MIDGARD_DISABLE_MODEL_DOWNLOADS", "1")
+    monkeypatch.setenv("LLUNA_TESTING", "1")
+    monkeypatch.setenv("LLUNA_DISABLE_MODEL_DOWNLOADS", "1")
     token = "test-session-token-that-is-at-least-thirty-two-characters"  # noqa: S105
     app = create_app(token)
 
@@ -28,9 +28,9 @@ def test_health_ready_and_authenticated_catalog(monkeypatch, tmp_path):
                 assert (await client.get("/health")).json() == {"status": "healthy"}
                 assert (await client.get("/ready")).json() == {"ready": True}
                 assert (await client.get("/api/nodes")).status_code == 401
-                response = await client.get("/api/nodes", headers={"X-Midgard-Token": token})
+                response = await client.get("/api/nodes", headers={"X-Lluna-Token": token})
                 assert response.status_code == 200
-                assert any(item["schemaId"] == "midgard.generate.image" for item in response.json())
+                assert any(item["schemaId"] == "lluna.generate.image" for item in response.json())
 
     asyncio.run(scenario())
 
@@ -64,8 +64,8 @@ def test_read_grant_registers_an_immediately_previewable_artifact(tmp_path):
 
 
 def test_queue_and_history_api_expose_frozen_workflow_identity(monkeypatch, tmp_path):
-    monkeypatch.setenv("MIDGARD_TESTING", "1")
-    monkeypatch.setenv("MIDGARD_DISABLE_MODEL_DOWNLOADS", "1")
+    monkeypatch.setenv("LLUNA_TESTING", "1")
+    monkeypatch.setenv("LLUNA_DISABLE_MODEL_DOWNLOADS", "1")
     token = "queue-session-token-that-is-at-least-thirty-two-characters"  # noqa: S105
     ArtifactStore._instance = ArtifactStore(tmp_path / "artifacts")
     DesktopGrantStore._instance = None
@@ -75,12 +75,12 @@ def test_queue_and_history_api_expose_frozen_workflow_identity(monkeypatch, tmp_
         nodes=[
             WorkflowNode(
                 id="prompt",
-                schema_id="midgard.input.prompt",
+                schema_id="lluna.input.prompt",
                 parameters={"value": "hello"},
             )
         ],
     )
-    headers = {"X-Midgard-Token": token}
+    headers = {"X-Lluna-Token": token}
 
     app = create_app(token)
 

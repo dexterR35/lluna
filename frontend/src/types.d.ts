@@ -194,7 +194,7 @@ export interface SerializedWorkflowEdge {
 }
 
 export interface WorkflowDocument {
-  format: "midgard-workflow";
+  format: "lluna-workflow";
   version: number;
   projectId: string;
   name: string;
@@ -219,7 +219,7 @@ export interface DesktopGrant {
   alpha?: boolean;
 }
 
-export interface MidgardDesktopApi {
+export interface LlunaDesktopApi {
   getBackendSession(): Promise<{ baseUrl: string; token: string }>;
   newWorkflow(): Promise<WorkflowDocument>;
   openWorkflow(): Promise<{ document: WorkflowDocument; name: string; displayPath: string } | null>;
@@ -266,7 +266,7 @@ export interface WorkflowGroup {
 }
 
 export interface EditorProject {
-  format: "midgard-workflow";
+  format: "lluna-workflow";
   version: number;
   projectId: string;
   name: string;
@@ -429,7 +429,7 @@ export interface ServerState {
 
 declare global {
   interface Window {
-    midgardDesktop?: MidgardDesktopApi;
+    llunaDesktop?: LlunaDesktopApi;
   }
   const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
   const MAIN_WINDOW_VITE_NAME: string;

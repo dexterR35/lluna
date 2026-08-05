@@ -253,7 +253,7 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
 .react-flow__attribution { display: none; }
 .react-flow__node { font-size: inherit; overflow: visible !important; }
 
-.midgard-node {
+.lluna-node {
   position: relative;
   display: flex;
   width: 380px;
@@ -265,21 +265,21 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   color: var(--mg-text-primary);
   transition: border-color .15s ease, opacity .15s ease;
 }
-.midgard-node.is-selected {
+.lluna-node.is-selected {
   border-color: color-mix(in srgb, var(--node-accent, var(--mg-accent)) 70%, #2c313c);
 }
-.midgard-node.is-disabled { opacity: .5; }
-.midgard-node-chrome {
+.lluna-node.is-disabled { opacity: .5; }
+.lluna-node-chrome {
   display: flex;
   min-height: 0;
   align-items: center;
   gap: 8px;
   padding: 12px 14px 0;
 }
-.midgard-node.is-prompt .midgard-node-chrome {
+.lluna-node.is-prompt .lluna-node-chrome {
   padding-bottom: 0;
 }
-.midgard-node-chip {
+.lluna-node-chip {
   display: grid;
   width: 28px;
   height: 28px;
@@ -292,16 +292,16 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   cursor: pointer;
   transition: color .15s ease, background-color .15s ease, border-color .15s ease;
 }
-.midgard-node-chip:hover {
+.lluna-node-chip:hover {
   border-color: #3a4150;
   background: #222632;
   color: var(--mg-text-primary);
 }
-.midgard-node-chip > svg {
+.lluna-node-chip > svg {
   width: 14px;
   height: 14px;
 }
-.midgard-node-title {
+.lluna-node-title {
   min-width: 0;
   flex: 1;
   overflow: hidden;
@@ -311,7 +311,7 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   font-weight: 600;
   letter-spacing: .01em;
 }
-.midgard-node-body {
+.lluna-node-body {
   position: relative;
   display: flex;
   min-height: 168px;
@@ -323,18 +323,18 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   border-radius: 16px;
   background: var(--mg-bg-app);
 }
-.midgard-node-body.is-prompt {
+.lluna-node-body.is-prompt {
   min-height: 112px;
   margin-top: 8px;
   border: 0;
   background: transparent;
 }
-.midgard-node-body.is-settings {
+.lluna-node-body.is-settings {
   min-height: 0;
   overflow: auto;
   background: #12151c;
 }
-.midgard-node-body.is-save {
+.lluna-node-body.is-save {
   min-height: 0;
   max-height: 238px;
   margin-top: 8px;
@@ -342,17 +342,17 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   border: 0;
   background: transparent;
 }
-.midgard-save-progress-list {
+.lluna-save-progress-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
   padding: 2px 2px 6px;
 }
-.midgard-save-progress-item {
+.lluna-save-progress-item {
   display: grid;
   gap: 4px;
 }
-.midgard-save-progress-heading {
+.lluna-save-progress-heading {
   display: flex;
   min-width: 0;
   align-items: center;
@@ -362,12 +362,12 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   font-size: 10px;
   font-weight: 600;
 }
-.midgard-save-progress-heading > span {
+.lluna-save-progress-heading > span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.midgard-save-progress-heading strong {
+.lluna-save-progress-heading strong {
   display: inline-flex;
   flex-shrink: 0;
   align-items: center;
@@ -375,24 +375,24 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   color: var(--mg-text-secondary);
   font-size: 9px;
 }
-.midgard-save-progress-item.is-finished .midgard-save-progress-heading strong {
+.lluna-save-progress-item.is-finished .lluna-save-progress-heading strong {
   color: var(--mg-success);
 }
-.midgard-save-progress-item.is-failed .midgard-save-progress-heading strong {
+.lluna-save-progress-item.is-failed .lluna-save-progress-heading strong {
   color: var(--mg-error);
 }
-.midgard-save-progress-pct {
+.lluna-save-progress-pct {
   color: var(--mg-text-muted);
   font-variant-numeric: tabular-nums;
   font-weight: 500;
 }
-.midgard-node-settings {
+.lluna-node-settings {
   display: flex;
   flex-direction: column;
   gap: 10px;
   padding: 12px;
 }
-.midgard-node-settings-field {
+.lluna-node-settings-field {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -402,16 +402,16 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   font-weight: 600;
   letter-spacing: .02em;
 }
-.midgard-node-settings-field.is-inline {
+.lluna-node-settings-field.is-inline {
   flex-direction: row;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
 }
-.midgard-node-settings-field.is-switch {
+.lluna-node-settings-field.is-switch {
   padding-top: 2px;
 }
-.midgard-node-settings-field .ui-input {
+.lluna-node-settings-field .ui-input {
   height: auto;
   width: 100%;
   border: 1px solid var(--mg-border-subtle);
@@ -422,33 +422,33 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   font-weight: 500;
   line-height: 1.45;
 }
-.midgard-node-settings-field .ui-input.is-area {
+.lluna-node-settings-field .ui-input.is-area {
   min-height: 72px;
   resize: none;
   padding: 8px 10px;
 }
-.midgard-node-settings-field.is-inline .ui-input {
+.lluna-node-settings-field.is-inline .ui-input {
   width: auto;
   max-width: 100%;
   flex: 0 0 auto;
   padding: 6px 8px;
 }
-.midgard-node-settings-field.is-inline input.ui-input {
+.lluna-node-settings-field.is-inline input.ui-input {
   width: 72px;
   text-align: right;
 }
-.midgard-node-settings-field .ui-input:focus {
+.lluna-node-settings-field .ui-input:focus {
   border-color: color-mix(in srgb, var(--mg-accent) 55%, var(--mg-border));
   --tw-ring-shadow: 0 0 #0000;
 }
-.midgard-node-body .checkerboard,
-.midgard-node-body [aria-label^="Loading"],
-.midgard-node-body .border-y {
+.lluna-node-body .checkerboard,
+.lluna-node-body [aria-label^="Loading"],
+.lluna-node-body .border-y {
   height: 100%;
   min-height: 168px;
   border: 0 !important;
 }
-.midgard-node-thumbs {
+.lluna-node-thumbs {
   display: grid;
   flex: 1;
   min-height: 168px;
@@ -458,36 +458,36 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   overflow: hidden;
   background: var(--mg-bg-app);
 }
-.midgard-node-thumb {
+.lluna-node-thumb {
   aspect-ratio: 1;
   overflow: hidden;
   border-radius: 6px;
   border: 1px solid var(--mg-border-subtle);
   background: var(--mg-bg-app);
 }
-.midgard-node-stage {
+.lluna-node-stage {
   display: grid;
   min-height: 168px;
   flex: 1;
   place-items: center;
 }
-.midgard-node-stage-glyph {
+.lluna-node-stage-glyph {
   width: 28px;
   height: 28px;
   color: var(--node-accent, #2a303c);
 }
-.midgard-node-prompt {
+.lluna-node-prompt {
   display: flex;
   flex: 1;
   align-items: stretch;
   padding: 4px 2px 0;
 }
-.midgard-node-body:not(.is-prompt) .midgard-node-prompt {
+.lluna-node-body:not(.is-prompt) .lluna-node-prompt {
   border-top: 1px solid var(--mg-border-subtle);
   background: #12151c;
   padding: 10px 12px;
 }
-.midgard-node-prompt textarea {
+.lluna-node-prompt textarea {
   width: 100%;
   min-height: 72px;
   resize: none;
@@ -498,13 +498,13 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   font-size: 13px;
   line-height: 1.45;
 }
-.midgard-node-body:not(.is-prompt) .midgard-node-prompt textarea {
+.lluna-node-body:not(.is-prompt) .lluna-node-prompt textarea {
   min-height: 40px;
   font-size: 11px;
 }
-.midgard-node-prompt textarea::placeholder { color: var(--mg-text-muted); }
-.midgard-node-progress { padding: 6px 14px 0; }
-.midgard-node-toolbar {
+.lluna-node-prompt textarea::placeholder { color: var(--mg-text-muted); }
+.lluna-node-progress { padding: 6px 14px 0; }
+.lluna-node-toolbar {
   display: flex;
   min-width: 0;
   flex: 1;
@@ -513,11 +513,11 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   gap: 6px;
   overflow-x: auto;
 }
-.midgard-node-toolbar > * {
+.lluna-node-toolbar > * {
   flex: 0 0 auto;
   max-width: 100%;
 }
-.midgard-node-pill {
+.lluna-node-pill {
   position: relative;
   display: inline-flex;
   max-width: 148px;
@@ -533,12 +533,12 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   cursor: pointer;
   transition: border-color .15s ease, background-color .15s ease, color .15s ease;
 }
-.midgard-node-pill:hover {
+.lluna-node-pill:hover {
   border-color: #3a4150;
   background: #222632;
   color: var(--mg-text-primary);
 }
-.midgard-node-pill-label {
+.lluna-node-pill-label {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -546,13 +546,13 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   font-size: 11px;
   font-weight: 500;
 }
-.midgard-node-pill-chevron {
+.lluna-node-pill-chevron {
   width: 12px;
   height: 12px;
   flex-shrink: 0;
   opacity: .7;
 }
-.midgard-node-pill select {
+.lluna-node-pill select {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -563,7 +563,7 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   background: transparent;
 }
 
-.midgard-node-stepper {
+.lluna-node-stepper {
   display: inline-flex;
   min-height: 32px;
   align-items: center;
@@ -574,7 +574,7 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   color: var(--mg-text-secondary);
   padding: 0 4px;
 }
-.midgard-node-stepper > span {
+.lluna-node-stepper > span {
   min-width: 1.75rem;
   text-align: center;
   font-size: 11px;
@@ -582,7 +582,7 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   font-variant-numeric: tabular-nums;
   color: var(--mg-text-primary);
 }
-.midgard-node-stepper > button {
+.lluna-node-stepper > button {
   display: grid;
   width: 24px;
   height: 24px;
@@ -594,44 +594,44 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   cursor: pointer;
   transition: background-color .15s ease, color .15s ease;
 }
-.midgard-node-stepper > button:hover:not(:disabled) {
+.lluna-node-stepper > button:hover:not(:disabled) {
   background: #222632;
   color: var(--mg-text-primary);
 }
-.midgard-node-stepper > button:disabled {
+.lluna-node-stepper > button:disabled {
   cursor: not-allowed;
   opacity: .35;
 }
-.midgard-node-stepper > button > svg {
+.lluna-node-stepper > button > svg {
   width: 12px;
   height: 12px;
 }
-.midgard-node-llava-toggle {
+.lluna-node-llava-toggle {
   padding: 0 8px 0 10px;
   border: 1px solid #2c313c;
   border-radius: var(--mg-radius-pill);
   background: var(--mg-bg-elevated);
 }
-.midgard-node-llava-toggle .ui-switch {
+.lluna-node-llava-toggle .ui-switch {
   min-height: 30px;
   gap: 8px;
   font-size: 10px;
 }
-.midgard-node-footer {
+.lluna-node-footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
   padding: 10px 12px 12px;
 }
-.midgard-node-footer-actions {
+.lluna-node-footer-actions {
   display: flex;
   flex-shrink: 0;
   align-items: center;
   gap: 6px;
   margin-left: auto;
 }
-.midgard-node-icon-btn {
+.lluna-node-icon-btn {
   display: grid;
   width: 34px;
   height: 34px;
@@ -643,16 +643,16 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   cursor: pointer;
   transition: color .15s ease, background-color .15s ease, border-color .15s ease;
 }
-.midgard-node-icon-btn:hover {
+.lluna-node-icon-btn:hover {
   border-color: #3a4150;
   background: #222632;
   color: var(--mg-text-primary);
 }
-.midgard-node-icon-btn > svg {
+.lluna-node-icon-btn > svg {
   width: 16px;
   height: 16px;
 }
-.midgard-node-run {
+.lluna-node-run {
   display: grid;
   width: 38px;
   height: 38px;
@@ -664,15 +664,15 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   cursor: pointer;
   transition: filter .15s ease, opacity .15s ease, background-color .15s ease;
 }
-.midgard-node-run:hover { background: #2a303c; filter: brightness(1.05); }
-.midgard-node-run:disabled { cursor: not-allowed; opacity: .45; }
-.midgard-node-run > svg {
+.lluna-node-run:hover { background: #2a303c; filter: brightness(1.05); }
+.lluna-node-run:disabled { cursor: not-allowed; opacity: .45; }
+.lluna-node-run > svg {
   width: 15px;
   height: 15px;
   margin-left: 1px;
 }
 
-.react-flow__handle.midgard-port-handle {
+.react-flow__handle.lluna-port-handle {
   display: grid;
   width: 30px !important;
   height: 30px !important;
@@ -685,20 +685,20 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   opacity: .82;
   transition: opacity .15s ease, border-color .15s ease, background-color .15s ease;
 }
-.react-flow__handle-left.midgard-port-handle { left: -7px !important; }
-.react-flow__handle-right.midgard-port-handle { right: -7px !important; }
-.midgard-node.is-ports-open .react-flow__handle.midgard-port-handle,
-.react-flow__handle.midgard-port-handle.is-active,
-.react-flow__handle.midgard-port-handle.connecting,
-.react-flow__handle.midgard-port-handle.valid,
-.react-flow.connecting .react-flow__handle.midgard-port-handle {
+.react-flow__handle-left.lluna-port-handle { left: -7px !important; }
+.react-flow__handle-right.lluna-port-handle { right: -7px !important; }
+.lluna-node.is-ports-open .react-flow__handle.lluna-port-handle,
+.react-flow__handle.lluna-port-handle.is-active,
+.react-flow__handle.lluna-port-handle.connecting,
+.react-flow__handle.lluna-port-handle.valid,
+.react-flow.connecting .react-flow__handle.lluna-port-handle {
   opacity: 1;
 }
-.react-flow__handle.midgard-port-handle:hover {
+.react-flow__handle.lluna-port-handle:hover {
   border-color: #3a4150 !important;
   background: #222632 !important;
 }
-.midgard-port-glyph {
+.lluna-port-glyph {
   width: 10px;
   height: 10px;
   pointer-events: none;
