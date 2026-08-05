@@ -1,16 +1,9 @@
 import { useEffect, useMemo } from "react";
 import {
   Box,
-  Cpu,
-  Image,
-  Monitor,
-  Moon,
   RotateCcw,
-  Settings2,
-  Sparkles,
-  Subtitles,
-  Wand2,
-} from "lucide-react";
+  resolveSectionIcon,
+} from "../icons";
 import {
   ActionRow,
   CompactButton,
@@ -24,19 +17,6 @@ import { useServerStore } from "../state/serverStore";
 import { PREFERENCE_SECTIONS } from "./fieldMeta";
 import { ModelsPanel } from "./ModelsPanel";
 import { SettingsForm } from "./SettingsForm";
-
-/** @type {Record<string, import("react").ComponentType<{className?: string}>>} */
-const SECTION_ICONS = {
-  editor: Monitor,
-  runtime: Cpu,
-  subtitle: Subtitles,
-  background_removal: Image,
-  enhancement: Sparkles,
-  low_light: Moon,
-  generation: Wand2,
-  object_selection: Box,
-  models: Box,
-};
 
 /** @param {{section: string, values: Record<string, any>}} props */
 function PreferenceSection({ section, values }) {
@@ -146,7 +126,7 @@ export function SettingsDialog() {
         <nav aria-label="Settings sections" className="ui-settings-nav">
           <p className="ui-kicker">Preferences</p>
           {sections.map((section) => {
-            const Icon = SECTION_ICONS[section.id] || Settings2;
+            const Icon = resolveSectionIcon(section.id);
             return (
               <NavItem
                 key={section.id}

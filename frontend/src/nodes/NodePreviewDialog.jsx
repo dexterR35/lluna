@@ -1,4 +1,4 @@
-import { Download, Image as ImageIcon } from "lucide-react";
+import { Download, Image as ImageIcon } from "../icons";
 import { Badge, Button, Dialog } from "../components";
 import { useToast } from "../components/ToastContext";
 import { ArtifactPreview, ArtifactThumbnail } from "../preview/ArtifactPreview";
@@ -15,7 +15,7 @@ export function NodePreviewDialog({ nodeId, onClose }) {
   const liveRun = useRunStore((store) =>
     nodeId ? store.nodeStates[nodeId] : null,
   );
-  if (!node) return null;
+  if (!node || node.data.definition?.supportsPreview !== true) return null;
 
   const persistedResult = node.data.result;
   const artifactIds = liveRun?.artifactIds?.length

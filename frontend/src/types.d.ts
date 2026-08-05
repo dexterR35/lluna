@@ -107,6 +107,7 @@ export interface NodeDefinition {
   inputs: PortDefinition[];
   outputs: PortDefinition[];
   parameters: ParameterDefinition[];
+  adapter?: string;
   capabilities?: string[];
   requiredModels?: string[];
   supportsPreview?: boolean;
@@ -119,6 +120,15 @@ export interface ArtifactResult {
   artifactIds?: string[];
   completedAt?: string;
   sourceName?: string;
+  saveItems?: SaveProgressItem[];
+}
+
+export interface SaveProgressItem {
+  index: number;
+  name: string;
+  progress: number;
+  status: string;
+  detail?: string;
 }
 
 export interface ArtifactMetadata {
@@ -312,6 +322,7 @@ export interface EditorState extends EditorSnapshot {
   groupSelected(): string | null;
   createFlowFromSelected(): string | null;
   selectGroup(id: string): void;
+  moveFlowBy(flowId: string, delta: {x: number; y: number}): void;
   updateGroup(id: string, patch: Partial<WorkflowGroup>): void;
   fitGroup(id: string): void;
   removeGroup(id: string): void;
@@ -341,6 +352,7 @@ export interface NodeRunState {
   message?: string;
   artifactIds?: string[];
   completedAt?: string;
+  saveItems?: SaveProgressItem[];
 }
 
 export interface RunSnapshot {

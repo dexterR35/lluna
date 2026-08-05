@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { X } from "lucide-react";
+import { X } from "../icons";
 import { IconButton } from "./IconButton";
 import { ToastContext } from "./ToastContext";
 
@@ -37,7 +37,7 @@ export function ToastProvider({ children }) {
           <div
             key={toast.id}
             role="status"
-            className={`flex items-center gap-3 rounded-2xl border border-mg-border bg-mg-panel p-3 text-sm text-mg-primary shadow-soft ${toast.tone === "error" ? "border-mg-error/60" : ""}`}
+            className={`flex items-center gap-3 rounded-2xl border border-mg-border bg-mg-panel p-3 text-sm text-mg-primary  ${toast.tone === "error" ? "border-mg-error/60" : ""}`}
           >
             <span className="flex-1">{toast.message}</span>
             <IconButton

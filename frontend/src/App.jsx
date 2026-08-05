@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Search } from "lucide-react";
+import { Search } from "./icons";
 import { api, connectEvents } from "./api/client";
 import {
   Button,
@@ -53,6 +53,10 @@ function EditorApp() {
     /** @type {string | null} */ (null),
   );
   const [zoom, setZoom] = useState(0.78);
+  const [pendingRecovery, setPendingRecovery] = useState(
+    /** @type {import("./types").WorkflowDocument | null} */ (null),
+  );
+  const [discardOpen, setDiscardOpen] = useState(false);
   useEffect(() => {
     void useServerStore.getState().bootstrap();
     void useRunStore.getState().loadActivity();
@@ -111,10 +115,7 @@ function EditorApp() {
     if (!server.nodes.length || recoveryChecked.current) return;
     recoveryChecked.current = true;
     window.midgardDesktop?.recoverWorkflow().then((document) => {
-      if (document && confirm("Recover the last autosaved workflow?")) {
-        useEditorStore.getState().loadWorkflow(document);
-        useRunStore.getState().hydrateResults(useEditorStore.getState().nodes);
-      } else if (document) void window.midgardDesktop?.clearRecovery();
+      if (document) setPendingRecovery(document);
     });
   }, [server.nodes]);
   useEffect(() => {
@@ -233,13 +234,19 @@ function EditorApp() {
       setZoom(viewport.zoom),
     [],
   );
+  const resetWorkflow = useCallback(async () => {
+    const doc = await window.midgardDesktop?.newWorkflow();
+    useEditorStore.getState().newWorkflow(doc);
+    useRunStore.getState().clearResults();
+    setIssues([]);
+  }, []);
   const actions = {
     newWorkflow: async () => {
-      if (editor.dirty && !confirm("Discard unsaved workflow changes?")) return;
-      const doc = await window.midgardDesktop?.newWorkflow();
-      editor.newWorkflow(doc);
-      useRunStore.getState().clearResults();
-      setIssues([]);
+      if (useEditorStore.getState().dirty) {
+        setDiscardOpen(true);
+        return;
+      }
+      await resetWorkflow();
     },
     openWorkflow: async () => {
       const result = await window.midgardDesktop?.openWorkflow();
@@ -474,6 +481,64 @@ function EditorApp() {
         onClose={() => setPreviewNodeId(null)}
       />
       <SettingsDialog />
+      <Dialog
+        open={Boolean(pendingRecovery)}
+        onClose={() => {
+          setPendingRecovery(null);
+          void window.midgardDesktop?.clearRecovery();
+        }}
+        title="Recover autosaved workflow?"
+        description="Midgard found an autosave from the last session. Restore it, or discard and start fresh."
+        bodyClassName="!hidden"
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setPendingRecovery(null);
+                void window.midgardDesktop?.clearRecovery();
+              }}
+            >
+              Discard
+            </Button>
+            <Button
+              onClick={() => {
+                if (!pendingRecovery) return;
+                useEditorStore.getState().loadWorkflow(pendingRecovery);
+                useRunStore
+                  .getState()
+                  .hydrateResults(useEditorStore.getState().nodes);
+                setPendingRecovery(null);
+              }}
+            >
+              Recover
+            </Button>
+          </>
+        }
+      />
+      <Dialog
+        open={discardOpen}
+        onClose={() => setDiscardOpen(false)}
+        title="Discard unsaved changes?"
+        description="Your current workflow has unsaved edits. Starting a new workflow will discard them."
+        bodyClassName="!hidden"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setDiscardOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              onClick={() => {
+                setDiscardOpen(false);
+                void resetWorkflow();
+              }}
+            >
+              Discard
+            </Button>
+          </>
+        }
+      />
     </div>
   );
 }

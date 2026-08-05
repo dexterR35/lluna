@@ -93,6 +93,8 @@ def scoped_node_ids(
 
 def _has_completed_boundary_output(node, definition, port_id: str) -> bool:
     """Return whether an unplanned upstream node can supply a stored value."""
+    if definition.adapter == "llava_config":
+        return True
     if definition.adapter == "literal":
         return node.parameters.get("value") is not None
     result = node.result or {}
@@ -165,6 +167,17 @@ def _batch_node_ids(
         if definition is None:
             continue
         if definition.adapter == "load_images":
+            batch.add(node_id)
+            continue
+        incoming_by_port: dict[str, list] = defaultdict(list)
+        for edge in incoming.get(node_id, ()):
+            incoming_by_port[edge.target_port_id].append(edge)
+        if any(
+            len(port_edges) > 1
+            and (target_port := _port(definition, port_id, output=False))
+            and target_port.multiple
+            for port_id, port_edges in incoming_by_port.items()
+        ):
             batch.add(node_id)
             continue
         for edge in incoming.get(node_id, ()):

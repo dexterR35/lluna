@@ -6,7 +6,7 @@ import {
   ListOrdered,
   ScrollText,
   Stethoscope,
-} from "lucide-react";
+} from "../icons";
 import {
   Badge,
   Button,

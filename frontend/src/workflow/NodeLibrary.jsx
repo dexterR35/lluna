@@ -3,13 +3,12 @@ import {
   AlertTriangle,
   Blocks,
   ChevronDown,
-  Image,
   PanelLeftClose,
   PanelLeftOpen,
-  PlaySquare,
-  Save,
-  Sparkles,
-} from "lucide-react";
+  resolveCategoryColor,
+  resolveCategoryIcon,
+  resolveNodeIcon,
+} from "../icons";
 import {
   Badge,
   EmptyState,
@@ -22,17 +21,10 @@ import { useDesktopStore } from "../state/desktopStore";
 import { useEditorStore } from "../state/editorStore";
 import { isVisibleCatalogNode } from "./catalogVisibility";
 
-/** @type {Record<string, import("react").ComponentType<{className?: string}>>} */
-const CATEGORY_ICONS = {
-  Input: Image,
-  Image: Sparkles,
-  Video: PlaySquare,
-  Output: Save,
-};
-
 /** @param {{node: import("../types").NodeDefinition, onAdd: (schemaId: string) => void}} props */
 function LibraryNode({ node, onAdd }) {
-  const Icon = CATEGORY_ICONS[node.category || ""] || Blocks;
+  const Icon = resolveNodeIcon(node.icon);
+  const color = resolveCategoryColor(node.category);
   return (
     <button
       type="button"
@@ -44,10 +36,14 @@ function LibraryNode({ node, onAdd }) {
         )
       }
       onClick={() => onAdd(node.schemaId)}
+      title={node.description || node.name}
       className="ui-row group"
     >
-      <IconTile className="group-hover:border-mg-secondary/30 group-hover:text-mg-primary">
-        <Icon className="ui-icon" />
+      <IconTile
+        className="group-hover:border-mg-secondary/30"
+        style={{ color }}
+      >
+        <Icon className="ui-icon" style={{ color }} />
       </IconTile>
       <span className="ui-copy-title min-w-0 flex-1 truncate text-[12px]">
         {node.name}
@@ -63,7 +59,6 @@ function LibraryNode({ node, onAdd }) {
 
 /** @param {{category: string, nodes: import("../types").NodeDefinition[], closed: boolean, onToggle: () => void, onAdd: (schemaId: string) => void}} props */
 function LibraryGroup({ category, nodes, closed, onToggle, onAdd }) {
-  const Icon = CATEGORY_ICONS[category] || Blocks;
   return (
     <section className="mb-2">
       <button
@@ -72,7 +67,6 @@ function LibraryGroup({ category, nodes, closed, onToggle, onAdd }) {
         onClick={onToggle}
         className="ui-nav-item"
       >
-        <Icon className="ui-icon" />
         <span className="flex-1 truncate">{category}</span>
         <span className="tabular-nums text-mg-muted">{nodes.length}</span>
         <ChevronDown
@@ -116,7 +110,7 @@ function LibraryBody({
       <div className="min-h-0 flex-1 overflow-y-auto p-2.5">
         {!groups.length && (
           <EmptyState
-            icon={<Blocks className="ui-icon-lg" />}
+            icon={<Blocks className="ui-icon-lg text-mg-primary" />}
             title="No matching nodes"
             description="Try another operation or category."
             compact
@@ -221,12 +215,13 @@ export function NodeLibrary({ onAdd }) {
                 setActiveCategory(null);
               }}
             >
-              <PanelLeftOpen className="ui-icon" />
+              <PanelLeftOpen className="ui-icon text-mg-primary" />
             </IconButton>
           </div>
           <div className="ui-stack-xs flex min-h-0 flex-1 flex-col items-center overflow-y-auto py-2">
             {categoryIcons.map(([category]) => {
-              const Icon = CATEGORY_ICONS[category] || Blocks;
+              const Icon = resolveCategoryIcon(category);
+              const color = resolveCategoryColor(category);
               const active = preview && activeCategory === category;
               return (
                 <IconButton
@@ -242,11 +237,12 @@ export function NodeLibrary({ onAdd }) {
                   }}
                   className={
                     active
-                      ? "border-mg-accent/40 bg-mg-accent/10 text-mg-accent"
+                      ? "border-mg-accent/40 bg-mg-accent/10"
                       : ""
                   }
+                  style={active ? { color, borderColor: `${color}66` } : { color }}
                 >
-                  <Icon className="ui-icon" />
+                  <Icon className="ui-icon" style={{ color }} />
                 </IconButton>
               );
             })}
@@ -254,7 +250,7 @@ export function NodeLibrary({ onAdd }) {
         </Panel>
         {preview && (
           <div
-            className="absolute left-full top-0 z-30 flex h-full w-62 flex-col border-r border-mg-border bg-mg-panel shadow-[8px_0_24px_rgba(0,0,0,0.18)]"
+            className="absolute left-full top-0 z-30 flex h-full w-62 flex-col border-r border-mg-border bg-red-500"
             onMouseEnter={() => setPreview(true)}
           >
             <LibraryBody
@@ -282,7 +278,7 @@ export function NodeLibrary({ onAdd }) {
         onToggleCategory={toggleCategory}
         trailing={
           <IconButton label="Collapse library" onClick={collapse}>
-            <PanelLeftClose className="ui-icon" />
+            <PanelLeftClose className="ui-icon text-mg-primary" />
           </IconButton>
         }
       />

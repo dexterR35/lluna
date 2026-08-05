@@ -1,5 +1,10 @@
 import { useState } from "react";
-import { FileImage, Film, LoaderCircle, Upload } from "lucide-react";
+import {
+  LoaderCircle,
+  Upload,
+  resolveCategoryColor,
+  resolveNodeIcon,
+} from "../icons";
 import {
   Button,
   IconTile,
@@ -148,7 +153,10 @@ function FileField({
       </div>
     );
 
-  const KindIcon = kind === "video" ? Film : FileImage;
+  const KindIcon = resolveNodeIcon(kind);
+  const accent = resolveCategoryColor(
+    kind === "video" ? "Video" : kind === "mask" ? "Mask" : "Image",
+  );
   return (
     <div className="ui-field-label">
       <span>{definition.label}</span>
@@ -182,11 +190,14 @@ function FileField({
         }}
       >
         <div className="ui-stack-xs justify-items-center">
-          <IconTile className="bg-mg-elevated text-mg-accent">
+          <IconTile
+            className="bg-mg-elevated"
+            style={{ color: accent }}
+          >
             {loading ? (
               <LoaderCircle className="ui-icon-lg animate-spin" />
             ) : (
-              <KindIcon className="ui-icon-lg" />
+              <KindIcon className="ui-icon-lg" style={{ color: accent }} />
             )}
           </IconTile>
           <strong className="ui-copy-title text-[10px]">
@@ -250,11 +261,16 @@ export function NodeParameterField({
   };
   if (definition.type === "boolean")
     return (
-      <Switch
-        label={definition.label}
-        checked={Boolean(value)}
-        onChange={onChange}
-      />
+      <div className="ui-stack-xs">
+        <Switch
+          label={definition.label}
+          checked={Boolean(value)}
+          onChange={onChange}
+        />
+        {definition.description && (
+          <span className="ui-help">{definition.description}</span>
+        )}
+      </div>
     );
   if (definition.options?.length)
     return (

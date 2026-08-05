@@ -10,7 +10,7 @@ import {
   Square,
   Undo2,
   Workflow,
-} from "lucide-react";
+} from "../icons";
 import { Button, TextField, ToolbarButton } from "../components";
 import { useDesktopStore } from "../state/desktopStore";
 import { useEditorStore } from "../state/editorStore";

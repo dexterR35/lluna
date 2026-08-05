@@ -24,7 +24,6 @@
   --radius-mg: 12px;
   --radius-mg-lg: 18px;
 
-  --shadow-soft: 0 12px 40px rgba(0, 0, 0, 0.35);
 
   --font-sans: Inter, "SF Pro Text", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
 }
@@ -54,7 +53,7 @@
   --mg-radius-md: var(--radius-mg);
   --mg-radius-lg: var(--radius-mg-lg);
   --mg-radius-pill: 999px;
-  --mg-shadow-soft: var(--shadow-soft);
+
 }
 
 * { box-sizing: border-box; }
@@ -108,17 +107,23 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   }
   .ui-row:hover { @apply border-mg-border bg-mg-elevated; }
   .ui-row:focus-visible { @apply outline-none ring-2 ring-mg-focus/40; }
-  .ui-control {
+  .ui-input {
     @apply h-9 w-full rounded-xl border border-mg-border bg-mg-app px-3 text-xs text-mg-primary outline-none transition placeholder:text-mg-muted hover:border-mg-secondary/50 focus:border-mg-focus focus:ring-2 focus:ring-mg-focus/20 disabled:cursor-not-allowed disabled:opacity-50;
   }
-  .ui-control-sm {
-    @apply h-7 w-auto max-w-37 min-w-24 cursor-pointer appearance-none rounded-full px-2.5 text-[10px] font-medium tracking-tight;
-  }
-  .ui-control-inline {
+  .ui-input.is-bare {
     @apply h-7 max-w-52 min-w-28 truncate border-transparent bg-transparent px-1.5 font-semibold tracking-tight hover:border-mg-border focus:border-mg-secondary/40 focus:bg-mg-elevated focus:ring-0;
   }
-  .ui-control-area {
+  .ui-input.is-area {
     @apply min-h-20 resize-y py-2;
+  }
+  .ui-input.is-error {
+    @apply border-mg-error;
+  }
+  .ui-search {
+    @apply flex h-9 w-full items-center gap-2 rounded-xl border border-mg-border bg-mg-app px-2 text-xs text-mg-primary transition hover:border-mg-secondary/50 focus-within:border-mg-focus focus-within:ring-2 focus-within:ring-mg-focus/20;
+  }
+  .ui-search input {
+    @apply min-w-0 flex-1 bg-transparent text-xs text-mg-primary outline-none placeholder:text-mg-muted;
   }
   .ui-field-label { @apply grid gap-1.5 text-[11px] font-medium text-mg-secondary; }
   .ui-help { @apply text-[10px] font-normal leading-4 text-mg-muted; }
@@ -249,25 +254,50 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
 .midgard-node {
   position: relative;
   display: flex;
-  width: 312px;
+  width: 380px;
   flex-direction: column;
   overflow: visible;
-  border: 1px solid var(--mg-border);
-  border-radius: var(--mg-radius-lg);
-  background: var(--mg-bg-node);
+  border: 1px solid #2c313c;
+  border-radius: 22px;
+  background: #16181f;
   color: var(--mg-text-primary);
   transition: border-color .15s ease, opacity .15s ease;
 }
 .midgard-node.is-selected {
-  border-color: var(--mg-accent);
+  border-color: color-mix(in srgb, var(--node-accent, var(--mg-accent)) 70%, #2c313c);
 }
 .midgard-node.is-disabled { opacity: .5; }
-.midgard-node-header {
+.midgard-node-chrome {
   display: flex;
-  min-height: 44px;
+  min-height: 0;
   align-items: center;
   gap: 8px;
-  padding: 12px 14px 8px;
+  padding: 12px 14px 0;
+}
+.midgard-node.is-prompt .midgard-node-chrome {
+  padding-bottom: 0;
+}
+.midgard-node-chip {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  place-items: center;
+  border: 1px solid #2c313c;
+  border-radius: var(--mg-radius-pill);
+  background: #1c1f28;
+  color: var(--mg-text-secondary);
+  cursor: pointer;
+  transition: color .15s ease, background-color .15s ease, border-color .15s ease;
+}
+.midgard-node-chip:hover {
+  border-color: #3a4150;
+  background: #222632;
+  color: var(--mg-text-primary);
+}
+.midgard-node-chip > svg {
+  width: 14px;
+  height: 14px;
 }
 .midgard-node-title {
   min-width: 0;
@@ -282,26 +312,145 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
 .midgard-node-body {
   position: relative;
   display: flex;
-  min-height: 196px;
+  min-height: 168px;
   flex: 1;
   flex-direction: column;
-  margin: 0 10px;
+  margin: 10px 12px 0;
   overflow: hidden;
   border: 1px solid var(--mg-border-subtle);
-  border-radius: var(--mg-radius-md);
+  border-radius: 16px;
   background: var(--mg-bg-stage);
+}
+.midgard-node-body.is-prompt {
+  min-height: 112px;
+  margin-top: 8px;
+  border: 0;
+  background: transparent;
+}
+.midgard-node-body.is-settings {
+  min-height: 0;
+  overflow: auto;
+  background: #12151c;
+}
+.midgard-node-body.is-save {
+  min-height: 0;
+  max-height: 238px;
+  margin-top: 8px;
+  overflow-y: auto;
+  border: 0;
+  background: transparent;
+}
+.midgard-save-progress-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 2px 2px 6px;
+}
+.midgard-save-progress-item {
+  display: grid;
+  gap: 4px;
+}
+.midgard-save-progress-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--mg-text-primary);
+  font-size: 10px;
+  font-weight: 600;
+}
+.midgard-save-progress-heading > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.midgard-save-progress-heading strong {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+  color: var(--mg-text-secondary);
+  font-size: 9px;
+}
+.midgard-save-progress-item.is-finished .midgard-save-progress-heading strong {
+  color: var(--mg-success);
+}
+.midgard-save-progress-item.is-failed .midgard-save-progress-heading strong {
+  color: var(--mg-error);
+}
+.midgard-save-progress-pct {
+  color: var(--mg-text-muted);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+.midgard-node-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+}
+.midgard-node-settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  color: var(--mg-text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .02em;
+}
+.midgard-node-settings-field.is-inline {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.midgard-node-settings-field.is-switch {
+  padding-top: 2px;
+}
+.midgard-node-settings-field .ui-input {
+  height: auto;
+  width: 100%;
+  border: 1px solid var(--mg-border-subtle);
+  border-radius: 8px;
+  background: var(--mg-bg-node);
+  color: var(--mg-text-primary);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.45;
+  box-shadow: none;
+}
+.midgard-node-settings-field .ui-input.is-area {
+  min-height: 72px;
+  resize: none;
+  padding: 8px 10px;
+}
+.midgard-node-settings-field.is-inline .ui-input {
+  width: auto;
+  max-width: 100%;
+  flex: 0 0 auto;
+  padding: 6px 8px;
+}
+.midgard-node-settings-field.is-inline input.ui-input {
+  width: 72px;
+  text-align: right;
+}
+.midgard-node-settings-field .ui-input:focus {
+  border-color: color-mix(in srgb, var(--mg-accent) 55%, var(--mg-border));
+  --tw-ring-shadow: 0 0 #0000;
 }
 .midgard-node-body .checkerboard,
 .midgard-node-body [aria-label^="Loading"],
 .midgard-node-body .border-y {
   height: 100%;
-  min-height: 196px;
+  min-height: 168px;
   border: 0 !important;
 }
 .midgard-node-thumbs {
   display: grid;
   flex: 1;
-  min-height: 196px;
+  min-height: 168px;
   grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
   gap: 4px;
   padding: 6px;
@@ -317,107 +466,230 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
 }
 .midgard-node-stage {
   display: grid;
-  min-height: 196px;
+  min-height: 168px;
   flex: 1;
   place-items: center;
 }
 .midgard-node-stage-glyph {
   width: 28px;
   height: 28px;
-  color: #2a303c;
+  color: var(--node-accent, #2a303c);
 }
 .midgard-node-prompt {
   display: flex;
-  align-items: flex-start;
-  gap: 8px;
+  flex: 1;
+  align-items: stretch;
+  padding: 4px 2px 0;
+}
+.midgard-node-body:not(.is-prompt) .midgard-node-prompt {
   border-top: 1px solid var(--mg-border-subtle);
-  background: #10131a;
+  background: #12151c;
   padding: 10px 12px;
 }
 .midgard-node-prompt textarea {
   width: 100%;
-  min-height: 40px;
+  min-height: 72px;
   resize: none;
   border: 0;
   background: transparent;
   color: var(--mg-text-primary);
   outline: none;
-  font-size: 11px;
+  font-size: 13px;
   line-height: 1.45;
 }
-.midgard-node-prompt textarea::placeholder { color: var(--mg-text-muted); }
-.midgard-node-progress { padding: 6px 12px 0; }
-.midgard-node-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 12px 12px 14px;
+.midgard-node-body:not(.is-prompt) .midgard-node-prompt textarea {
+  min-height: 40px;
+  font-size: 11px;
 }
-.midgard-node-footer-options,
-.midgard-node-footer-actions {
+.midgard-node-prompt textarea::placeholder { color: var(--mg-text-muted); }
+.midgard-node-progress { padding: 6px 14px 0; }
+.midgard-node-toolbar {
   display: flex;
   min-width: 0;
+  flex: 1;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
+  overflow-x: auto;
 }
-.midgard-node-footer-actions {
+.midgard-node-toolbar > * {
+  flex: 0 0 auto;
+  max-width: 100%;
+}
+.midgard-node-pill {
+  position: relative;
+  display: inline-flex;
+  max-width: 148px;
+  min-height: 32px;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+  border: 1px solid #2c313c;
+  border-radius: var(--mg-radius-pill);
+  background: #1c1f28;
+  color: var(--mg-text-secondary);
+  padding: 0 10px 0 12px;
+  cursor: pointer;
+  transition: border-color .15s ease, background-color .15s ease, color .15s ease;
+}
+.midgard-node-pill:hover {
+  border-color: #3a4150;
+  background: #222632;
+  color: var(--mg-text-primary);
+}
+.midgard-node-pill-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 500;
+}
+.midgard-node-pill-chevron {
+  width: 12px;
+  height: 12px;
   flex-shrink: 0;
-  justify-content: flex-end;
+  opacity: .7;
 }
-.midgard-node-gear {
+.midgard-node-pill select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  border: 0;
+  background: transparent;
+}
+.midgard-node-pill:has(select:disabled) {
+  cursor: not-allowed;
+  opacity: .45;
+}
+.midgard-node-stepper {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  gap: 2px;
+  border: 1px solid #2c313c;
+  border-radius: var(--mg-radius-pill);
+  background: #1c1f28;
+  color: var(--mg-text-secondary);
+  padding: 0 4px;
+}
+.midgard-node-stepper > span {
+  min-width: 1.75rem;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--mg-text-primary);
+}
+.midgard-node-stepper > button {
   display: grid;
-  width: 34px;
-  height: 34px;
+  width: 24px;
+  height: 24px;
   place-items: center;
   border: 0;
   border-radius: var(--mg-radius-pill);
   background: transparent;
-  color: var(--mg-text-muted);
+  color: inherit;
   cursor: pointer;
-  transition: color .15s ease, background-color .15s ease;
+  transition: background-color .15s ease, color .15s ease;
 }
-.midgard-node-gear:hover { background: var(--mg-bg-elevated); color: var(--mg-text-primary); }
-.midgard-node-gear > svg {
-  width: 18px;
-  height: 18px;
+.midgard-node-stepper > button:hover:not(:disabled) {
+  background: #222632;
+  color: var(--mg-text-primary);
 }
-.midgard-node-run {
+.midgard-node-stepper > button:disabled {
+  cursor: not-allowed;
+  opacity: .35;
+}
+.midgard-node-stepper > button > svg {
+  width: 12px;
+  height: 12px;
+}
+.midgard-node-llava-toggle {
+  padding: 0 8px 0 10px;
+  border: 1px solid #2c313c;
+  border-radius: var(--mg-radius-pill);
+  background: #1c1f28;
+}
+.midgard-node-llava-toggle .ui-switch {
+  min-height: 30px;
+  gap: 8px;
+  font-size: 10px;
+}
+.midgard-node-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px 12px;
+}
+.midgard-node-footer-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+.midgard-node-icon-btn {
   display: grid;
   width: 34px;
   height: 34px;
   place-items: center;
-  border: 0;
+  border: 1px solid #2c313c;
   border-radius: var(--mg-radius-pill);
-  background: var(--mg-accent);
-  color: #fff;
+  background: #1c1f28;
+  color: var(--mg-text-secondary);
   cursor: pointer;
-  transition: filter .15s ease, opacity .15s ease;
+  transition: color .15s ease, background-color .15s ease, border-color .15s ease;
 }
-.midgard-node-run:hover { filter: brightness(1.08); }
-.midgard-node-run:disabled { cursor: not-allowed; opacity: .45; }
-.midgard-node-run > svg {
+.midgard-node-icon-btn:hover {
+  border-color: #3a4150;
+  background: #222632;
+  color: var(--mg-text-primary);
+}
+.midgard-node-icon-btn > svg {
   width: 16px;
   height: 16px;
+}
+.midgard-node-run {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 1px solid #2c313c;
+  border-radius: var(--mg-radius-pill);
+  background: #222632;
+  color: var(--mg-text-primary);
+  cursor: pointer;
+  transition: filter .15s ease, opacity .15s ease, background-color .15s ease;
+}
+.midgard-node-run:hover { background: #2a303c; filter: brightness(1.05); }
+.midgard-node-run:disabled { cursor: not-allowed; opacity: .45; }
+.midgard-node-run > svg {
+  width: 15px;
+  height: 15px;
+  margin-left: 1px;
 }
 
 .react-flow__handle.midgard-port-handle {
   display: grid;
-  width: 28px !important;
-  height: 28px !important;
+  width: 20px !important;
+  height: 20px !important;
   place-items: center;
   overflow: visible !important;
-  border: 2px solid var(--mg-bg-stage) !important;
+  border: 1px solid #2c313c !important;
   border-radius: var(--mg-radius-pill) !important;
-  background: var(--mg-bg-elevated) !important;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--port-color, #3a4150) 55%, #3a4150);
+  background: #1c1f28 !important;
   outline: none !important;
-  opacity: .55;
-  transition: opacity .15s ease;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--port-color, #9298a7) 24%, transparent);
+  opacity: .82;
+  transition: opacity .15s ease, border-color .15s ease, background-color .15s ease;
 }
-.react-flow__handle-left.midgard-port-handle { left: -14px !important; }
-.react-flow__handle-right.midgard-port-handle { right: -14px !important; }
+.react-flow__handle-left.midgard-port-handle { left: -26px !important; }
+.react-flow__handle-right.midgard-port-handle { right: -26px !important; }
 .midgard-node.is-ports-open .react-flow__handle.midgard-port-handle,
 .react-flow__handle.midgard-port-handle.is-active,
 .react-flow__handle.midgard-port-handle.connecting,
@@ -425,9 +697,13 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
 .react-flow.connecting .react-flow__handle.midgard-port-handle {
   opacity: 1;
 }
+.react-flow__handle.midgard-port-handle:hover {
+  border-color: #3a4150 !important;
+  background: #222632 !important;
+}
 .midgard-port-glyph {
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
   pointer-events: none;
 }
 
@@ -436,28 +712,6 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
 .react-flow__edge.selected .react-flow__edge-path {
   stroke: var(--mg-accent);
   stroke-width: 2.4;
-}
-.midgard-edge-unlink {
-  z-index: 4;
-  border-color: var(--mg-border);
-  background: var(--mg-bg-panel);
-  color: var(--mg-text-secondary);
-  opacity: .72;
-  pointer-events: all;
-  transition: border-color .15s ease, background-color .15s ease, color .15s ease, opacity .15s ease, scale .15s ease;
-}
-.midgard-edge-unlink:hover,
-.midgard-edge-unlink:focus-visible,
-.midgard-edge-unlink.is-selected {
-  border-color: var(--mg-error);
-  background: color-mix(in srgb, var(--mg-error) 12%, var(--mg-bg-panel));
-  color: var(--mg-error);
-  opacity: 1;
-}
-.midgard-edge-unlink:hover { scale: 1.08; }
-.midgard-edge-unlink:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--mg-error) 45%, transparent);
-  outline-offset: 2px;
 }
 .react-flow__selection,
 .react-flow__nodesselection-rect {
@@ -468,7 +722,7 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   overflow: hidden;
   border: 1px solid var(--mg-border);
   border-radius: var(--mg-radius-md);
-  box-shadow: var(--mg-shadow-soft);
+
 }
 .react-flow__controls-button {
   background: var(--mg-bg-panel);
@@ -484,7 +738,7 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   border-radius: var(--mg-radius-md);
   background: var(--mg-bg-panel);
   overflow: hidden;
-  box-shadow: var(--mg-shadow-soft);
+ 
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

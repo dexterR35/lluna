@@ -1,10 +1,11 @@
 import {
   Box,
   Database,
-  Image as ImageIcon,
   Settings2,
-  Sparkles,
-} from "lucide-react";
+  resolveCategoryColor,
+  resolveNodeIcon,
+  resolveSectionIcon,
+} from "../icons";
 import { ArtifactPreview } from "../preview/ArtifactPreview";
 import {
   Badge,
@@ -94,6 +95,10 @@ export function NodeEditorDialog({ nodeId, onClose, onManageModels }) {
     : persistedResult?.artifactIds || [];
   const artifactId = artifactIds.at(-1);
   const status = liveRun?.status || persistedResult?.status || "IDLE";
+  const supportsPreview = definition?.supportsPreview === true;
+  const NodeIcon = resolveNodeIcon(definition?.icon);
+  const accent = resolveCategoryColor(definition?.category);
+  const ModelsIcon = resolveSectionIcon("models");
 
   function setParameter(
     /** @type {import("../types").ParameterDefinition | undefined} */ parameter,
@@ -154,6 +159,7 @@ export function NodeEditorDialog({ nodeId, onClose, onManageModels }) {
       wide
       className="!max-w-6xl"
       title={definition?.name || node.data.label}
+      description={definition?.description}
       bodyClassName="!max-h-[72vh] !overflow-hidden !p-0"
       footer={
         <Button variant="secondary" onClick={onClose}>
@@ -161,11 +167,17 @@ export function NodeEditorDialog({ nodeId, onClose, onManageModels }) {
         </Button>
       }
     >
-      <div className="grid h-[62vh] min-h-[30rem] grid-cols-[15rem_minmax(15rem,0.85fr)_minmax(0,1.15fr)]">
+      <div
+        className={
+          supportsPreview
+            ? "grid h-[62vh] min-h-[30rem] grid-cols-[15rem_minmax(15rem,0.85fr)_minmax(0,1.15fr)]"
+            : "grid h-[62vh] min-h-[30rem] grid-cols-[15rem_minmax(15rem,1fr)]"
+        }
+      >
         <aside className="ui-settings-nav border-r p-3.5">
           <div className="ui-inline mb-2.5">
-            <IconTile size="sm">
-              <Sparkles className="ui-icon-sm" />
+            <IconTile size="sm" style={{ color: accent }}>
+              <ModelsIcon className="ui-icon-sm" style={{ color: accent }} />
             </IconTile>
             <div>
               <h3 className="ui-copy-title text-[11px]">Model</h3>
@@ -321,24 +333,26 @@ export function NodeEditorDialog({ nodeId, onClose, onManageModels }) {
           </div>
         </section>
 
-        <aside className="flex min-h-0 flex-col overflow-hidden p-4">
-          <div className="ui-inline mb-2.5">
-            <IconTile size="sm">
-              <ImageIcon className="ui-icon-sm" />
-            </IconTile>
-            <h3 className="ui-copy-title text-[11px] text-mg-secondary">
-              Preview
-            </h3>
-          </div>
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            <ArtifactPreview
-              artifactId={artifactId}
-              artifactIds={artifactIds}
-              schemaId={node.data.schemaId}
-              effect={String(node.data.appearance?.imageEffect || "none")}
-            />
-          </div>
-        </aside>
+        {supportsPreview && (
+          <aside className="flex min-h-0 flex-col overflow-hidden p-4">
+            <div className="ui-inline mb-2.5">
+              <IconTile size="sm" style={{ color: accent }}>
+                <NodeIcon className="ui-icon-sm" style={{ color: accent }} />
+              </IconTile>
+              <h3 className="ui-copy-title text-[11px] text-mg-secondary">
+                Preview
+              </h3>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <ArtifactPreview
+                artifactId={artifactId}
+                artifactIds={artifactIds}
+                schemaId={node.data.schemaId}
+                effect={String(node.data.appearance?.imageEffect || "none")}
+              />
+            </div>
+          </aside>
+        )}
       </div>
     </Dialog>
   );

@@ -1,6 +1,5 @@
-import { Search, X } from "lucide-react";
+import { Search, X } from "../icons";
 import { IconButton } from "./IconButton";
-import { cn } from "./utils";
 
 /** @param {{value: string, onChange: (value: string) => void, placeholder?: string, label?: string, autoFocus?: boolean}} props */
 export function SearchInput({
@@ -11,7 +10,7 @@ export function SearchInput({
   autoFocus = false,
 }) {
   return (
-    <label className={cn("ui-control flex items-center gap-2 px-2")}>
+    <label className="ui-search">
       <Search aria-hidden className="ui-icon text-mg-muted" />
       <span className="sr-only">{label}</span>
       <input
@@ -19,7 +18,6 @@ export function SearchInput({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        className="min-w-0 flex-1 bg-transparent text-xs text-mg-primary outline-none placeholder:text-mg-muted"
       />
       {value && (
         <IconButton

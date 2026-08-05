@@ -9,7 +9,7 @@ import {
   RefreshCw,
   Trash2,
   Upload,
-} from "lucide-react";
+} from "../icons";
 import { api } from "../api/client";
 import {
   Badge,

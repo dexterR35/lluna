@@ -15,8 +15,8 @@ function TextAreaComponent(
         ref={ref}
         aria-invalid={Boolean(error)}
         className={cn(
-          "ui-control ui-control-area",
-          Boolean(error) && "border-mg-error",
+          "ui-input is-area",
+          Boolean(error) && "is-error",
           className,
         )}
         {...props}

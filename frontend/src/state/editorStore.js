@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { addEdge, applyEdgeChanges, applyNodeChanges } from "@xyflow/react";
+import { compatibleTypes } from "../icons";
 /** @typedef {import("../types").EditorState} EditorState */
 /** @typedef {import("../types").EditorNode} EditorNode */
 /** @typedef {import("../types").EditorEdge} EditorEdge */
@@ -51,6 +52,7 @@ export const DEFAULT_APPEARANCE = {
 };
 /** @param {NodeDefinition} definition @param {{x: number, y: number}} position @returns {EditorNode} */
 function createNode(definition, position) {
+  const isSettingsCard = definition.schemaId === "midgard.input.llava";
   return {
     id: crypto.randomUUID(),
     type: "midgard",
@@ -60,11 +62,97 @@ function createNode(definition, position) {
       schemaVersion: definition.schemaVersion,
       label: definition.name,
       parameters: defaults(definition),
-      appearance: { ...DEFAULT_APPEARANCE },
+      appearance: {
+        ...DEFAULT_APPEARANCE,
+        ...(isSettingsCard
+          ? { showPreview: false, cardStyle: "settings" }
+          : {}),
+      },
       definition,
     },
     selected: false,
   };
+}
+
+const UPSCALE_SCHEMA_ID = "midgard.image.upscale";
+const LLAVA_SCHEMA_ID = "midgard.input.llava";
+
+/**
+ * Keep the SUPIR LLaVA toggle and its visible companion node in sync.
+ * @param {EditorState} state
+ * @param {EditorNode[]} nodes
+ * @param {EditorEdge[]} edges
+ * @param {string} upscaleId
+ */
+function reconcileLlavaCompanion(state, nodes, edges, upscaleId) {
+  const upscale = nodes.find((node) => node.id === upscaleId);
+  if (!upscale || upscale.data.schemaId !== UPSCALE_SCHEMA_ID)
+    return { nodes, edges, groups: state.groups };
+
+  const connectedEdges = edges.filter(
+    (edge) => edge.target === upscaleId && edge.targetHandle === "llava",
+  );
+  const companionIds = new Set(
+    connectedEdges.flatMap((edge) => {
+      const source = nodes.find((node) => node.id === edge.source);
+      return source?.data.schemaId === LLAVA_SCHEMA_ID ? [source.id] : [];
+    }),
+  );
+  const shouldExist =
+    upscale.data.parameters?.model === "SUPIR" &&
+    Boolean(upscale.data.parameters?.useLlava);
+
+  if (shouldExist && !companionIds.size && !connectedEdges.length) {
+    const definition = state.definitions.find(
+      (item) => item.schemaId === LLAVA_SCHEMA_ID,
+    );
+    if (!definition) return { nodes, edges, groups: state.groups };
+    const companion = {
+      ...createNode(definition, {
+        x: upscale.position.x - 320,
+        y: upscale.position.y + 32,
+      }),
+      selected: false,
+    };
+    const nextNodes = [...nodes, companion];
+    const nextEdges = [
+      ...edges,
+      {
+        id: crypto.randomUUID(),
+        source: companion.id,
+        sourceHandle: "config",
+        target: upscaleId,
+        targetHandle: "llava",
+        type: "midgard",
+        data: { portType: "MODEL" },
+      },
+    ];
+    let groups = state.groups;
+    const targetGroup = state.groups.find((group) =>
+      group.nodeIds.includes(upscaleId),
+    );
+    if (targetGroup)
+      groups = state.groups.map((group) =>
+        group.id === targetGroup.id
+          ? expandFlowGroup(group, [companion.id], nextNodes, nextEdges)
+          : group,
+      );
+    return { nodes: nextNodes, edges: nextEdges, groups };
+  }
+
+  if (!shouldExist && companionIds.size) {
+    const nextNodes = nodes.filter((node) => !companionIds.has(node.id));
+    const nextEdges = edges.filter(
+      (edge) =>
+        !companionIds.has(edge.source) && !companionIds.has(edge.target),
+    );
+    return {
+      nodes: nextNodes,
+      edges: nextEdges,
+      groups: refreshFlowGroups(state.groups, nextNodes, nextEdges),
+    };
+  }
+  return { nodes, edges, groups: state.groups };
 }
 /** @returns {import("../types").EditorProject} */
 function projectTemplate() {
@@ -139,9 +227,19 @@ function hasBatchSource(nodeId, nodes, edges, definitions) {
   return [...upstream].some((id) => {
     const node = nodes.find((candidate) => candidate.id === id);
     const definition = node ? map[node.data.schemaId] : undefined;
-    return (
+    if (
       definition?.kind === "input" &&
       definition.outputs.some((port) => Boolean(port.multiple))
+    )
+      return true;
+    return Boolean(
+      definition?.inputs.some(
+        (port) =>
+          port.multiple &&
+          edges.filter(
+            (edge) => edge.target === id && edge.targetHandle === port.id,
+          ).length > 1,
+      ),
     );
   });
 }
@@ -412,10 +510,7 @@ const createEditorState = (set, get) => ({
     );
     if (!sourcePort || !targetPort)
       return { valid: false, reason: "The selected port no longer exists." };
-    if (!(
-      sourcePort.type === targetPort.type ||
-      (sourcePort.type === "INTEGER" && targetPort.type === "NUMBER")
-    ))
+    if (!compatibleTypes(sourcePort.type, targetPort.type))
       return {
         valid: false,
         reason: `${sourcePort.type} cannot connect to ${targetPort.type}.`,
@@ -434,6 +529,7 @@ const createEditorState = (set, get) => ({
         reason: `${targetPort.label} accepts one item, but this output contains a queue.`,
       };
     if (
+      !targetPort.multiple &&
       state.edges.some(
         (edge) =>
           edge.target === target.id && edge.targetHandle === targetPort.id,
@@ -466,8 +562,20 @@ const createEditorState = (set, get) => ({
     const result = get().canConnect(connection);
     if (!result.valid) return result;
     set((state) => {
+      const source = state.nodes.find((node) => node.id === connection.source);
+      const sourceDefinition = source
+        ? definitionsById(state.definitions)[source.data.schemaId]
+        : undefined;
+      const sourcePort = sourceDefinition?.outputs.find(
+        (port) => port.id === connection.sourceHandle,
+      );
       const edges = addEdge(
-        { ...connection, id: crypto.randomUUID(), type: "midgard" },
+        {
+          ...connection,
+          id: crypto.randomUUID(),
+          type: "midgard",
+          data: { portType: sourcePort?.type || "" },
+        },
         state.edges,
       );
       return history(state, {
@@ -486,41 +594,45 @@ const createEditorState = (set, get) => ({
       });
     }),
   updateNode: (id, patch) =>
-    set((state) =>
-      history(state, {
-        nodes: state.nodes.map((node) =>
-          node.id === id
-            ? {
-                ...node,
-                data: {
-                  ...node.data,
-                  ...patch,
-                  parameters: patch.parameters ?? node.data.parameters,
-                },
-              }
-            : node,
-        ),
-      }),
-    ),
+    set((state) => {
+      const nodes = state.nodes.map((node) =>
+        node.id === id
+          ? {
+              ...node,
+              data: {
+                ...node.data,
+                ...patch,
+                parameters: patch.parameters ?? node.data.parameters,
+              },
+            }
+          : node,
+      );
+      const synced = patch.parameters
+        ? reconcileLlavaCompanion(state, nodes, state.edges, id)
+        : { nodes, edges: state.edges, groups: state.groups };
+      return history(state, synced);
+    }),
   setNodeModel: (id, value) =>
-    set((state) =>
-      history(state, {
-        nodes: state.nodes.map((node) =>
-          node.id === id
-            ? {
-                ...node,
-                data: {
-                  ...node.data,
-                  parameters: { ...node.data.parameters, model: value },
-                  result: node.data.result
-                    ? { ...node.data.result, status: "STALE" }
-                    : node.data.result,
-                },
-              }
-            : node,
-        ),
-      }),
-    ),
+    set((state) => {
+      const nodes = state.nodes.map((node) =>
+        node.id === id
+          ? {
+              ...node,
+              data: {
+                ...node.data,
+                parameters: { ...node.data.parameters, model: value },
+                result: node.data.result
+                  ? { ...node.data.result, status: "STALE" }
+                  : node.data.result,
+              },
+            }
+          : node,
+      );
+      return history(
+        state,
+        reconcileLlavaCompanion(state, nodes, state.edges, id),
+      );
+    }),
   recordNodeResult: (id, result) =>
     set((state) => ({
       nodes: state.nodes.map((node) =>
@@ -697,6 +809,26 @@ const createEditorState = (set, get) => ({
       nodes: state.nodes.map((node) => ({ ...node, selected: false })),
       edges: state.edges.map((edge) => ({ ...edge, selected: false })),
     })),
+  moveFlowBy: (flowId, delta) =>
+    set((state) => {
+      const group = state.groups.find((item) => item.id === flowId);
+      if (!group || (!delta.x && !delta.y)) return state;
+      const ids = new Set(group.nodeIds);
+      return {
+        nodes: state.nodes.map((node) =>
+          ids.has(node.id)
+            ? {
+                ...node,
+                position: {
+                  x: node.position.x + delta.x,
+                  y: node.position.y + delta.y,
+                },
+              }
+            : node,
+        ),
+        dirty: true,
+      };
+    }),
   updateGroup: (id, patch) =>
     set((state) =>
       history(state, {
@@ -797,23 +929,48 @@ const createEditorState = (set, get) => ({
       },
     }));
     /** @type {EditorEdge[]} */
-    const edges = document.edges.map((edge) => ({
-      id: edge.id,
-      source: edge.sourceNodeId,
-      sourceHandle: edge.sourcePortId,
-      target: edge.targetNodeId,
-      targetHandle: edge.targetPortId,
-      type: "midgard",
-    }));
-    set({
-      project: projectFromDocument(document),
+    const edges = document.edges.map((edge) => {
+      const sourceNode = document.nodes.find(
+        (node) => node.id === edge.sourceNodeId,
+      );
+      const sourcePort = sourceNode
+        ? map[sourceNode.schemaId]?.outputs.find(
+            (port) => port.id === edge.sourcePortId,
+          )
+        : undefined;
+      return {
+        id: edge.id,
+        source: edge.sourceNodeId,
+        sourceHandle: edge.sourcePortId,
+        target: edge.targetNodeId,
+        targetHandle: edge.targetPortId,
+        type: "midgard",
+        data: { portType: sourcePort?.type || "" },
+      };
+    });
+    let synced = {
       nodes,
       edges,
       groups: refreshFlowGroups(document.groups || [], nodes, edges),
+    };
+    for (const node of nodes) {
+      if (node.data.schemaId !== UPSCALE_SCHEMA_ID) continue;
+      synced = reconcileLlavaCompanion(
+        { ...get(), definitions, groups: synced.groups },
+        synced.nodes,
+        synced.edges,
+        node.id,
+      );
+    }
+    set({
+      project: projectFromDocument(document),
+      nodes: synced.nodes,
+      edges: synced.edges,
+      groups: synced.groups,
       selectedGroupId: null,
       past: [],
       future: [],
-      dirty: false,
+      dirty: synced.nodes.length !== nodes.length,
     });
   },
   serialize: () => {

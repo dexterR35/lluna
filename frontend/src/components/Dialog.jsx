@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef } from "react";
-import { X } from "lucide-react";
+import { X } from "../icons";
 import { IconButton } from "./IconButton";
 
 /** @param {{open: boolean, onClose: () => void, title: import("react").ReactNode, description?: import("react").ReactNode, children?: import("react").ReactNode, footer?: import("react").ReactNode, wide?: boolean, className?: string, bodyClassName?: string}} props */
@@ -79,7 +79,7 @@ export function Dialog({
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={description ? descriptionId : undefined}
-        className={`max-h-[86vh] w-full ${wide ? "max-w-5xl" : "max-w-xl"} overflow-hidden rounded-mg-lg border border-mg-border bg-mg-panel shadow-soft ${className}`}
+        className={`max-h-[86vh] w-full ${wide ? "max-w-5xl" : "max-w-xl"} overflow-hidden rounded-mg-lg border border-mg-border bg-mg-panel  ${className}`}
       >
         <header className="ui-preview-bar is-header h-auto items-start justify-between gap-3 px-4 py-3.5">
           <div className="min-w-0">

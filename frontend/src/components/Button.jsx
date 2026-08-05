@@ -1,5 +1,5 @@
 import { forwardRef } from "react";
-import { LoaderCircle } from "lucide-react";
+import { LoaderCircle } from "../icons";
 import { cn, focusRing } from "./utils";
 
 /** @typedef {Omit<import("react").ButtonHTMLAttributes<HTMLButtonElement>, "disabled"> & {variant?: "primary"|"secondary"|"danger"|"ghost", loading?: boolean, disabled?: boolean}} ButtonProps */

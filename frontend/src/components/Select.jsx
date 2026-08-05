@@ -9,7 +9,6 @@ import { cn } from "./utils";
  *   error?: import("react").ReactNode,
  *   hint?: import("react").ReactNode,
  *   bare?: boolean,
- *   controlSize?: "md" | "sm",
  * }} SelectProps
  */
 
@@ -21,7 +20,6 @@ function SelectComponent(
     error,
     hint,
     bare = false,
-    controlSize = "md",
     className = "",
     ...props
   },
@@ -40,10 +38,9 @@ function SelectComponent(
       id={id}
       aria-invalid={Boolean(error)}
       className={cn(
-        "ui-control",
-        controlSize === "sm" && "ui-control-sm",
-        bare && controlSize !== "sm" && "ui-control-inline",
-        Boolean(error) && "border-mg-error",
+        "ui-input",
+        bare && "is-bare",
+        Boolean(error) && "is-error",
         className,
       )}
       {...props}

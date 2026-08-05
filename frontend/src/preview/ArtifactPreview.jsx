@@ -3,7 +3,7 @@ import {
   AlertTriangle,
   Download,
   Image as ImageIcon,
-} from "lucide-react";
+} from "../icons";
 import { api, artifactObjectUrl, artifactThumbnailUrl } from "../api/client";
 import { Badge, Button, EmptyState, LoadingState } from "../components";
 import { useToast } from "../components/ToastContext";

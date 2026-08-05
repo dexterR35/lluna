@@ -7,7 +7,7 @@ import {
   Link2,
   LockKeyhole,
   ShieldCheck,
-} from "lucide-react";
+} from "../icons";
 import { api } from "../api/client";
 import {
   Badge,

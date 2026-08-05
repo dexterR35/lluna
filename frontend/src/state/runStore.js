@@ -36,6 +36,7 @@ const createRunState = (set, get) => ({
                     status: node.data.result.status || "SUCCEEDED",
                     progress: 100,
                     artifactIds: node.data.result.artifactIds || [],
+                    saveItems: node.data.result.saveItems || [],
                     completedAt: node.data.result.completedAt,
                   },
                 ],
@@ -174,6 +175,33 @@ const createRunState = (set, get) => ({
             completedAt: ["SUCCEEDED", "CACHED"].includes(status)
               ? event.timestamp || new Date().toISOString()
               : previous.completedAt,
+            saveItems:
+              typeof event.payload.itemName === "string"
+                ? Array.from(
+                    {
+                      length: Math.max(
+                        Number(event.payload.itemCount) || 1,
+                        previous.saveItems?.length || 0,
+                      ),
+                    },
+                    (_, index) =>
+                      index === Number(event.payload.itemIndex)
+                        ? {
+                            index,
+                            name: event.payload.itemName,
+                            progress: Number(event.payload.itemProgress) || 0,
+                            status: event.payload.itemStatus || "SAVING",
+                            detail: event.payload.detail,
+                          }
+                        : previous.saveItems?.[index] || {
+                            index,
+                            name: `Image ${index + 1}`,
+                            progress: 0,
+                            status: "PENDING",
+                            detail: "Waiting to save",
+                          },
+                  )
+                : previous.saveItems || [],
           },
         };
         const values = Object.values(nodeStates);
@@ -196,6 +224,7 @@ const createRunState = (set, get) => ({
           .recordNodeResult(nodeId, {
             status,
             artifactIds: result?.artifactIds || [],
+            saveItems: result?.saveItems || [],
             completedAt:
               result?.completedAt ||
               event.timestamp ||

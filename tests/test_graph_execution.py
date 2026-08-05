@@ -149,6 +149,12 @@ def test_image_queue_saves_lineage_names_and_requires_explicit_replace(monkeypat
     expected = {"portrait_nobg_upscale.png", "product_nobg_upscale.png"}
     assert {item.name for item in destination.iterdir()} == expected
     assert len(first_run.nodes["save"].artifact_ids) == 2
+    assert [item["status"] for item in first_run.nodes["save"].save_items] == [
+        "FINISHED",
+        "FINISHED",
+    ]
+    assert [item["progress"] for item in first_run.nodes["save"].save_items] == [100, 100]
+    assert {item["name"] for item in first_run.nodes["save"].save_items} == expected
 
     conflict_run = wait_for_run(manager, manager.start(workflow).run_id)
     assert conflict_run.status == "FAILED"
@@ -159,6 +165,66 @@ def test_image_queue_saves_lineage_names_and_requires_explicit_replace(monkeypat
     replacement_run = wait_for_run(manager, manager.start(workflow, force=True).run_id)
     assert replacement_run.status == "COMPLETED", replacement_run.error
     assert {item.name for item in destination.iterdir()} == expected
+
+
+def test_multiple_scalar_image_links_share_one_batch_save_input(monkeypatch, tmp_path):
+    monkeypatch.setenv("MIDGARD_FAKE_WORKER", "1")
+    first_path = tmp_path / "first.png"
+    second_path = tmp_path / "second.png"
+    Image.new("RGB", (3, 3), (10, 20, 30)).save(first_path)
+    Image.new("RGB", (3, 3), (30, 20, 10)).save(second_path)
+    destination = tmp_path / "joined"
+    destination.mkdir()
+
+    ArtifactStore._instance = ArtifactStore(tmp_path / "artifacts-multi-link")
+    DesktopGrantStore._instance = None
+    grants = DesktopGrantStore.instance()
+    first_grant = grants.issue(first_path)
+    second_grant = grants.issue(second_path)
+    destination_grant = grants.issue(destination, mode="directory")
+    RunManager._instance = None
+    manager = RunManager.instance()
+
+    first = WorkflowNode(
+        id="first",
+        schema_id="midgard.input.image",
+        parameters={"pathGrantId": first_grant.grant_id},
+    )
+    second = WorkflowNode(
+        id="second",
+        schema_id="midgard.input.image",
+        parameters={"pathGrantId": second_grant.grant_id},
+    )
+    save = WorkflowNode(
+        id="save",
+        schema_id="midgard.output.save_image",
+        parameters={
+            "destinationGrantId": destination_grant.grant_id,
+            "conflictPolicy": "replace",
+        },
+    )
+    workflow = WorkflowDocument(
+        nodes=[first, second, save],
+        edges=[
+            WorkflowEdge(
+                source_node_id="first",
+                source_port_id="image",
+                target_node_id="save",
+                target_port_id="image",
+            ),
+            WorkflowEdge(
+                source_node_id="second",
+                source_port_id="image",
+                target_node_id="save",
+                target_port_id="image",
+            ),
+        ],
+    )
+
+    snapshot = wait_for_run(manager, manager.start(workflow).run_id)
+    assert snapshot.status == "COMPLETED", snapshot.error
+    assert {item.name for item in destination.iterdir()} == {"first.png", "second.png"}
+    assert len(snapshot.nodes["save"].artifact_ids) == 2
 
 
 def test_load_image_uses_saved_artifact_when_desktop_grant_has_expired(tmp_path):
@@ -177,6 +243,36 @@ def test_load_image_uses_saved_artifact_when_desktop_grant_has_expired(tmp_path)
     )
     loaded = manager._load_granted_media(node)
     assert loaded.artifact_id == artifact.artifact_id
+
+
+def test_supir_uses_settings_from_connected_llava_node(monkeypatch):
+    manager = object.__new__(RunManager)
+    captured = {}
+
+    def capture(*args, **_kwargs):
+        captured.update(args[3])
+        return args[3]
+
+    monkeypatch.setattr(manager, "_invoke_worker", capture)
+    node = WorkflowNode(
+        id="supir",
+        schema_id="midgard.image.upscale",
+        parameters={"model": "SUPIR", "useLlava": True},
+    )
+    llava = {
+        "temperature": 0.6,
+        "topP": 0.4,
+        "question": "Describe materials and lighting.",
+        "load8Bit": True,
+    }
+
+    manager._run_inference(None, node, {"llava": llava}, [], "cache-key")
+
+    assert captured["use_llava"] is True
+    assert captured["llava_temperature"] == 0.6
+    assert captured["llava_top_p"] == 0.4
+    assert captured["llava_question"] == "Describe materials and lighting."
+    assert captured["load_8bit_llava"] is True
 
 
 def test_selected_run_reuses_boundary_artifact_without_running_upstream(monkeypatch, tmp_path):

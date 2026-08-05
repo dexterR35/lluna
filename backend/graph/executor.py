@@ -52,6 +52,7 @@ class NodeRun(BaseModel):
     progress: int = 0
     message: str = ""
     artifact_ids: list[str] = Field(default_factory=list)
+    save_items: list[dict[str, Any]] = Field(default_factory=list)
     started_at: datetime | None = None
     completed_at: datetime | None = None
 
@@ -90,6 +91,13 @@ def _artifact_values(value: Any) -> list[ArtifactRecord]:
     if isinstance(value, (list, tuple)):
         return [artifact for item in value for artifact in _artifact_values(item)]
     return []
+
+
+def _stable_value_hash(value: Any) -> str:
+    encoded = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode(
+        "utf-8"
+    )
+    return hashlib.sha256(encoded).hexdigest()
 
 
 class _RunControl:
@@ -402,12 +410,11 @@ class RunManager:
             check_model_availability=True,
         )
         nodes = {node.id: node for node in workflow.nodes}
-        incoming: dict[str, dict[str, tuple[str, str]]] = {}
+        incoming: dict[str, dict[str, list[tuple[str, str]]]] = {}
         for edge in workflow.edges:
-            incoming.setdefault(edge.target_node_id, {})[edge.target_port_id] = (
-                edge.source_node_id,
-                edge.source_port_id,
-            )
+            incoming.setdefault(edge.target_node_id, {}).setdefault(
+                edge.target_port_id, []
+            ).append((edge.source_node_id, edge.source_port_id))
         active = {step.node_id for step in plan.steps}
         with control.lock:
             snapshot.status = RunStatus.RUNNING
@@ -422,15 +429,25 @@ class RunManager:
                     raise ExecutionFailure("CANCELLED", "Run cancelled.")
                 node = nodes[step.node_id]
                 definition = NODE_REGISTRY[node.schema_id]
-                input_values = {
-                    port_id: values[source]
-                    for port_id, source in incoming.get(node.id, {}).items()
-                    if source in values
-                }
+                input_values: dict[str, Any] = {}
+                for port_id, sources in incoming.get(node.id, {}).items():
+                    connected = [values[source] for source in sources if source in values]
+                    if not connected:
+                        continue
+                    if len(connected) == 1:
+                        input_values[port_id] = connected[0]
+                        continue
+                    combined: list[Any] = []
+                    for value in connected:
+                        combined.extend(value if isinstance(value, (list, tuple)) else [value])
+                    input_values[port_id] = combined
                 input_artifacts = _artifact_values(input_values)
+                input_hashes = [item.content_hash for item in input_artifacts]
+                if "llava" in input_values:
+                    input_hashes.append(f"llava:{_stable_value_hash(input_values['llava'])}")
                 cache_key = build_cache_key(
                     node,
-                    [item.content_hash for item in input_artifacts],
+                    input_hashes,
                 )
                 has_batch_input = any(
                     isinstance(value, (list, tuple)) for value in input_values.values()
@@ -560,6 +577,8 @@ class RunManager:
                 continue
             if definition.adapter == "literal":
                 value = source.parameters.get("value")
+            elif definition.adapter == "llava_config":
+                value = dict(source.parameters)
             else:
                 result = source.result or {}
                 outputs = result.get("outputs")
@@ -630,6 +649,8 @@ class RunManager:
             result = self._load_granted_media(node)
         elif definition.adapter == "literal":
             result = {definition.outputs[0].id: node.parameters.get("value")}
+        elif definition.adapter == "llava_config":
+            result = {definition.outputs[0].id: dict(node.parameters)}
         elif definition.adapter == "passthrough":
             result = next(iter(inputs.values()))
         elif definition.adapter == "save":
@@ -690,6 +711,10 @@ class RunManager:
                 for name, value in scalar_inputs.items()
                 for artifact in _artifact_values(value)
             ]
+            if "llava" in scalar_inputs:
+                input_signatures.append(
+                    f"llava:{_stable_value_hash(scalar_inputs['llava'])}"
+                )
             item_cache_key = build_cache_key(node, input_signatures)
             artifact = None
             if (
@@ -977,17 +1002,126 @@ class RunManager:
             reserved.update(targets)
 
         saved: list[ArtifactRecord] = []
-        for artifact, destination in zip(artifacts, targets, strict=True):
+        item_count = len(artifacts)
+        for item_index, (artifact, destination) in enumerate(
+            zip(artifacts, targets, strict=True)
+        ):
+            self._save_item_progress(
+                control,
+                node,
+                item_index=item_index,
+                item_count=item_count,
+                item_progress=0,
+                item_name=destination.name,
+                item_status="SAVING",
+                detail=f"Saving to {destination.name}",
+            )
             temporary = destination.with_suffix(destination.suffix + f".{uuid4().hex}.tmp")
             try:
-                shutil.copy2(Path(artifact.path), temporary)
+                source = Path(artifact.path)
+                total_bytes = max(source.stat().st_size, 1)
+                copied_bytes = 0
+                last_progress = 0
+                with source.open("rb") as source_file, temporary.open("wb") as target_file:
+                    while chunk := source_file.read(1024 * 1024):
+                        target_file.write(chunk)
+                        copied_bytes += len(chunk)
+                        item_progress = min(99, int(copied_bytes * 100 / total_bytes))
+                        if item_progress >= last_progress + 5:
+                            last_progress = item_progress
+                            self._save_item_progress(
+                                control,
+                                node,
+                                item_index=item_index,
+                                item_count=item_count,
+                                item_progress=item_progress,
+                                item_name=destination.name,
+                                item_status="SAVING",
+                                detail=f"{copied_bytes:,} of {total_bytes:,} bytes copied",
+                            )
+                shutil.copystat(source, temporary)
                 temporary.replace(destination)
+            except Exception as exc:
+                self._save_item_progress(
+                    control,
+                    node,
+                    item_index=item_index,
+                    item_count=item_count,
+                    item_progress=0,
+                    item_name=destination.name,
+                    item_status="FAILED",
+                    detail=str(exc),
+                )
+                raise
             finally:
                 temporary.unlink(missing_ok=True)
             saved.append(
                 self._artifacts.register_source(destination, media_type=artifact.media_type)
             )
+            self._save_item_progress(
+                control,
+                node,
+                item_index=item_index,
+                item_count=item_count,
+                item_progress=100,
+                item_name=destination.name,
+                item_status="FINISHED",
+                detail=f"Saved as {destination.name}",
+            )
         return saved
+
+    def _save_item_progress(
+        self,
+        control: _RunControl,
+        node: WorkflowNode,
+        *,
+        item_index: int,
+        item_count: int,
+        item_progress: int,
+        item_name: str,
+        item_status: str,
+        detail: str,
+    ) -> None:
+        aggregate = int(((item_index + item_progress / 100) / item_count) * 100)
+        message = f"{item_status.title()} {item_index + 1} of {item_count}: {item_name}"
+        self._node_state(control, node.id, "RUNNING", aggregate, message)
+        item = {
+            "index": item_index,
+            "name": item_name,
+            "progress": item_progress,
+            "status": item_status,
+            "detail": detail,
+        }
+        with control.lock:
+            items = list(control.snapshot.nodes[node.id].save_items)
+            while len(items) < item_count:
+                pending_index = len(items)
+                items.append(
+                    {
+                        "index": pending_index,
+                        "name": f"Image {pending_index + 1}",
+                        "progress": 0,
+                        "status": "PENDING",
+                        "detail": "Waiting to save",
+                    }
+                )
+            items[item_index] = item
+            control.snapshot.nodes[node.id].save_items = items
+        self._events.publish(
+            "node.progress",
+            run_id=control.snapshot.run_id,
+            node_id=node.id,
+            payload={
+                "progress": aggregate,
+                "message": message,
+                "itemIndex": item_index,
+                "itemCount": item_count,
+                "itemProgress": item_progress,
+                "itemName": item_name,
+                "itemStatus": item_status,
+                "detail": detail,
+            },
+        )
 
     def _composite_images(
         self,
@@ -1147,6 +1281,8 @@ class RunManager:
         if adapter == "enhance":
             model_value = params.get("model") or settings.enhancement.mode
             if model_value == "SUPIR":
+                llava = inputs.get("llava")
+                llava = llava if isinstance(llava, dict) else {}
                 job_type = JobType.SUPIR
                 preset = str(params.get("supirPreset") or "quality")
                 preset_values = {
@@ -1189,10 +1325,16 @@ class RunManager:
                     diff_dtype=params.get("diffDtype") or "fp16",
                     ae_dtype=params.get("aeDtype") or "bf16",
                     use_llava=bool(params.get("useLlava", True)),
-                    llava_temperature=float(params.get("llavaTemperature", 0.2)),
-                    llava_top_p=float(params.get("llavaTopP", 0.7)),
-                    llava_question=params.get("llavaQuestion") or "",
-                    load_8bit_llava=bool(params.get("load8BitLlava", False)),
+                    llava_temperature=float(
+                        llava.get("temperature", params.get("llavaTemperature", 0.2))
+                    ),
+                    llava_top_p=float(llava.get("topP", params.get("llavaTopP", 0.7))),
+                    llava_question=(
+                        llava.get("question") or params.get("llavaQuestion") or ""
+                    ),
+                    load_8bit_llava=bool(
+                        llava.get("load8Bit", params.get("load8BitLlava", False))
+                    ),
                     loading_half_params=bool(params.get("loadingHalfParams", False)),
                     use_tile_vae=bool(params.get("useTileVae", False)),
                     encoder_tile_size=int(params.get("encoderTileSize", 512)),

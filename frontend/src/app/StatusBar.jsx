@@ -1,4 +1,4 @@
-import { Cpu, Wifi, WifiOff } from "lucide-react";
+import { Cpu, Wifi, WifiOff } from "../icons";
 import { Badge } from "../components";
 import { useRunStore } from "../state/runStore";
 import { useServerStore } from "../state/serverStore";

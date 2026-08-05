@@ -50,8 +50,24 @@ def test_supir_is_a_reviewed_upscale_option_with_model_specific_controls():
     parameters = {item.id: item for item in upscale.parameters}
     assert parameters["edmSteps"].visible_for_models == ["SUPIR"]
     assert parameters["useLlava"].default is True
+    assert "LLaVA Caption node" in parameters["useLlava"].description
+    assert not {"llavaTemperature", "llavaTopP", "llavaQuestion", "load8BitLlava"} & set(
+        parameters
+    )
+    assert next(port for port in upscale.inputs if port.id == "llava").type == "MODEL"
     assert parameters["useTileVae"].visible_for_models == ["SUPIR"]
     assert "SUPIR" not in parameters["denoise"].visible_for_models
+
+    llava = next(item for item in list_nodes() if item.schema_id == "midgard.input.llava")
+    assert llava.description
+    assert llava.adapter == "llava_config"
+    assert {item.id for item in llava.parameters} == {
+        "temperature",
+        "topP",
+        "question",
+        "load8Bit",
+    }
+    assert all(item.description for item in llava.parameters)
 
 
 def test_image_queue_and_composite_nodes_publish_batch_contracts():
@@ -63,6 +79,22 @@ def test_image_queue_and_composite_nodes_publish_batch_contracts():
     assert next(port for port in remove.inputs if port.id == "image").multiple
     assert all(port.multiple for port in composite.inputs)
     assert composite.adapter == "composite"
+
+
+def test_only_media_nodes_publish_preview_support():
+    catalog = {item.schema_id: item for item in list_nodes()}
+    for schema_id in (
+        "midgard.input.image",
+        "midgard.input.images",
+        "midgard.input.video",
+        "midgard.generate.image",
+        "midgard.image.remove_background",
+        "midgard.output.preview_image",
+        "midgard.output.preview_video",
+    ):
+        assert catalog[schema_id].supports_preview is True
+    assert catalog["midgard.output.save_image"].supports_preview is False
+    assert catalog["midgard.output.save_video"].supports_preview is False
 
 
 def test_every_node_model_option_has_a_lifecycle_inventory_entry():
@@ -147,7 +179,7 @@ def test_known_batch_can_flow_into_batch_save_output():
     save_definition = catalog["midgard.output.save_image"]
     assert save_definition.inputs[0].multiple
     assert save_definition.outputs[0].multiple
-    assert save_definition.supports_preview
+    assert not save_definition.supports_preview
 
 
 def test_repeated_processor_is_rejected_only_inside_the_planned_path():

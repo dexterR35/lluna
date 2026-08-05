@@ -10,7 +10,7 @@ import {
   useReactFlow,
   ViewportPortal,
 } from "@xyflow/react";
-import { Check, Layers3, Play, X } from "lucide-react";
+import { Check, Layers3, Play, X, resolveFlowColor } from "../icons";
 import "@xyflow/react/dist/style.css";
 import { Badge, ContextMenu } from "../components";
 import { useDesktopStore } from "../state/desktopStore";
@@ -26,15 +26,6 @@ import { MidgardNode } from "../nodes/MidgardNode";
 const nodeTypes = { midgard: MidgardNode };
 /** @type {import("@xyflow/react").EdgeTypes} */
 const edgeTypes = { midgard: MidgardEdge };
-/** @type {Record<string, string>} */
-const FLOW_COLORS = {
-  teal: "#63cbb6",
-  blue: "#70b7f8",
-  violet: "#a393fa",
-  amber: "#e8b768",
-  rose: "#ef7182",
-  slate: "#9298a7",
-};
 const DEFAULT_VIEWPORT = { x: 0, y: 0, zoom: 0.78 };
 const FIT_VIEW_OPTIONS = {
   padding: 0.3,
@@ -51,6 +42,10 @@ const FOCUS_VIEW_OPTIONS = {
 
 /** @param {{group: import("../types").WorkflowGroup, nodes: EditorNode[], selected: boolean, onSelect: () => void, onRun: (ids: string[]) => void}} props */
 function FlowBox({ group, nodes, selected, onSelect, onRun }) {
+  const flow = useReactFlow();
+  const dragRef = useRef(
+    /** @type {{x: number, y: number} | null} */ (null),
+  );
   const nodeStates = useRunStore((store) => store.nodeStates);
   const bounds = boundsForNodes(nodes, group.nodeIds);
   const members = group.nodeIds.flatMap((id) => {
@@ -81,7 +76,17 @@ function FlowBox({ group, nodes, selected, onSelect, onRun }) {
   const outputs = new Set(states.flatMap((state) => state.artifactIds || []))
     .size;
   const StatusIcon = failed ? X : completed ? Check : Layers3;
-  const color = FLOW_COLORS[group.color] || FLOW_COLORS.teal;
+  const color = resolveFlowColor(group.color);
+  const endFlowDrag = useCallback(
+    (/** @type {import("react").PointerEvent<HTMLElement>} */ event) => {
+      if (!dragRef.current) return;
+      dragRef.current = null;
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+    },
+    [],
+  );
   return (
     <section
       aria-label={`${group.label} flow box`}
@@ -97,11 +102,34 @@ function FlowBox({ group, nodes, selected, onSelect, onRun }) {
       }}
     >
       <header
-        className="pointer-events-auto absolute inset-x-0 top-0 flex h-10 items-center gap-2 border-b border-mg-border/60 px-2.5"
+        className="pointer-events-auto absolute inset-x-0 top-0 flex h-10 cursor-grab items-center gap-2 border-b border-mg-border/60 px-2.5 touch-none select-none active:cursor-grabbing"
         onPointerDown={(event) => {
+          if (event.button !== 0) return;
+          if (
+            event.target instanceof Element &&
+            event.target.closest("button")
+          ) {
+            return;
+          }
           event.stopPropagation();
+          event.preventDefault();
           onSelect();
+          dragRef.current = { x: event.clientX, y: event.clientY };
+          event.currentTarget.setPointerCapture(event.pointerId);
         }}
+        onPointerMove={(event) => {
+          const drag = dragRef.current;
+          if (!drag) return;
+          const zoom = flow.getZoom() || 1;
+          const dx = (event.clientX - drag.x) / zoom;
+          const dy = (event.clientY - drag.y) / zoom;
+          if (!dx && !dy) return;
+          drag.x = event.clientX;
+          drag.y = event.clientY;
+          useEditorStore.getState().moveFlowBy(group.id, { x: dx, y: dy });
+        }}
+        onPointerUp={endFlowDrag}
+        onPointerCancel={endFlowDrag}
       >
         <span
           className="grid size-6 place-items-center rounded-full"

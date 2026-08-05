@@ -1,45 +1,28 @@
 import { memo, useState } from "react";
 import * as XYFlow from "@xyflow/react";
+import { ProgressBar, Badge, Switch } from "../components";
 import {
-  AlertTriangle,
-  Ban,
-  Box,
-  Check,
-  Clock3,
+  ChevronDown,
   Eye,
-  FileImage,
-  Film,
-  Hash,
-  Image as ImageIcon,
-  Images,
-  Layers3,
-  LoaderCircle,
-  Pause,
+  Minus,
   Play,
+  Plus,
   Settings2,
-  Sparkles,
-  Type,
-  X,
-  ZoomIn,
-} from "lucide-react";
-import { ProgressBar, Badge, IconTile, Select } from "../components";
+  resolveCategoryColor,
+  resolveNodeIcon,
+  resolvePortColor,
+  resolvePortIcon,
+  resolveStatusIcon,
+} from "../icons";
 import { ArtifactThumbGrid, ArtifactThumbnail } from "../preview/ArtifactPreview";
 import { useRunStore } from "../state/runStore";
-import { PORT_COLORS } from "./portTypes";
 import { enabledModelOptions } from "../models/modelAvailability";
+import {
+  capabilityContract,
+  parametersForCapabilities,
+} from "../models/modelCapabilities";
 
-/** @typedef {import("react").ComponentType<{className?: string, "aria-hidden"?: boolean, style?: import("react").CSSProperties}>} NodeIcon */
-/** @type {Record<string, NodeIcon>} */
-const STATUS_ICON = {
-  RUNNING: LoaderCircle,
-  SUCCEEDED: Check,
-  FAILED: X,
-  CACHED: Sparkles,
-  PAUSED: Pause,
-  PAUSE_REQUESTED: Clock3,
-  DISABLED: Ban,
-  INVALID: AlertTriangle,
-};
+const SETTINGS_CARD_SCHEMAS = new Set(["midgard.input.llava"]);
 
 /** @type {Record<string, "neutral"|"success"|"warning"|"error"|"running"|"cached"|"accent">} */
 const STATUS_TONE = {
@@ -54,64 +37,181 @@ const STATUS_TONE = {
   DISABLED: "neutral",
 };
 
-/** @type {Record<string, NodeIcon>} */
-const PORT_ICONS = {
-  IMAGE: ImageIcon,
-  MASK: ImageIcon,
-  ALPHA: ImageIcon,
-  VIDEO: Film,
-  PROMPT: Type,
-  TEXT: Type,
-  STRING: Type,
-  NUMBER: Hash,
-  INTEGER: Hash,
-  FILE: FileImage,
-  DIRECTORY: FileImage,
-  MODEL: Box,
-};
-
-/** @type {Record<string, NodeIcon>} */
-const NODE_ICONS = {
-  image: ImageIcon,
-  images: Images,
-  layers: Layers3,
-  film: Film,
-  sparkles: Sparkles,
-  "zoom-in": ZoomIn,
-  eye: ImageIcon,
-  play: Play,
-};
-
-/** @param {string | undefined} type */
-function portIcon(type) {
-  return PORT_ICONS[type || ""] || Box;
-}
-
-/** @param {import("../types").NodeDefinition} definition */
-function nodeIcon(definition) {
-  return NODE_ICONS[definition.icon || ""] || Box;
-}
-
 /**
  * Outside connection circle for linking ports.
  * @param {{port: import("../types").PortDefinition, side: "input"|"output", top: string, active: boolean}} props
  */
 function PortCircle({ port, side, top, active }) {
   const output = side === "output";
-  const Icon = portIcon(port.type);
-  const color = PORT_COLORS[port.type] || "#9298a7";
+  const Icon = resolvePortIcon(port.type);
+  const color = resolvePortColor(port.type);
   return (
     <XYFlow.Handle
       id={port.id}
       type={output ? "source" : "target"}
       position={output ? XYFlow.Position.Right : XYFlow.Position.Left}
-      className={`midgard-port-handle ${active ? "is-active" : ""} ${output ? "is-output" : "is-input"}`}
+      className={`midgard-port-handle ${active ? "is-active" : ""} ${port.multiple ? "is-multiple" : ""} ${output ? "is-output" : "is-input"}`}
+      data-port-type={port.type}
+      data-multiple={port.multiple ? "true" : "false"}
       style={/** @type {import("react").CSSProperties} */ ({ top, "--port-color": color })}
       aria-label={`${port.label}, ${port.type}${port.multiple ? ", queue" : ""}`}
       title={`${port.label} · ${port.type}${port.multiple ? " queue" : ""}`}
     >
       <Icon aria-hidden className="midgard-port-glyph" style={{ color }} />
     </XYFlow.Handle>
+  );
+}
+
+/**
+ * Compact pill select for the node toolbar.
+ * @param {{
+ *   label: string,
+ *   value: string,
+ *   disabled?: boolean,
+ *   options: {value: string, label: string, disabled?: boolean}[],
+ *   onChange: (value: string) => void,
+ *   stopPointer: (event: import("react").SyntheticEvent) => void,
+ * }} props
+ */
+function PillSelect({ label, value, disabled, options, onChange, stopPointer }) {
+  const selected = options.find((option) => option.value === value);
+  return (
+    <label className="midgard-node-pill nodrag nowheel" title={label}>
+      <span className="midgard-node-pill-label">{selected?.label || label}</span>
+      <ChevronDown aria-hidden className="midgard-node-pill-chevron" />
+      <select
+        aria-label={label}
+        disabled={disabled}
+        value={value}
+        onPointerDown={stopPointer}
+        onClick={stopPointer}
+        onKeyDown={stopPointer}
+        onChange={(event) => {
+          event.stopPropagation();
+          onChange(event.target.value);
+        }}
+      >
+        {options.map((option) => (
+          <option
+            key={option.value}
+            value={option.value}
+            disabled={option.disabled}
+          >
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+/**
+ * Compact − xN + stepper for small integer ranges.
+ * @param {{
+ *   label: string,
+ *   value: number,
+ *   min?: number,
+ *   max?: number,
+ *   step?: number,
+ *   disabled?: boolean,
+ *   onChange: (value: number) => void,
+ *   stopPointer: (event: import("react").SyntheticEvent) => void,
+ * }} props
+ */
+function QuantityStepper({
+  label,
+  value,
+  min = 1,
+  max = 8,
+  step = 1,
+  disabled,
+  onChange,
+  stopPointer,
+}) {
+  const clamp = (/** @type {number} */ next) =>
+    Math.min(max, Math.max(min, next));
+  return (
+    <div
+      className="midgard-node-stepper nodrag nowheel"
+      title={label}
+      onPointerDown={stopPointer}
+    >
+      <button
+        type="button"
+        aria-label={`Decrease ${label}`}
+        disabled={disabled || value <= min}
+        onClick={(event) => {
+          event.stopPropagation();
+          onChange(clamp(value - step));
+        }}
+      >
+        <Minus aria-hidden />
+      </button>
+      <span aria-label={label}>x{value}</span>
+      <button
+        type="button"
+        aria-label={`Increase ${label}`}
+        disabled={disabled || value >= max}
+        onClick={(event) => {
+          event.stopPropagation();
+          onChange(clamp(value + step));
+        }}
+      >
+        <Plus aria-hidden />
+      </button>
+    </div>
+  );
+}
+
+/** @param {import("../types").ParameterDefinition} parameter */
+function isQuantityParam(parameter) {
+  if (parameter.type !== "integer" && parameter.type !== "number") return false;
+  const id = parameter.id.toLowerCase();
+  if (/(count|batch|quantity|numimages|num_images|samples)/.test(id)) {
+    return true;
+  }
+  const max = parameter.maximum;
+  const min = parameter.minimum ?? 0;
+  return typeof max === "number" && max - min <= 16 && max <= 32;
+}
+
+/** @param {{items: import("../types").SaveProgressItem[]}} props */
+function SaveProgressList({ items }) {
+  return (
+    <div className="midgard-save-progress-list">
+      {items.map((item, index) => {
+        const finished = item.status === "FINISHED";
+        const failed = item.status === "FAILED";
+        const label = item.name || `Image ${index + 1}`;
+        const statusLabel = finished
+          ? "Finished"
+          : failed
+            ? "Failed"
+            : item.status === "PENDING"
+              ? "Waiting"
+              : "Saving";
+        return (
+          <div
+            key={`${item.index}-${label}`}
+            className={`midgard-save-progress-item ${finished ? "is-finished" : ""} ${failed ? "is-failed" : ""}`}
+          >
+            <div className="midgard-save-progress-heading">
+              <span title={label}>{label}</span>
+              <strong>
+                {statusLabel}
+                <span className="midgard-save-progress-pct">
+                  {Math.round(item.progress)}%
+                </span>
+              </strong>
+            </div>
+            <ProgressBar
+              value={item.progress}
+              label={`${label} save progress`}
+            />
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -140,8 +240,9 @@ function MidgardNodeComponent({ id, data, selected }) {
     ? state.artifactIds
     : persistedResult?.artifactIds || [];
   const artifactId = artifactIds.at(-1);
-  const StatusIcon = STATUS_ICON[status] || Box;
-  const HeaderIcon = nodeIcon(definition);
+  const StatusIcon = resolveStatusIcon(status);
+  const HeaderIcon = resolveNodeIcon(definition.icon);
+  const accent = resolveCategoryColor(definition.category);
   const busy = status === "RUNNING" || status === "QUEUED";
   const showPorts = selected || hovered || busy;
   const nodeLabel = data.label || definition.name;
@@ -165,37 +266,109 @@ function MidgardNodeComponent({ id, data, selected }) {
   const modelAvailable = modelOptions.some(
     (option) => String(option.value) === String(modelValue),
   );
-  const footerParams = parameters.filter((parameter) => {
+  const selectedModelOption =
+    modelOptions.find((option) => String(option.value) === String(modelValue)) ||
+    modelParameter?.options?.find(
+      (option) => String(option.value) === String(modelValue),
+    );
+  const selectedCapabilities = capabilityContract(selectedModelOption);
+  const visibleParameters = parametersForCapabilities(
+    parameters,
+    selectedCapabilities,
+    String(modelValue || ""),
+  );
+  const llavaToggle = visibleParameters.find(
+    (parameter) => parameter.id === "useLlava",
+  );
+  const showLlavaToggle = modelValue === "SUPIR" && Boolean(llavaToggle);
+  const isSettingsCard = SETTINGS_CARD_SCHEMAS.has(definition.schemaId);
+  const quantityParam = visibleParameters.find(isQuantityParam);
+  const footerParams = visibleParameters.filter((parameter) => {
+    if (isSettingsCard) return false;
+    if (quantityParam && parameter.id === quantityParam.id) return false;
     if (parameter.id === "model" || parameter.type === "model") return true;
     if (parameter.type === "select" || parameter.type === "enum") return true;
     return Boolean(parameter.options?.length);
   });
-  const promptParam = parameters.find(
-    (parameter) =>
-      parameter.type === "textarea" ||
-      parameter.id === "value" ||
-      parameter.id === "prompt" ||
-      parameter.id === "text",
-  );
+  const promptParam = visibleParameters.find((parameter) => {
+    const id = parameter.id.toLowerCase();
+    if (id.includes("negative")) return false;
+    return (
+      id === "value" ||
+      id === "prompt" ||
+      id === "text" ||
+      id === "question" ||
+      (parameter.type === "textarea" &&
+        (id.includes("prompt") || id.includes("instruction") || id.includes("caption")))
+    );
+  });
   const showPromptField =
     Boolean(promptParam) &&
-    (definition.kind === "input" ||
+    (isSettingsCard ||
+      definition.kind === "input" ||
       definition.schemaId?.includes("prompt") ||
-      definition.schemaId?.includes("generate"));
+      definition.schemaId?.includes("llava"));
+  const bodySettings = isSettingsCard
+    ? visibleParameters.filter(
+        (parameter) =>
+          parameter.id !== promptParam?.id &&
+          (["number", "integer", "boolean", "select", "enum"].includes(
+            parameter.type,
+          ) ||
+            Boolean(parameter.options?.length)),
+      )
+    : [];
+  const supportsPreview = definition.supportsPreview === true;
+  const isSaveImage = definition.schemaId === "midgard.output.save_image";
+  const reportedSaveItems = state
+    ? state.saveItems || []
+    : persistedResult?.saveItems || [];
+  const saveItems = reportedSaveItems.length
+    ? reportedSaveItems
+    : isSaveImage &&
+        artifactIds.length &&
+        ["SUCCEEDED", "CACHED"].includes(status)
+      ? artifactIds.map((_, index) => ({
+          index,
+          name: artifactIds.length === 1 ? "Saved image" : `Image ${index + 1}`,
+          progress: 100,
+          status: "FINISHED",
+          detail: "Saved successfully",
+        }))
+      : [];
+  const showPreview =
+    !isSettingsCard &&
+    supportsPreview &&
+    appearance.showPreview !== false &&
+    (Boolean(artifactId) || artifactIds.length > 1 || !showPromptField);
+  const showNodeBody =
+    isSettingsCard || showPreview || showPromptField || saveItems.length > 0;
+  const promptFirst = showPromptField && !isSettingsCard;
   const inputs = definition.inputs || [];
   const outputs = definition.outputs || [];
   /** @param {import("react").SyntheticEvent} event */
   const stopPointer = (event) => event.stopPropagation();
+  /** @param {string} parameterId @param {unknown} value */
+  const setParameter = (parameterId, value) => {
+    actions.onParameterChange?.(id, parameterId, value);
+  };
 
   /** @param {number} index @param {number} total */
   const portTop = (index, total) =>
     total <= 1 ? "50%" : `${((index + 1) / (total + 1)) * 100}%`;
 
+  const quantityValue = Number(
+    data.parameters?.[quantityParam?.id || ""] ??
+      quantityParam?.default ??
+      1,
+  );
+
   return (
     <article
       aria-label={`${nodeLabel} node`}
       title="Use the settings button to edit this node"
-      className={`midgard-node ${selected ? "is-selected" : ""} ${data.disabled ? "is-disabled" : ""} ${showPorts ? "is-ports-open" : ""}`}
+      className={`midgard-node ${selected ? "is-selected" : ""} ${data.disabled ? "is-disabled" : ""} ${showPorts ? "is-ports-open" : ""} ${promptFirst ? "is-prompt" : ""} ${isSettingsCard ? "is-settings-card" : ""}`}
+      style={/** @type {import("react").CSSProperties} */ ({ "--node-accent": accent })}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
@@ -218,22 +391,33 @@ function MidgardNodeComponent({ id, data, selected }) {
         />
       ))}
 
-      <header className="midgard-node-header">
-        <IconTile
-          size="sm"
-          active={selected}
-          className="border-transparent bg-transparent"
-          aria-hidden
+      <div className="midgard-node-chrome">
+        <button
+          type="button"
+          className="nodrag nowheel midgard-node-chip"
+          aria-label={
+            status !== "IDLE" && status !== "SUCCEEDED"
+              ? `${nodeLabel} status ${status.replaceAll("_", " ")}`
+              : `Open ${nodeLabel} options`
+          }
+          title={nodeLabel}
+          onPointerDown={stopPointer}
+          onClick={(event) => {
+            event.stopPropagation();
+            actions.onOpen?.(id);
+          }}
         >
           {status !== "IDLE" && status !== "SUCCEEDED" ? (
             <StatusIcon
-              className={`size-3.5 ${status === "RUNNING" ? "animate-spin" : ""}`}
+              className={status === "RUNNING" ? "animate-spin" : undefined}
             />
           ) : (
-            <HeaderIcon className="size-3.5" />
+            <Plus aria-hidden />
           )}
-        </IconTile>
-        <strong className="midgard-node-title">{nodeLabel}</strong>
+        </button>
+        {!promptFirst && (
+          <strong className="midgard-node-title">{nodeLabel}</strong>
+        )}
         {status !== "IDLE" && (
           <Badge size="xs" tone={STATUS_TONE[status] || "neutral"}>
             {status.replaceAll("_", " ")}
@@ -244,60 +428,204 @@ function MidgardNodeComponent({ id, data, selected }) {
             {artifactIds.length} items
           </Badge>
         )}
-      </header>
-
-      <div className="midgard-node-body">
-        {appearance.showPreview !== false && artifactIds.length > 1 ? (
-          <ArtifactThumbGrid
-            artifactIds={artifactIds}
-            schemaId={data.schemaId}
-            effect={String(appearance.imageEffect || "none")}
-            fit={String(appearance.imageFit || "cover")}
-            label={`${nodeLabel} output`}
-          />
-        ) : appearance.showPreview !== false && artifactId ? (
-          <ArtifactThumbnail
-            artifactId={artifactId}
-            schemaId={data.schemaId}
-            effect={String(appearance.imageEffect || "none")}
-            fit={String(appearance.imageFit || "cover")}
-            ratio="square"
-            label={`${nodeLabel} output`}
-          />
-        ) : (
-          <div className="midgard-node-stage" aria-hidden>
-            {!showPromptField && (
-              <ImageIcon className="midgard-node-stage-glyph" />
-            )}
-          </div>
-        )}
-
-        {showPromptField && promptParam && (
-          <div className="midgard-node-prompt">
-            <Type aria-hidden className="size-3.5 shrink-0 text-mg-muted" />
-            <textarea
-              className="nodrag nowheel"
-              rows={2}
-              placeholder={
-                promptParam.description ||
-                `Describe the ${definition.category?.split("/")[0]?.toLowerCase() || "result"} you want…`
-              }
-              aria-label={promptParam.label || "Prompt"}
-              disabled={data.disabled || busy}
-              value={String(data.parameters?.[promptParam.id] ?? "")}
-              onPointerDown={stopPointer}
-              onClick={stopPointer}
-              onKeyDown={stopPointer}
-              onChange={(event) => {
-                event.stopPropagation();
-                actions.onParameterChange?.(id, promptParam.id, event.target.value);
-              }}
-            />
-          </div>
-        )}
       </div>
 
-      {(status === "RUNNING" || status === "PAUSE_REQUESTED") && (
+      {showNodeBody && (
+        <div
+          className={`midgard-node-body ${isSettingsCard ? "is-settings" : ""} ${isSaveImage ? "is-save" : ""} ${promptFirst && !showPreview ? "is-prompt" : ""}`}
+        >
+          {isSaveImage ? (
+            <SaveProgressList items={saveItems} />
+          ) : isSettingsCard ? (
+          <div className="midgard-node-settings">
+            {showPromptField && promptParam && (
+              <label className="midgard-node-settings-field">
+                <span>{promptParam.label || "Instruction"}</span>
+                <textarea
+                  className="ui-input is-area nodrag nowheel"
+                  rows={4}
+                  placeholder={
+                    promptParam.description ||
+                    "Describe what LLaVA should caption…"
+                  }
+                  aria-label={promptParam.label || "Instruction"}
+                  disabled={data.disabled || busy}
+                  value={String(
+                    data.parameters?.[promptParam.id] ??
+                      promptParam.default ??
+                      "",
+                  )}
+                  onPointerDown={stopPointer}
+                  onClick={stopPointer}
+                  onKeyDown={stopPointer}
+                  onChange={(event) => {
+                    event.stopPropagation();
+                    setParameter(promptParam.id, event.target.value);
+                  }}
+                />
+              </label>
+            )}
+            {bodySettings.map((parameter) => {
+              const raw =
+                data.parameters?.[parameter.id] ?? parameter.default;
+              if (parameter.type === "boolean") {
+                return (
+                  <div
+                    key={parameter.id}
+                    className="midgard-node-settings-field is-switch"
+                    onPointerDown={stopPointer}
+                  >
+                    <Switch
+                      label={parameter.label}
+                      checked={Boolean(raw)}
+                      disabled={data.disabled || busy}
+                      onChange={(checked) =>
+                        setParameter(parameter.id, checked)
+                      }
+                    />
+                  </div>
+                );
+              }
+              if (
+                parameter.type === "select" ||
+                parameter.type === "enum" ||
+                parameter.options?.length
+              ) {
+                const options = parameter.options || [];
+                if (!options.length) return null;
+                return (
+                  <label
+                    key={parameter.id}
+                    className="midgard-node-settings-field is-inline"
+                  >
+                    <span>{parameter.label}</span>
+                    <select
+                      className="ui-input nodrag nowheel"
+                      aria-label={parameter.label}
+                      disabled={data.disabled || busy}
+                      value={String(raw ?? "")}
+                      onPointerDown={stopPointer}
+                      onClick={stopPointer}
+                      onKeyDown={stopPointer}
+                      onChange={(event) => {
+                        event.stopPropagation();
+                        const option = options.find(
+                          (candidate) =>
+                            String(candidate.value) === event.target.value,
+                        );
+                        setParameter(
+                          parameter.id,
+                          option ? option.value : event.target.value,
+                        );
+                      }}
+                    >
+                      {options.map((option) => (
+                        <option
+                          key={String(option.value)}
+                          value={String(option.value)}
+                          disabled={option.disabled}
+                        >
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                );
+              }
+              return (
+                <label
+                  key={parameter.id}
+                  className="midgard-node-settings-field is-inline"
+                >
+                  <span>{parameter.label}</span>
+                  <input
+                    type="number"
+                    className="ui-input nodrag nowheel"
+                    min={parameter.minimum}
+                    max={parameter.maximum}
+                    step={
+                      parameter.step ||
+                      (parameter.type === "integer" ? 1 : "any")
+                    }
+                    aria-label={parameter.label}
+                    disabled={data.disabled || busy}
+                    value={raw == null ? "" : String(raw)}
+                    onPointerDown={stopPointer}
+                    onClick={stopPointer}
+                    onKeyDown={stopPointer}
+                    onChange={(event) => {
+                      event.stopPropagation();
+                      const next =
+                        parameter.type === "integer"
+                          ? Number.parseInt(event.target.value || "0", 10)
+                          : Number(event.target.value);
+                      setParameter(
+                        parameter.id,
+                        Number.isFinite(next) ? next : parameter.default,
+                      );
+                    }}
+                  />
+                </label>
+              );
+            })}
+          </div>
+        ) : (
+          <>
+            {showPreview && artifactIds.length > 1 ? (
+              <ArtifactThumbGrid
+                artifactIds={artifactIds}
+                schemaId={data.schemaId}
+                effect={String(appearance.imageEffect || "none")}
+                fit={String(appearance.imageFit || "cover")}
+                label={`${nodeLabel} output`}
+              />
+            ) : showPreview && artifactId ? (
+              <ArtifactThumbnail
+                artifactId={artifactId}
+                schemaId={data.schemaId}
+                effect={String(appearance.imageEffect || "none")}
+                fit={String(appearance.imageFit || "cover")}
+                ratio="square"
+                label={`${nodeLabel} output`}
+              />
+            ) : showPreview ? (
+              <div className="midgard-node-stage" aria-hidden>
+                <HeaderIcon
+                  className="midgard-node-stage-glyph"
+                  style={{ color: accent }}
+                />
+              </div>
+            ) : null}
+
+            {showPromptField && promptParam && (
+              <div className="midgard-node-prompt">
+                <textarea
+                  className="nodrag nowheel"
+                  rows={promptFirst && !showPreview ? 4 : 2}
+                  placeholder={
+                    promptParam.description ||
+                    `Describe the ${definition.category?.split("/")[0]?.toLowerCase() || "result"} you want…`
+                  }
+                  aria-label={promptParam.label || "Prompt"}
+                  disabled={data.disabled || busy}
+                  value={String(data.parameters?.[promptParam.id] ?? "")}
+                  onPointerDown={stopPointer}
+                  onClick={stopPointer}
+                  onKeyDown={stopPointer}
+                  onChange={(event) => {
+                    event.stopPropagation();
+                    setParameter(promptParam.id, event.target.value);
+                  }}
+                />
+              </div>
+            )}
+          </>
+          )}
+        </div>
+      )}
+
+      {!isSaveImage &&
+        (status === "RUNNING" || status === "PAUSE_REQUESTED") && (
         <div className="midgard-node-progress">
           <ProgressBar
             value={state?.progress || 0}
@@ -305,10 +633,27 @@ function MidgardNodeComponent({ id, data, selected }) {
             showLabel
           />
         </div>
-      )}
+        )}
 
       <footer className="midgard-node-footer">
-        <div className="midgard-node-footer-options">
+        <div className="midgard-node-toolbar">
+          {quantityParam && Number.isFinite(quantityValue) && (
+            <QuantityStepper
+              label={quantityParam.label}
+              value={Math.round(quantityValue)}
+              min={quantityParam.minimum ?? 1}
+              max={quantityParam.maximum ?? 8}
+              step={
+                typeof quantityParam.step === "number"
+                  ? quantityParam.step
+                  : 1
+              }
+              disabled={data.disabled || busy}
+              onChange={(value) => setParameter(quantityParam.id, value)}
+              stopPointer={stopPointer}
+            />
+          )}
+
           {footerParams.map((parameter) => {
             const isModel =
               parameter.id === "model" || parameter.type === "model";
@@ -339,24 +684,16 @@ function MidgardNodeComponent({ id, data, selected }) {
                 })),
               ];
               return (
-                <Select
+                <PillSelect
                   key={parameter.id}
-                  bare
-                  controlSize="sm"
-                  aria-label={`Model for ${nodeLabel}`}
-                  title={`Model for ${nodeLabel}`}
+                  label={`Model for ${nodeLabel}`}
                   value={String(modelValue ?? "")}
-                  options={options}
                   disabled={data.disabled || busy || !modelOptions.length}
-                  className="nodrag nowheel"
-                  onPointerDown={(event) => event.stopPropagation()}
-                  onClick={(event) => event.stopPropagation()}
-                  onKeyDown={(event) => event.stopPropagation()}
-                  onChange={(event) => {
-                    event.stopPropagation();
+                  options={options}
+                  stopPointer={stopPointer}
+                  onChange={(next) => {
                     const option = modelOptions.find(
-                      (candidate) =>
-                        String(candidate.value) === event.target.value,
+                      (candidate) => String(candidate.value) === next,
                     );
                     if (option) actions.onModelChange?.(id, option.value);
                   }}
@@ -371,54 +708,54 @@ function MidgardNodeComponent({ id, data, selected }) {
             }));
             if (!options.length) return null;
             return (
-              <Select
+              <PillSelect
                 key={parameter.id}
-                bare
-                controlSize="sm"
-                aria-label={parameter.label}
-                title={parameter.label}
+                label={parameter.label}
                 value={String(raw ?? "")}
-                options={options}
                 disabled={data.disabled || busy}
-                className="nodrag nowheel"
-                onPointerDown={(event) => event.stopPropagation()}
-                onClick={(event) => event.stopPropagation()}
-                onKeyDown={(event) => event.stopPropagation()}
-                onChange={(event) => {
-                  event.stopPropagation();
+                options={options}
+                stopPointer={stopPointer}
+                onChange={(next) => {
                   const option = parameter.options?.find(
-                    (candidate) =>
-                      String(candidate.value) === event.target.value,
+                    (candidate) => String(candidate.value) === next,
                   );
                   actions.onParameterChange?.(
                     id,
                     parameter.id,
-                    option ? option.value : event.target.value,
+                    option ? option.value : next,
                   );
                 }}
               />
             );
           })}
-          <button
-            type="button"
-            className="nodrag nowheel midgard-node-gear"
-            aria-label={`Open ${nodeLabel} options`}
-            title="Node options"
-            onPointerDown={stopPointer}
-            onClick={(event) => {
-              event.stopPropagation();
-              actions.onOpen?.(id);
-            }}
-          >
-            <Settings2 className="size-4.5" />
-          </button>
+
+          {showLlavaToggle && llavaToggle && (
+            <div
+              className="nodrag nowheel midgard-node-llava-toggle"
+              title={llavaToggle.description}
+              onPointerDown={stopPointer}
+              onClick={stopPointer}
+              onKeyDown={stopPointer}
+            >
+              <Switch
+                label="LLaVA"
+                checked={Boolean(
+                  data.parameters?.[llavaToggle.id] ?? llavaToggle.default,
+                )}
+                disabled={data.disabled || busy}
+                onChange={(checked) =>
+                  setParameter(llavaToggle.id, checked)
+                }
+              />
+            </div>
+          )}
         </div>
 
         <div className="midgard-node-footer-actions">
-          {artifactId && (
+          {supportsPreview && artifactId && (
             <button
               type="button"
-              className="nodrag nowheel midgard-node-gear"
+              className="nodrag nowheel midgard-node-icon-btn"
               aria-label={`Preview ${nodeLabel} image`}
               title="Preview image"
               onPointerDown={stopPointer}
@@ -427,9 +764,22 @@ function MidgardNodeComponent({ id, data, selected }) {
                 actions.onPreview?.(id);
               }}
             >
-              <Eye className="size-4.5" />
+              <Eye />
             </button>
           )}
+          <button
+            type="button"
+            className="nodrag nowheel midgard-node-icon-btn"
+            aria-label={`Open ${nodeLabel} options`}
+            title="Node options"
+            onPointerDown={stopPointer}
+            onClick={(event) => {
+              event.stopPropagation();
+              actions.onOpen?.(id);
+            }}
+          >
+            <Settings2 />
+          </button>
           <button
             type="button"
             className="nodrag nowheel midgard-node-run"
@@ -442,7 +792,7 @@ function MidgardNodeComponent({ id, data, selected }) {
               actions.onRun?.(id);
             }}
           >
-            <Play className="size-4 fill-current" />
+            <Play className="fill-current" />
           </button>
         </div>
       </footer>

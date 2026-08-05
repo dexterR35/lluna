@@ -54,6 +54,88 @@ test("serialization never copies backend definitions", () => {
   expect(required(document.nodes[0]).schemaId).toBe("test.number");
   expect(required(document.nodes[0])).not.toHaveProperty("definition");
 });
+test("SUPIR LLaVA toggle adds and removes its companion node", () => {
+  const upscale = /** @type {import("../src/types").NodeDefinition} */ ({
+    ...definition,
+    schemaId: "midgard.image.upscale",
+    name: "Upscale Image",
+    parameters: [
+      {
+        id: "model",
+        label: "Model",
+        type: "model",
+        default: "RealESRGAN_x2plus",
+      },
+      {
+        id: "useLlava",
+        label: "Automatic LLaVA caption",
+        type: "boolean",
+        default: true,
+      },
+    ],
+    inputs: [
+      { id: "image", label: "Image", type: "IMAGE" },
+      { id: "llava", label: "LLaVA settings", type: "MODEL" },
+    ],
+  });
+  const llava = /** @type {import("../src/types").NodeDefinition} */ ({
+    ...definition,
+    schemaId: "midgard.input.llava",
+    name: "LLaVA Caption",
+    kind: "input",
+    parameters: [
+      { id: "temperature", label: "Temperature", type: "number", default: 0.2 },
+    ],
+    inputs: [],
+    outputs: [{ id: "config", label: "LLaVA settings", type: "MODEL" }],
+  });
+  useEditorStore.getState().setDefinitions([upscale, llava]);
+  const upscaleId = addNode(upscale.schemaId, { x: 500, y: 100 });
+
+  useEditorStore.getState().setNodeModel(upscaleId, "SUPIR");
+  let state = useEditorStore.getState();
+  const llavaNode = required(
+    state.nodes.find((node) => node.data.schemaId === llava.schemaId),
+  );
+  expect(llavaNode.position).toEqual({ x: 180, y: 132 });
+  expect(state.edges).toContainEqual(
+    expect.objectContaining({
+      source: llavaNode.id,
+      sourceHandle: "config",
+      target: upscaleId,
+      targetHandle: "llava",
+    }),
+  );
+
+  const upscaleNode = required(state.nodes.find((node) => node.id === upscaleId));
+  useEditorStore.getState().updateNode(upscaleId, {
+    parameters: { ...upscaleNode.data.parameters, useLlava: false },
+  });
+  state = useEditorStore.getState();
+  expect(
+    state.nodes.some((node) => node.data.schemaId === llava.schemaId),
+  ).toBe(false);
+  expect(state.edges.some((item) => item.targetHandle === "llava")).toBe(false);
+
+  const disabledUpscale = required(
+    state.nodes.find((node) => node.id === upscaleId),
+  );
+  useEditorStore.getState().updateNode(upscaleId, {
+    parameters: { ...disabledUpscale.data.parameters, useLlava: true },
+  });
+  expect(
+    useEditorStore
+      .getState()
+      .nodes.some((node) => node.data.schemaId === llava.schemaId),
+  ).toBe(true);
+
+  useEditorStore.getState().setNodeModel(upscaleId, "RealESRGAN_x2plus");
+  expect(
+    useEditorStore
+      .getState()
+      .nodes.some((node) => node.data.schemaId === llava.schemaId),
+  ).toBe(false);
+});
 test("downstream flow selection stops at each connected end", () => {
   const edges = [
     { source: "a", target: "b" },
@@ -205,6 +287,45 @@ test("known image queues connect only to batch-capable inputs", () => {
   expect(invalid.valid).toBe(false);
   expect(invalid.reason).toContain("accepts one item");
 });
+test("one multiple input handle accepts several typed connections", () => {
+  const imageInput = /** @type {import("../src/types").NodeDefinition} */ ({
+    ...definition,
+    schemaId: "test.image",
+    name: "Image",
+    kind: "input",
+    inputs: [],
+    outputs: [{ id: "image", label: "Image", type: "IMAGE" }],
+  });
+  const batchTarget = /** @type {import("../src/types").NodeDefinition} */ ({
+    ...definition,
+    schemaId: "test.batch-target",
+    name: "Image Queue",
+    kind: "output",
+    inputs: [
+      { id: "images", label: "Images", type: "IMAGE", multiple: true },
+    ],
+    outputs: [],
+  });
+  useEditorStore.getState().setDefinitions([imageInput, batchTarget]);
+  const first = addNode(imageInput.schemaId);
+  const second = addNode(imageInput.schemaId);
+  const target = addNode(batchTarget.schemaId);
+
+  for (const source of [first, second]) {
+    expect(
+      useEditorStore.getState().connect({
+        source,
+        sourceHandle: "image",
+        target,
+        targetHandle: "images",
+      }).valid,
+    ).toBe(true);
+  }
+
+  expect(useEditorStore.getState().edges).toHaveLength(2);
+  expect(useEditorStore.getState().edges.every((item) => item.data?.portType === "IMAGE"))
+    .toBe(true);
+});
 test("creating a flow with overlap expands the existing flow instead of nesting", () => {
   const first = addNode("test.number", { x: 10, y: 20 });
   const second = addNode("test.number", { x: 320, y: 20 });
@@ -257,6 +378,33 @@ test("dropping a node into a flow adds it to that flow", () => {
   );
   expect(group.nodeIds).toEqual(expect.arrayContaining([first, second, third]));
   expect(group.startNodeIds).toEqual(expect.arrayContaining([first, third]));
+});
+test("dragging a flow header moves every node in that flow", () => {
+  const first = addNode("test.number", { x: 100, y: 100 });
+  const second = addNode("test.number", { x: 400, y: 140 });
+  const outsider = addNode("test.number", { x: 20, y: 20 });
+  useEditorStore.setState((state) => ({
+    nodes: state.nodes.map((node) => ({
+      ...node,
+      selected: node.id === first,
+    })),
+    edges: [edge("one", first, second)],
+  }));
+  const groupId = required(useEditorStore.getState().createFlowFromSelected());
+  useEditorStore.getState().moveFlowBy(groupId, { x: 48, y: -16 });
+  const state = useEditorStore.getState();
+  expect(required(state.nodes.find((node) => node.id === first)).position).toEqual({
+    x: 148,
+    y: 84,
+  });
+  expect(required(state.nodes.find((node) => node.id === second)).position).toEqual({
+    x: 448,
+    y: 124,
+  });
+  expect(
+    required(state.nodes.find((node) => node.id === outsider)).position,
+  ).toEqual({ x: 20, y: 20 });
+  expect(state.dirty).toBe(true);
 });
 test("unlinking a connection removes only that edge and refreshes its parent flow", () => {
   const first = addNode();
@@ -312,6 +460,9 @@ test("primitive value nodes stay out of the creation catalog", () => {
     false,
   );
   expect(isVisibleCatalogNode({ schemaId: "midgard.input.number" })).toBe(
+    false,
+  );
+  expect(isVisibleCatalogNode({ schemaId: "midgard.input.llava" })).toBe(
     false,
   );
   expect(isVisibleCatalogNode({ schemaId: "midgard.input.prompt" })).toBe(true);

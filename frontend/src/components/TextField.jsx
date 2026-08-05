@@ -27,9 +27,9 @@ function TextFieldComponent(
       aria-invalid={Boolean(error)}
       aria-describedby={error ? `${id}-error` : undefined}
       className={cn(
-        "ui-control",
-        bare && "ui-control-inline",
-        Boolean(error) && "border-mg-error",
+        "ui-input",
+        bare && "is-bare",
+        Boolean(error) && "is-error",
         className,
       )}
       {...props}
