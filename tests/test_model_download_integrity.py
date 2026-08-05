@@ -8,12 +8,12 @@ from backend.models.artifacts import (
     ArtifactVerificationError,
     promote_verified_artifact,
 )
-from backend.models.metadata import ExpectedFile
-from backend.models.registry import MODEL_REGISTRY
-from backend.tools import enhance_models
-from backend.tools.constant import EnhanceMode
-from backend.tools.enhance_models import catalog_info
-from backend.tools.select_object_models import MODEL_CATALOG as SELECT_OBJECT_CATALOG
+from backend.models.reference.metadata import ExpectedFile
+from backend.models.reference.catalog import MODEL_REGISTRY
+from backend.tools.installers import enhance as enhance_models
+from backend.tools.shared.constants import EnhanceMode
+from backend.tools.installers.enhance import catalog_info
+from backend.tools.installers.select_object import MODEL_CATALOG as SELECT_OBJECT_CATALOG
 
 
 def test_verified_artifact_replaces_destination_only_after_validation(tmp_path) -> None:
@@ -110,7 +110,7 @@ def test_realesrgan_installer_rejects_tampered_download(tmp_path, monkeypatch) -
         with open(filename, "wb") as stream:
             stream.write(b"tampered")
 
-    from backend.tools import model_download_registry
+    from backend.tools.shared import download_registry as model_download_registry
 
     monkeypatch.setattr(enhance_models, "models_dir", lambda: tmp_path)
     monkeypatch.setattr(enhance_models.urllib.request, "urlretrieve", fake_download)

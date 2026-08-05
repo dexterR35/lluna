@@ -11,7 +11,7 @@ def test_subtitle_pipeline_imports_is_image_file():
     common_tools_imports = {
         alias.name
         for node in module.body
-        if isinstance(node, ast.ImportFrom) and node.module == "backend.tools.common_tools"
+        if isinstance(node, ast.ImportFrom) and node.module == "backend.tools.media.common"
         for alias in node.names
     }
 

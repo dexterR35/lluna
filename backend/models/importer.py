@@ -11,7 +11,7 @@ from typing import Any, Mapping
 
 from backend.core.atomic import atomic_write_json
 from backend.models.dynamic_registry import DynamicModelRegistry
-from backend.models.manifest import (
+from backend.models.reference.manifest import (
     MANIFEST_FILENAME,
     HardwareRequirement,
     ManifestError,
@@ -23,7 +23,7 @@ from backend.models.manifest import (
     model_files,
     normalize_model_id,
 )
-from backend.models.runtime_profiles import runtime_status
+from backend.models.reference.runtimes import runtime_status
 
 _HF_URL = re.compile(
     r"^(?:https?://)?(?:www\.)?huggingface\.co/([^/\s]+)/([^/?#\s]+)(?:/.*)?$",
@@ -72,7 +72,7 @@ def _card_value(card: object, key: str, default: Any = "") -> Any:
 def analyze_huggingface(value: str, *, revision: str = "") -> dict:
     from huggingface_hub import HfApi
 
-    from backend.tools.hf_auth import resolve_hf_token
+    from backend.tools.shared.huggingface import resolve_hf_token
 
     repo = parse_hf_repo(value)
     token = resolve_hf_token()
@@ -116,7 +116,7 @@ def analyze_huggingface(value: str, *, revision: str = "") -> dict:
     if total_size:
         minimum_vram = int(min(max(total_size / (1024 * 1024) * 0.65, 0), 98304))
     backends = ("cuda", "mps", "cpu")
-    from backend.models.capability_resolver import (
+    from backend.models.reference.capabilities import (
         huggingface_metadata_contract,
         reviewed_huggingface_contract,
     )
@@ -193,7 +193,7 @@ def analyze_local(path: Path) -> dict:
         else inferred_manifest(source)
     )
     if manifest.capabilities.provenance == "unknown":
-        from backend.models.capability_resolver import inspect_local_contract
+        from backend.models.reference.capabilities import inspect_local_contract
 
         variant, capabilities = inspect_local_contract(
             source, task=manifest.task, adapter=manifest.adapter
@@ -315,7 +315,7 @@ def install_huggingface(manifest: ModelManifest) -> Path:
         raise ValueError("Configure this model before installation.")
     if manifest.security.trust_remote_code:
         raise PermissionError("Remote repository code is disabled by Lluna policy.")
-    from backend.tools.hf_auth import snapshot_download_with_progress
+    from backend.tools.shared.huggingface import snapshot_download_with_progress
 
     registry = DynamicModelRegistry.instance()
     target = registry.root / manifest.id

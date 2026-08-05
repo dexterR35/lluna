@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from backend.models.metadata import ExpectedFile
+from backend.models.reference.metadata import ExpectedFile
 from backend.models.verifier import VerificationResult, verify_file
 
 

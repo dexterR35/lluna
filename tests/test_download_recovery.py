@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from backend.tools.model_download_lifecycle import prepare_restart_pending
-from backend.tools.model_download_registry import ModelDownloadRegistry
+from backend.tools.shared.download_lifecycle import prepare_restart_pending
+from backend.tools.shared.download_registry import ModelDownloadRegistry
 
 
 def test_corrupt_pending_state_is_backed_up(monkeypatch, tmp_path: Path) -> None:

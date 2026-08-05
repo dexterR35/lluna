@@ -5,7 +5,7 @@ import threading
 from pathlib import Path
 
 from backend.core.atomic import atomic_write_json
-from backend.tools.model_download_queue import ModelDownloadQueue
+from backend.tools.shared.download_queue import ModelDownloadQueue
 
 
 def test_atomic_json_replaces_complete_document(tmp_path: Path) -> None:

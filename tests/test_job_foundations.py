@@ -9,7 +9,7 @@ from backend.diagnostics.redaction import redact_text, redact_url
 from backend.media.output_paths import default_output_path, next_available_path
 from backend.media.progress import CancellationToken
 from backend.media.workspace import JobWorkspace
-from backend.tools.infer_protocol import JobRequest, JobType
+from backend.tools.inference.protocol import JobRequest, JobType
 
 
 def test_job_status_validates_progress() -> None:

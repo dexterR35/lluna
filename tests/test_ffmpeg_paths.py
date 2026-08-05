@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from backend.diagnostics.errors import DependencyError
-from backend.tools.ffmpeg_cli import resolve_ffmpeg_path
+from backend.tools.media.ffmpeg import resolve_ffmpeg_path
 
 
 @pytest.mark.parametrize(

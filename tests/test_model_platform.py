@@ -15,10 +15,10 @@ from backend.core.paths import AppPaths
 from backend.graph.registry import list_nodes
 from backend.graph.schema import WorkflowDocument, WorkflowNode
 from backend.graph.validation import validate_workflow
-from backend.models.capability_resolver import reviewed_huggingface_contract
+from backend.models.reference.capabilities import reviewed_huggingface_contract
 from backend.models.dynamic_registry import DynamicModelRegistry
 from backend.models.importer import analyze_huggingface, configure_manifest, import_local
-from backend.models.manifest import MANIFEST_FILENAME, ManifestError, ModelManifest
+from backend.models.reference.manifest import MANIFEST_FILENAME, ManifestError, ModelManifest
 
 
 def paths(root: Path) -> AppPaths:
@@ -192,8 +192,8 @@ def test_reviewed_catalog_contract_precedes_metadata_and_is_complete() -> None:
 
 
 def test_supir_reviewed_contract_and_checkpoint_import(tmp_path, monkeypatch) -> None:
-    from backend.models.capability_resolver import builtin_contract
-    from backend.tools import supir_models
+    from backend.models.reference.capabilities import builtin_contract
+    from backend.tools.installers import supir as supir_models
 
     monkeypatch.setattr(supir_models, "supir_root", lambda: tmp_path / "supir")
     source_q = tmp_path / "downloaded-q.ckpt"
@@ -223,7 +223,8 @@ def test_supir_reviewed_contract_and_checkpoint_import(tmp_path, monkeypatch) ->
 
 
 def test_supir_checkpoint_download_is_revision_and_hash_pinned(tmp_path, monkeypatch) -> None:
-    from backend.tools import hf_auth, supir_models
+    from backend.tools.shared import huggingface as hf_auth
+    from backend.tools.installers import supir as supir_models
 
     checkpoint = b"small deterministic SUPIR fixture"
     monkeypatch.setattr(supir_models, "supir_root", lambda: tmp_path / "supir")
@@ -264,7 +265,7 @@ def test_supir_checkpoint_download_is_revision_and_hash_pinned(tmp_path, monkeyp
 
 
 def test_supir_finds_uv_python_when_desktop_path_is_minimal(tmp_path, monkeypatch) -> None:
-    from backend.tools import supir_models
+    from backend.tools.installers import supir as supir_models
 
     python = tmp_path / ".local" / "bin" / "python3.10"
     python.parent.mkdir(parents=True)
@@ -279,7 +280,7 @@ def test_supir_finds_uv_python_when_desktop_path_is_minimal(tmp_path, monkeypatc
 
 
 def test_supir_rejects_configured_unsupported_python(tmp_path, monkeypatch) -> None:
-    from backend.tools import supir_models
+    from backend.tools.installers import supir as supir_models
 
     python = tmp_path / "python3.12"
     python.write_text("#!/bin/sh\nprintf '3.12\\n'\n", encoding="utf-8")
@@ -293,7 +294,8 @@ def test_supir_rejects_configured_unsupported_python(tmp_path, monkeypatch) -> N
 
 
 def test_supir_run_throws_clear_error_without_cuda(monkeypatch) -> None:
-    from backend.tools import image_supir, supir_models
+    from backend.ai.runtimes import supir as image_supir
+    from backend.tools.installers import supir as supir_models
 
     monkeypatch.setattr(supir_models, "cuda_compatible", lambda: False)
 
@@ -307,7 +309,7 @@ def test_supir_run_throws_clear_error_without_cuda(monkeypatch) -> None:
 
 
 def test_supir_install_fetches_both_variants_and_official_sdxl(monkeypatch) -> None:
-    from backend.tools import supir_models
+    from backend.tools.installers import supir as supir_models
 
     actions: list[str] = []
     monkeypatch.setattr(supir_models, "readiness", lambda: {"runtime": False})
@@ -337,7 +339,8 @@ def test_supir_install_fetches_both_variants_and_official_sdxl(monkeypatch) -> N
 
 
 def test_supir_dependencies_use_resumable_managed_downloads(tmp_path, monkeypatch) -> None:
-    from backend.tools import hf_auth, supir_models
+    from backend.tools.shared import huggingface as hf_auth
+    from backend.tools.installers import supir as supir_models
 
     monkeypatch.setattr(supir_models, "supir_root", lambda: tmp_path / "supir")
     partial = supir_models.dependency_dir("llava-v1.5-13b")

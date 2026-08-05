@@ -5,7 +5,7 @@ import torch
 import numpy as np
 from PIL import Image
 from backend.inpaint.utils.lama_util import prepare_img_and_mask, get_image, pad_img_to_modulo
-from backend.tools.inpaint_tools import get_inpaint_area_by_mask
+from backend.tools.media.inpaint import get_inpaint_area_by_mask
 
 class LamaInpaint:
     def __init__(self, device: torch.device = torch.device("cuda" if torch.cuda.is_available() else "cpu"), model_path='big-lama.pt') -> None:

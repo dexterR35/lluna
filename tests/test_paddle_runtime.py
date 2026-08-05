@@ -4,7 +4,7 @@ import os
 import sys
 
 from backend.hardware import providers
-from backend.tools.paddle_runtime import (
+from backend.ai.runtimes.paddle import (
     disable_paddle_background_services,
     preferred_paddle_device,
 )

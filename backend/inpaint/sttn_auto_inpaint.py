@@ -9,9 +9,9 @@ from tqdm import tqdm
 
 from backend.inpaint.sttn.auto_sttn import InpaintGenerator
 from backend.inpaint.tensor_transforms import to_tensors
-from backend.tools.inpaint_tools import get_inpaint_area_by_mask, is_frame_number_in_ab_sections
-from backend.tools.video_io import FramePrefetcher
-from backend.tools.hardware_accelerator import HardwareAccelerator
+from backend.tools.media.inpaint import get_inpaint_area_by_mask, is_frame_number_in_ab_sections
+from backend.tools.media.video import FramePrefetcher
+from backend.tools.shared.hardware import HardwareAccelerator
 
 # Define image preprocessing pipeline
 _to_tensors = to_tensors()
@@ -196,7 +196,7 @@ class STTNAutoInpaint:
             reference_length=reference_length,
         )
         try:
-            from backend.tools.inpaint_release import register_video_inpaint_model
+            from backend.ai.runtimes.inpaint import register_video_inpaint_model
             register_video_inpaint_model(self.sttn_inpaint)
         except Exception:
             pass

@@ -9,7 +9,7 @@ from typing import Any
 from backend.hardware.policy import select_execution_policy
 from backend.hardware.profile import HardwareProfile
 from backend.settings.base import ModelSettings
-from backend.settings.model_schemas import (
+from backend.settings.schemas.model import (
     GenerateSettings,
     LowLightSettings,
     ProPainterSettings,

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from backend.graph.registry import list_nodes
-from backend.models.registry import MODEL_REGISTRY
-from backend.tools import seedvr_models
+from backend.models.reference.catalog import MODEL_REGISTRY
+from backend.tools.installers import seedvr2 as seedvr_models
 
 
 def test_seedvr_variants_are_catalogued_as_cuda_upscalers() -> None:

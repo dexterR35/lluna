@@ -13,15 +13,15 @@ import cv2
 from functools import cached_property
 
 from backend.configuration.models import SubtitleSettings
-from backend.tools.constant import InpaintMode, SubtitleDetectMode
-from backend.tools.hardware_accelerator import HardwareAccelerator
-from backend.tools.common_tools import get_readable_path, is_image_file, read_image
+from backend.tools.shared.constants import InpaintMode, SubtitleDetectMode
+from backend.tools.shared.hardware import HardwareAccelerator
+from backend.tools.media.common import get_readable_path, is_image_file, read_image
 from backend.inpaint.sttn_auto_inpaint import STTNAutoInpaint
 from backend.inpaint.sttn_det_inpaint import STTNDetInpaint
 from backend.inpaint.lama_inpaint import LamaInpaint
 from backend.inpaint.opencv_inpaint import OpenCVInpaint
 from backend.inpaint.propainter_inpaint import PropainterInpaint
-from backend.tools.inpaint_tools import (
+from backend.tools.media.inpaint import (
     create_mask,
     batch_generator,
     expand_frame_ranges,
@@ -31,9 +31,9 @@ from backend.models.paths import (
     SubtitleModelPaths,
     prepare_bundled_subtitle_models,
 )
-from backend.tools.ffmpeg_cli import FFmpegCLI
-from backend.tools.subtitle_detect import SubtitleDetect
-from backend.tools.video_io import FramePrefetcher, FFmpegVideoWriter
+from backend.tools.media.ffmpeg import FFmpegCLI
+from backend.tools.media.subtitles import SubtitleDetect
+from backend.tools.media.video import FramePrefetcher, FFmpegVideoWriter
 import time
 from tqdm import tqdm
 import numpy as np
@@ -243,7 +243,7 @@ class SubtitleRemover:
             self.settings.propainter_max_load_num,
         )
         try:
-            from backend.tools.inpaint_release import register_video_inpaint_model
+            from backend.ai.runtimes.inpaint import register_video_inpaint_model
             register_video_inpaint_model(propainter_inpaint)
         except Exception:
             pass
@@ -673,7 +673,7 @@ class SubtitleRemover:
         device = self.hardware_accelerator.device if self.hardware_accelerator.has_cuda() or self.hardware_accelerator.has_mps() else torch.device("cpu")
         obj = LamaInpaint(device, model_path)
         try:
-            from backend.tools.inpaint_release import register_video_inpaint_model
+            from backend.ai.runtimes.inpaint import register_video_inpaint_model
             register_video_inpaint_model(obj)
         except Exception:
             pass
@@ -688,7 +688,7 @@ class SubtitleRemover:
             reference_length=self.settings.sttn_reference_length,
         )
         try:
-            from backend.tools.inpaint_release import register_video_inpaint_model
+            from backend.ai.runtimes.inpaint import register_video_inpaint_model
             register_video_inpaint_model(obj)
         except Exception:
             pass

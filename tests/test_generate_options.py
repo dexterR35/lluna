@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import pytest
 
-from backend.tools.constant import GenerateMode
-from backend.tools.generate_models import (
+from backend.tools.shared.constants import GenerateMode
+from backend.tools.installers.generate import (
     MODEL_CATALOG,
     _validate_download_snapshot,
     catalog_info,
     model_downloads,
 )
-from backend.tools.generate_options import (
+from backend.tools.options.generate import (
     default_size_preset_for_mode,
     default_step_preset_for_mode,
     resolve_guidance,
@@ -130,7 +130,7 @@ def test_filtered_generate_snapshot_is_checked_before_install(
 
 
 def test_qwen_generation_uses_true_cfg_and_an_empty_negative_prompt() -> None:
-    from backend.tools.image_generate import _QwenImageRunner
+    from backend.ai.runtimes.diffusion import _QwenImageRunner
 
     runner = object.__new__(_QwenImageRunner)
     kwargs = runner._build_call_kwargs(
@@ -151,7 +151,7 @@ def test_fp8_loader_combines_single_file_with_local_diffusers_components(
 ) -> None:
     import torch
 
-    from backend.tools import image_generate
+    from backend.ai.runtimes import diffusion as image_generate
 
     checkpoint = tmp_path / "flux-2-klein-9b-fp8.safetensors"
     checkpoint.touch()

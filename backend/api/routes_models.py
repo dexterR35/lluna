@@ -12,7 +12,7 @@ from backend.models.service import (
     list_models,
     start_model_action,
 )
-from backend.tools.model_download_queue import ModelDownloadQueue
+from backend.tools.shared.download_queue import ModelDownloadQueue
 
 router = APIRouter(prefix="/api", dependencies=[Depends(require_token)])
 
@@ -114,7 +114,7 @@ def update_model_manifest(model_id: str, manifest: dict[str, Any]) -> dict:
 
 @router.get("/huggingface/status")
 def huggingface_status(verify: bool = False) -> dict:
-    from backend.tools.hf_auth import hf_auth_status
+    from backend.tools.shared.huggingface import hf_auth_status
 
     try:
         return hf_auth_status(verify=verify)
@@ -126,7 +126,7 @@ def huggingface_status(verify: bool = False) -> dict:
 
 @router.post("/huggingface/connect")
 def connect_huggingface(request: HuggingFaceConnectRequest) -> dict:
-    from backend.tools.hf_auth import save_hf_token, validate_hf_token
+    from backend.tools.shared.huggingface import save_hf_token, validate_hf_token
 
     try:
         status = validate_hf_token(request.token)
@@ -140,7 +140,7 @@ def connect_huggingface(request: HuggingFaceConnectRequest) -> dict:
 
 @router.delete("/huggingface/connect")
 def disconnect_huggingface() -> dict:
-    from backend.tools.hf_auth import clear_hf_token
+    from backend.tools.shared.huggingface import clear_hf_token
 
     clear_hf_token()
     return {"connected": False, "account": "", "role": "", "storage": "none"}
@@ -165,7 +165,7 @@ def install(model_id: str) -> dict:
 @router.post("/models/supir/checkpoint")
 def import_supir_checkpoint(request: SupirCheckpointRequest) -> dict:
     from backend.artifacts.store import DesktopGrantStore
-    from backend.tools.supir_models import import_checkpoint, readiness
+    from backend.tools.installers.supir import import_checkpoint, readiness
 
     try:
         source = DesktopGrantStore.instance().resolve(request.grantId, mode="read")

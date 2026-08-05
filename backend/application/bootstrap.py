@@ -61,7 +61,7 @@ def prepare_control_plane() -> BootstrapReport:
     except (OSError, ValueError) as exc:
         logger.warning("Custom model registry was not started: %s", exc)
     try:
-        from backend.tools.model_download_lifecycle import prepare_restart_pending
+        from backend.tools.shared.download_lifecycle import prepare_restart_pending
 
         recovered = prepare_restart_pending()
         if recovered:
@@ -72,12 +72,12 @@ def prepare_control_plane() -> BootstrapReport:
     except (OSError, RuntimeError, ValueError) as exc:
         logger.warning("Model download recovery was not applied: %s", exc)
     try:
-        from backend.tools.hf_auth import apply_hf_token_to_env
+        from backend.tools.shared.huggingface import apply_hf_token_to_env
         apply_hf_token_to_env()
     except (ImportError, OSError, ValueError):
         logger.info("No saved Hugging Face credential was applied")
     try:
-        from backend.tools.soft_defaults import apply_soft_defaults_if_needed
+        from backend.tools.shared.defaults import apply_soft_defaults_if_needed
         apply_soft_defaults_if_needed()
     except (OSError, RuntimeError, ValueError) as exc:
         logger.warning("Hardware soft defaults were not applied: %s", exc)

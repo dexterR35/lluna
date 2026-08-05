@@ -205,13 +205,13 @@ class DynamicRuntimeManager:
             raise AdapterError("The custom model is not installed and enabled.")
         if not record.manifest.is_configured():
             raise AdapterError("The custom model needs configuration.")
-        from backend.models.runtime_profiles import runtime_status
+        from backend.models.reference.runtimes import runtime_status
 
         status = runtime_status(record.manifest)
         if not status["compatible"]:
             raise AdapterError(" ".join(status["reasons"]))
         if record.manifest.task in {"text-to-image", "image-to-image", "inpainting"}:
-            from backend.models.capability_validation import validate_generation_inputs
+            from backend.models.reference.validation import validate_generation_inputs
 
             capability_issues = validate_generation_inputs(
                 record.manifest.capabilities.to_dict(record.manifest.task), inputs

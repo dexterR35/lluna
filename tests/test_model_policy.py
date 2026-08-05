@@ -1,5 +1,5 @@
 from backend.models.policy import evaluate_model_compatibility, video_frame_policy
-from backend.models.registry import MODEL_REGISTRY
+from backend.models.reference.catalog import MODEL_REGISTRY
 from tests.fakes.hardware import CPU_ONLY, CUDA, DIRECTML, profile
 
 

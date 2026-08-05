@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from backend.settings.metadata import SettingsLevel
-from backend.settings.model_schemas import (
+from backend.settings.schemas.model import (
     GenerateSettings,
     LowLightSettings,
     ObjectSelectionSettings,

@@ -78,8 +78,8 @@ def create_video_writer(path: str, fps: float, size: tuple[int, int]):
     """Prefer FFmpeg/libx264, with a validated OpenCV fallback."""
     import cv2
 
-    from backend.tools.common_tools import get_readable_path
-    from backend.tools.video_io import FFmpegVideoWriter
+    from backend.tools.media.common import get_readable_path
+    from backend.tools.media.video import FFmpegVideoWriter
 
     try:
         return FFmpegVideoWriter(get_readable_path(path), fps, size)

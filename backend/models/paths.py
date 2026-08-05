@@ -43,7 +43,7 @@ class SubtitleModelPaths:
 
 def prepare_bundled_subtitle_models(paths: SubtitleModelPaths) -> None:
     """Merge repository-shipped chunks explicitly before model loading."""
-    from backend.tools.common_tools import merge_big_file_if_not_exists
+    from backend.tools.media.common import merge_big_file_if_not_exists
 
     merge_big_file_if_not_exists(str(paths.lama_dir), "big-lama.pt")
     merge_big_file_if_not_exists(str(paths.propainter_dir), "ProPainter.pth")

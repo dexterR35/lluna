@@ -273,7 +273,7 @@ def validate_workflow(
             )
             capabilities = selected_option.get("capabilities") if selected_option else None
             if node.schema_id == "lluna.generate.image":
-                from backend.models.capability_validation import validate_generation_inputs
+                from backend.models.reference.validation import validate_generation_inputs
 
                 capability_issues = (
                     validate_generation_inputs(capabilities, node.parameters)

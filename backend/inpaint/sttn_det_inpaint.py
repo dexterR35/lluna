@@ -6,7 +6,7 @@ import torch
 from typing import List
 from backend.inpaint.sttn.network_sttn import InpaintGenerator
 from backend.inpaint.tensor_transforms import to_tensors
-from backend.tools.inpaint_tools import get_inpaint_area_by_mask
+from backend.tools.media.inpaint import get_inpaint_area_by_mask
 
 # Define image preprocessing pipeline
 _to_tensors = to_tensors()

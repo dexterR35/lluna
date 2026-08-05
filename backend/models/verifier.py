@@ -6,7 +6,7 @@ import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 
-from backend.models.metadata import ExpectedFile
+from backend.models.reference.metadata import ExpectedFile
 
 
 @dataclass(frozen=True)

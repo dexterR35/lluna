@@ -14,7 +14,7 @@ router = APIRouter(prefix="/api", dependencies=[Depends(require_token)])
 def diagnostics() -> dict:
     worker = {"alive": False, "active": None}
     try:
-        from backend.tools.infer_client import InferClient
+        from backend.tools.inference.client import InferClient
 
         worker = InferClient.instance().status_snapshot()
     except (ImportError, RuntimeError):
@@ -30,7 +30,7 @@ def diagnostics() -> dict:
 @router.post("/system/release-models")
 def release_models() -> dict:
     try:
-        from backend.tools.infer_client import InferClient
+        from backend.tools.inference.client import InferClient
 
         InferClient.instance().release()
     except (ImportError, RuntimeError):

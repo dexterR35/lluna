@@ -41,7 +41,7 @@ def create_app(token: str | None = None) -> FastAPI:
             set_ready(False)
             from backend.graph.executor import RunManager
             from backend.models.dynamic_registry import DynamicModelRegistry
-            from backend.tools.model_download_lifecycle import abort_downloads_on_shutdown
+            from backend.tools.shared.download_lifecycle import abort_downloads_on_shutdown
 
             RunManager.instance().shutdown()
             DynamicModelRegistry.instance().stop_watcher()

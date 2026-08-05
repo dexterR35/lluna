@@ -186,8 +186,9 @@ keep the model disabled.
 Remote repository code is disabled, SafeTensors is preferred, and legacy
 pickle-capable weights require explicit opt-in. Repository `requirements.txt`
 files are never installed into Lluna's main environment. See
-[the model platform guide](backend/models/PLATFORM.md) and
-[manifest schema](backend/models/model-manifest.schema.json).
+[the model platform guide](backend/models/reference/PLATFORM.md),
+[model references](backend/models/reference/README.md), and
+[manifest schema](backend/models/reference/model-manifest.schema.json).
 
 ---
 

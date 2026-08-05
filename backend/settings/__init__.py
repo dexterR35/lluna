@@ -1,6 +1,6 @@
 """Typed model settings and hardware-aware preset resolution."""
 
-from backend.settings.model_schemas import (
+from backend.settings.schemas.model import (
     GenerateSettings,
     LamaSettings,
     LowLightSettings,

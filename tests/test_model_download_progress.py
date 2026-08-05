@@ -5,7 +5,7 @@ import time
 
 import pytest
 
-from backend.tools.model_download_queue import ModelDownloadQueue
+from backend.tools.shared.download_queue import ModelDownloadQueue
 
 
 def _wait_until(predicate, timeout: float = 2.0) -> None:
@@ -122,7 +122,7 @@ def test_stopping_current_job_continues_with_next_queued_job(
     monkeypatch,
     tmp_path,
 ) -> None:
-    from backend.tools.model_download_registry import (
+    from backend.tools.shared.download_registry import (
         DownloadCancelled,
         ModelDownloadRegistry,
     )
@@ -174,7 +174,7 @@ def test_stopping_current_job_continues_with_next_queued_job(
 
 
 def test_stopping_queued_job_removes_only_that_item(monkeypatch, tmp_path) -> None:
-    from backend.tools.model_download_registry import (
+    from backend.tools.shared.download_registry import (
         DownloadCancelled,
         ModelDownloadRegistry,
     )
@@ -218,7 +218,7 @@ def test_stopping_queued_job_removes_only_that_item(monkeypatch, tmp_path) -> No
 
 
 def test_direct_download_reporthook_updates_active_percentage(monkeypatch) -> None:
-    from backend.tools.model_download_registry import urllib_cancel_reporthook
+    from backend.tools.shared.download_registry import urllib_cancel_reporthook
 
     queue = ModelDownloadQueue()
     monkeypatch.setattr(ModelDownloadQueue, "_instance", queue)
@@ -239,7 +239,7 @@ def test_direct_download_reporthook_updates_active_percentage(monkeypatch) -> No
 
 def test_huggingface_byte_adapter_updates_active_percentage(monkeypatch) -> None:
     pytest.importorskip("tqdm")
-    from backend.tools.model_download_registry import (
+    from backend.tools.shared.download_registry import (
         huggingface_download_total,
         huggingface_progress_tqdm,
     )
@@ -272,7 +272,7 @@ def test_huggingface_byte_adapter_updates_active_percentage(monkeypatch) -> None
 
 def test_pooch_byte_adapter_updates_active_metrics(monkeypatch) -> None:
     pytest.importorskip("tqdm")
-    from backend.tools.model_download_registry import pooch_progress_tqdm
+    from backend.tools.shared.download_registry import pooch_progress_tqdm
 
     queue = ModelDownloadQueue()
     monkeypatch.setattr(ModelDownloadQueue, "_instance", queue)

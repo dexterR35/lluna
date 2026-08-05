@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-from backend.tools import (
-    enhance_models,
-    hf_auth,
-    low_light_models,
-    select_object_models,
-)
-from backend.tools.constant import EnhanceMode, LowLightMode, SelectObjectModelId
+from backend.tools.installers import enhance as enhance_models
+from backend.tools.installers import low_light as low_light_models
+from backend.tools.installers import select_object as select_object_models
+from backend.tools.shared import huggingface as hf_auth
+from backend.tools.shared.constants import EnhanceMode, LowLightMode, SelectObjectModelId
 
 
 def _make_repo_cache(root, repo_id: str):

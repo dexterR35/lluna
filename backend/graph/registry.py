@@ -957,7 +957,7 @@ NODE_REGISTRY = {definition.schema_id: definition for definition in _NODES}
 
 def list_nodes() -> list[NodeDefinition]:
     values = [definition.model_copy(deep=True) for definition in NODE_REGISTRY.values()]
-    from backend.models.capability_resolver import builtin_contract
+    from backend.models.reference.capabilities import builtin_contract
 
     for definition in values:
         for parameter_definition in definition.parameters:
@@ -971,7 +971,7 @@ def list_nodes() -> list[NodeDefinition]:
                 model_option["capabilities"] = capabilities.to_dict(task)
     try:
         from backend.models.dynamic_registry import DynamicModelRegistry
-        from backend.models.runtime_profiles import runtime_status
+        from backend.models.reference.runtimes import runtime_status
 
         custom_records = [
             record
@@ -1004,7 +1004,7 @@ def list_nodes() -> list[NodeDefinition]:
         pass
     try:
         from backend.models.dynamic_registry import DynamicModelRegistry
-        from backend.models.runtime_profiles import runtime_status
+        from backend.models.reference.runtimes import runtime_status
 
         custom_records = [
             record

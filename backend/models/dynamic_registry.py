@@ -11,14 +11,14 @@ from typing import Callable
 
 from backend.core.atomic import atomic_write_json
 from backend.core.paths import PATHS, AppPaths
-from backend.models.manifest import (
+from backend.models.reference.manifest import (
     MANIFEST_FILENAME,
     ManifestError,
     ModelManifest,
     inferred_manifest,
     model_files,
 )
-from backend.models.runtime_profiles import runtime_status
+from backend.models.reference.runtimes import runtime_status
 
 logger = logging.getLogger(__name__)
 RegistryListener = Callable[[], None]
@@ -201,7 +201,7 @@ class DynamicModelRegistry:
             raise KeyError(model_id) from exc
 
     def register(self, manifest: ModelManifest) -> Path:
-        from backend.models.registry import MODEL_REGISTRY
+        from backend.models.reference.catalog import MODEL_REGISTRY
 
         if manifest.id in MODEL_REGISTRY or manifest.id.startswith("generate:"):
             raise ManifestError(f"Model id {manifest.id!r} is reserved by Lluna.")

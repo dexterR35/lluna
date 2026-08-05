@@ -825,7 +825,7 @@ def seed_default_model_downloads(py: Path) -> None:
     script = r"""
 import sys
 sys.path.insert(0, sys.argv[1])
-from backend.tools.first_run_downloads import seed_first_run_downloads
+from backend.tools.installers.first_run import seed_first_run_downloads
 
 n = seed_first_run_downloads()
 print(f"  Scheduled {n} default model(s) for the model download queue.")
@@ -933,7 +933,7 @@ def main() -> int:
     run([str(py), "-c", merge_script])
 
     try:
-        from backend.tools.model_download_lifecycle import cli_stop_and_revert_downloads
+        from backend.tools.shared.download_lifecycle import cli_stop_and_revert_downloads
 
         cli_stop_and_revert_downloads()
     except Exception as e:

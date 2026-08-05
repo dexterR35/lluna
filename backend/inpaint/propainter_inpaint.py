@@ -14,7 +14,7 @@ from backend.inpaint.video.model.modules.flow_comp_raft import RAFT_bi
 from backend.inpaint.video.model.recurrent_flow_completion import RecurrentFlowCompleteNet
 from backend.inpaint.video.model.propainter import InpaintGenerator
 from backend.inpaint.tensor_transforms import to_tensors
-from backend.tools.inpaint_tools import get_inpaint_area_by_mask
+from backend.tools.media.inpaint import get_inpaint_area_by_mask
 
 import warnings
 

@@ -1,6 +1,6 @@
 import numpy as np
 
-from backend.tools.inpaint_tools import create_mask
+from backend.tools.media.inpaint import create_mask
 
 
 def test_create_mask_accepts_float_coordinates_and_rounds_outward():

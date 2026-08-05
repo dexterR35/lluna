@@ -26,7 +26,7 @@ from backend.graph.cache import build_cache_key
 from backend.graph.compiler import compile_workflow
 from backend.graph.registry import NODE_REGISTRY, get_node
 from backend.graph.schema import WorkflowDocument, WorkflowNode
-from backend.tools.infer_protocol import JobType
+from backend.tools.inference.protocol import JobType
 
 
 class RunStatus(str, Enum):
@@ -308,7 +308,7 @@ class RunManager:
             worker_run_id = control.worker_run_id
         if worker_run_id is not None:
             try:
-                from backend.tools.infer_client import InferClient
+                from backend.tools.inference.client import InferClient
 
                 InferClient.instance().cancel(worker_run_id)
             except RuntimeError:
@@ -338,7 +338,7 @@ class RunManager:
         for control in controls:
             control.cancel.set()
         try:
-            from backend.tools.infer_client import InferClient
+            from backend.tools.inference.client import InferClient
 
             InferClient.instance().shutdown()
         except (ImportError, RuntimeError):
@@ -1532,7 +1532,7 @@ class RunManager:
         item_index: int = 0,
         item_count: int = 1,
     ) -> ArtifactRecord:
-        from backend.tools.infer_client import InferClient
+        from backend.tools.inference.client import InferClient
 
         done = threading.Event()
         result_path: list[str] = []

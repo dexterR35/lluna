@@ -12,8 +12,8 @@ from backend.api.events import EventBroker
 from backend.configuration.service import get_settings
 from backend.core.atomic import atomic_write_json
 from backend.core.paths import PATHS
-from backend.models.registry import MODEL_REGISTRY
-from backend.tools.model_download_queue import ModelDownloadQueue
+from backend.models.reference.catalog import MODEL_REGISTRY
+from backend.tools.shared.download_queue import ModelDownloadQueue
 
 _GENERATION_REGISTRY_IDS = {"flux", "flux2-dev", "flux2-klein-9b-fp8", "qwen-image"}
 _BIREFNET_IDS = {
@@ -110,7 +110,7 @@ def _set_enabled_override(model_id: str, enabled: bool) -> None:
 
 
 def _variant_ids() -> list[str]:
-    from backend.tools.generate_models import MODEL_CATALOG as generation_models
+    from backend.tools.installers.generate import MODEL_CATALOG as generation_models
 
     return [
         *(f"generate:{item.mode.value}" for item in generation_models),
@@ -161,40 +161,40 @@ def _installed(model_id: str) -> bool:
     if dynamic is not None:
         return dynamic.installed
     if model_id.startswith("generate:"):
-        from backend.tools.constant import GenerateMode
-        from backend.tools.generate_models import is_model_installed
+        from backend.tools.shared.constants import GenerateMode
+        from backend.tools.installers.generate import is_model_installed
 
         return is_model_installed(GenerateMode(model_id.removeprefix("generate:")))
     metadata = MODEL_REGISTRY[model_id]
     if model_id in {"sam2", "grounding-dino"}:
-        from backend.tools.select_object_models import is_fast_pair_installed
+        from backend.tools.installers.select_object import is_fast_pair_installed
 
         return is_fast_pair_installed()
     if model_id == "mirnet":
-        from backend.tools.constant import LowLightMode
-        from backend.tools.low_light_models import is_model_installed
+        from backend.tools.shared.constants import LowLightMode
+        from backend.tools.installers.low_light import is_model_installed
 
         return is_model_installed(LowLightMode.MIRNET_LOL)
     if model_id == "realesrgan-x2":
-        from backend.tools.constant import EnhanceMode
-        from backend.tools.enhance_models import is_model_installed
+        from backend.tools.shared.constants import EnhanceMode
+        from backend.tools.installers.enhance import is_model_installed
 
         return is_model_installed(EnhanceMode.X2PLUS)
     if model_id == "realesrgan-x4":
-        from backend.tools.constant import EnhanceMode
-        from backend.tools.enhance_models import is_model_installed
+        from backend.tools.shared.constants import EnhanceMode
+        from backend.tools.installers.enhance import is_model_installed
 
         return is_model_installed(EnhanceMode.X4PLUS)
     if model_id == "supir":
-        from backend.tools.supir_models import is_model_installed
+        from backend.tools.installers.supir import is_model_installed
 
         return is_model_installed()
     if model_id in _BIREFNET_IDS:
-        from backend.tools.birefnet_models import is_model_installed
+        from backend.tools.installers.birefnet import is_model_installed
 
         return is_model_installed(model_id)
     if model_id in _SEEDVR_IDS:
-        from backend.tools.seedvr_models import is_model_installed
+        from backend.tools.installers.seedvr2 import is_model_installed
 
         return is_model_installed(model_id)
     path = _model_path(metadata.local_path)
@@ -241,7 +241,7 @@ def list_models() -> list[dict]:
 
 
 def _builtin_platform_fields(model_id: str, item: dict) -> dict:
-    from backend.models.capability_resolver import builtin_contract
+    from backend.models.reference.capabilities import builtin_contract
 
     variant, capabilities = builtin_contract(model_id)
     if model_id.startswith("generate:"):
@@ -265,7 +265,7 @@ def _builtin_platform_fields(model_id: str, item: dict) -> dict:
     else:
         task, adapter, profile = "inpainting", "lluna-native", "lluna-native"
     try:
-        from backend.models.runtime_profiles import get_runtime_profile, runtime_installed
+        from backend.models.reference.runtimes import get_runtime_profile, runtime_installed
 
         runtime = get_runtime_profile(profile)
         installed = runtime_installed(runtime)
@@ -285,7 +285,7 @@ def _builtin_platform_fields(model_id: str, item: dict) -> dict:
     elif model_id == "supir":
         from backend.hardware.detector import get_hardware_profile
         from backend.hardware.policy import select_execution_policy
-        from backend.tools.supir_models import SUPIR_PACKAGES
+        from backend.tools.installers.supir import SUPIR_PACKAGES
 
         runtime_packages = list(SUPIR_PACKAGES)
         runtime_isolated = True
@@ -298,7 +298,7 @@ def _builtin_platform_fields(model_id: str, item: dict) -> dict:
     elif model_id in _SEEDVR_IDS:
         from backend.hardware.detector import get_hardware_profile
         from backend.hardware.policy import select_execution_policy
-        from backend.tools.seedvr_models import SEEDVR_PACKAGES
+        from backend.tools.installers.seedvr2 import SEEDVR_PACKAGES
 
         runtime_packages = list(SEEDVR_PACKAGES)
         runtime_isolated = True
@@ -372,14 +372,14 @@ def _builtin_platform_fields(model_id: str, item: dict) -> dict:
 
 def _model_description(model_id: str) -> dict:
     if model_id == "supir":
-        from backend.tools.supir_models import readiness, supir_root
+        from backend.tools.installers.supir import readiness, supir_root
 
         item = asdict(MODEL_REGISTRY[model_id])
         item.update(resolved_path=str(supir_root()), setup=readiness())
         return item
     if model_id.startswith("generate:"):
-        from backend.tools.constant import GenerateMode
-        from backend.tools.generate_models import catalog_info, model_dir
+        from backend.tools.shared.constants import GenerateMode
+        from backend.tools.installers.generate import catalog_info, model_dir
 
         mode = GenerateMode(model_id.removeprefix("generate:"))
         info = catalog_info(mode)
@@ -418,12 +418,12 @@ def _disk_usage(path: Path) -> int:
 def _enabled(model_id: str) -> bool:
     dynamic = _dynamic_record(model_id)
     if dynamic is not None:
-        from backend.models.runtime_profiles import runtime_status
+        from backend.models.reference.runtimes import runtime_status
 
         return dynamic.enabled and runtime_status(dynamic.manifest)["compatible"]
     settings = get_settings()
     if model_id.startswith("generate:"):
-        from backend.tools.generate_models import get_enabled_values
+        from backend.tools.installers.generate import get_enabled_values
 
         return model_id.removeprefix("generate:") in get_enabled_values()
     if model_id == "realesrgan-x2":
@@ -451,7 +451,7 @@ def _action(model_id: str, operation: str) -> None:
         elif operation == "remove":
             uninstall_dynamic(model_id)
         elif operation in {"enable", "disable"}:
-            from backend.models.runtime_profiles import runtime_status
+            from backend.models.reference.runtimes import runtime_status
 
             if operation == "enable" and (
                 not dynamic.installed
@@ -463,8 +463,8 @@ def _action(model_id: str, operation: str) -> None:
             DynamicModelRegistry.instance().set_enabled(model_id, operation == "enable")
         return
     if model_id.startswith("generate:"):
-        from backend.tools.constant import GenerateMode
-        from backend.tools.generate_models import install_model, set_model_enabled, uninstall_model
+        from backend.tools.shared.constants import GenerateMode
+        from backend.tools.installers.generate import install_model, set_model_enabled, uninstall_model
 
         mode = GenerateMode(model_id.removeprefix("generate:"))
         {"install": install_model, "remove": uninstall_model}.get(
@@ -472,8 +472,8 @@ def _action(model_id: str, operation: str) -> None:
         )(mode)
         return
     if model_id in {"realesrgan-x2", "realesrgan-x4"}:
-        from backend.tools.constant import EnhanceMode
-        from backend.tools.enhance_models import install_model, set_model_enabled, uninstall_model
+        from backend.tools.shared.constants import EnhanceMode
+        from backend.tools.installers.enhance import install_model, set_model_enabled, uninstall_model
 
         mode = EnhanceMode.X2PLUS if model_id.endswith("x2") else EnhanceMode.X4PLUS
         {"install": install_model, "remove": uninstall_model}.get(
@@ -481,7 +481,7 @@ def _action(model_id: str, operation: str) -> None:
         )(mode)
         return
     if model_id in _BIREFNET_IDS:
-        from backend.tools.birefnet_models import discard_partial, install_model
+        from backend.tools.installers.birefnet import discard_partial, install_model
 
         if operation == "install":
             install_model(model_id)
@@ -497,7 +497,7 @@ def _action(model_id: str, operation: str) -> None:
             _set_enabled_override(model_id, False)
         return
     if model_id in _SEEDVR_IDS:
-        from backend.tools.seedvr_models import discard_partial, install_model, uninstall_model
+        from backend.tools.installers.seedvr2 import discard_partial, install_model, uninstall_model
 
         if operation == "install":
             install_model(model_id)
@@ -514,7 +514,7 @@ def _action(model_id: str, operation: str) -> None:
             _set_enabled_override(model_id, False)
         return
     if model_id == "supir":
-        from backend.tools.supir_models import install_model, uninstall_model
+        from backend.tools.installers.supir import install_model, uninstall_model
 
         if operation == "install":
             install_model()
@@ -528,8 +528,8 @@ def _action(model_id: str, operation: str) -> None:
             _set_enabled_override(model_id, operation == "enable")
         return
     if model_id == "mirnet":
-        from backend.tools.constant import LowLightMode
-        from backend.tools.low_light_models import install_model, set_model_enabled, uninstall_model
+        from backend.tools.shared.constants import LowLightMode
+        from backend.tools.installers.low_light import install_model, set_model_enabled, uninstall_model
 
         mode = LowLightMode.MIRNET_LOL
         {"install": install_model, "remove": uninstall_model}.get(
@@ -537,7 +537,7 @@ def _action(model_id: str, operation: str) -> None:
         )(mode)
         return
     if model_id in {"sam2", "grounding-dino"}:
-        from backend.tools.select_object_models import (
+        from backend.tools.installers.select_object import (
             SelectObjectPairId,
             install_pair,
             uninstall_pair,

@@ -5,7 +5,7 @@ import types
 
 import torch
 
-from backend.tools.hardware_accelerator import HardwareAccelerator
+from backend.tools.shared.hardware import HardwareAccelerator
 
 
 def _accelerator(*, dml: bool, cuda: bool = False, mps: bool = False):

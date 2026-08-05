@@ -5,8 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from backend.hardware.profile import HardwareProfile
-from backend.models.metadata import ModelMetadata
-from backend.settings.model_schemas import ProPainterSettings, STTNSettings
+from backend.models.reference.metadata import ModelMetadata
+from backend.settings.schemas.model import ProPainterSettings, STTNSettings
 from backend.settings.presets import Preset, ResolutionContext, resolve
 
 
