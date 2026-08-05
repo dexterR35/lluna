@@ -24,7 +24,6 @@ SUPPORTED_ADAPTERS = {
     "transformers",
     "paddle",
     "midgard-native",
-    "python-worker",
     "supir",
 }
 SUPPORTED_TASKS = {
@@ -129,7 +128,6 @@ class ModelSource:
 class RuntimeRequirement:
     profile: str
     packages: tuple[str, ...] = ()
-    isolated: bool = False
 
     @classmethod
     def from_mapping(cls, raw: Mapping[str, Any]) -> "RuntimeRequirement":
@@ -139,7 +137,6 @@ class RuntimeRequirement:
         return cls(
             profile=profile,
             packages=_strings(raw.get("packages"), "runtime.packages"),
-            isolated=bool(raw.get("isolated", False)),
         )
 
 
@@ -506,7 +503,7 @@ class ModelManifest:
             name=str(raw.get("name", raw.get("displayName", ""))).strip(),
             description=str(raw.get("description", "")).strip(),
             task=str(raw.get("task", "custom")).strip().lower(),
-            adapter=str(raw.get("adapter", "python-worker")).strip().lower(),
+            adapter=str(raw.get("adapter", "")).strip().lower(),
             license=str(raw.get("license", "See upstream model card")).strip(),
             gated=bool(raw.get("gated", False)),
             source=ModelSource.from_mapping(dict(raw.get("source", {}))),
@@ -544,7 +541,6 @@ class ModelManifest:
             "runtime": {
                 "profile": self.runtime.profile,
                 "packages": list(self.runtime.packages),
-                "isolated": self.runtime.isolated,
             },
             "hardware": self.hardware.to_dict(),
             "security": self.security.to_dict(),
@@ -579,7 +575,9 @@ def infer_adapter(path: Path) -> tuple[str, str, str]:
         return "transformers", "transformers-torch", "custom"
     if suffixes & {".pdmodel", ".pdiparams"}:
         return "paddle", "paddle", "custom"
-    return "python-worker", "custom-python", "custom"
+    raise ManifestError(
+        "Midgard could not identify a supported Diffusers, Transformers, or Paddle model."
+    )
 
 
 def inferred_manifest(path: Path) -> ModelManifest:
@@ -606,7 +604,7 @@ def inferred_manifest(path: Path) -> ModelManifest:
         task=task,
         adapter=adapter,
         source=ModelSource("local", local_name=path.name),
-        runtime=RuntimeRequirement(runtime, isolated=runtime == "custom-python"),
+        runtime=RuntimeRequirement(runtime),
         security=SecurityPolicy(False, not legacy_pickle, legacy_pickle),
         variant=variant,
         capabilities=capabilities,

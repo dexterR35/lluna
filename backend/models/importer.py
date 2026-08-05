@@ -58,7 +58,9 @@ def _adapter_for(library: str, pipeline: str, filenames: list[str]) -> tuple[str
             "automatic-speech-recognition", "text-to-image",
         }
         return "transformers", "transformers-torch", pipeline if pipeline in known else "custom"
-    return "python-worker", "custom-python", "custom"
+    raise ValueError(
+        "Midgard could not identify a supported Diffusers or Transformers model."
+    )
 
 
 def _card_value(card: object, key: str, default: Any = "") -> Any:
@@ -101,10 +103,6 @@ def analyze_huggingface(value: str, *, revision: str = "") -> dict:
         blocking_reasons.append(
             f"This repository does not expose {safe_weight_suffix} weights that Midgard can load safely."
         )
-    if adapter == "python-worker":
-        blocking_reasons.append(
-            "Midgard could not identify a safe supported adapter for this repository. Import it locally with a reviewed manifest."
-        )
     size_by_name = {
         str(getattr(item, "rfilename", "")): int(getattr(item, "size", 0) or 0)
         for item in siblings
@@ -117,7 +115,7 @@ def analyze_huggingface(value: str, *, revision: str = "") -> dict:
     minimum_vram = 0
     if total_size:
         minimum_vram = int(min(max(total_size / (1024 * 1024) * 0.65, 0), 98304))
-    backends = ("cuda", "mps", "cpu") if adapter in {"diffusers", "transformers"} else ("cpu", "cuda", "directml")
+    backends = ("cuda", "mps", "cpu")
     from backend.models.capability_resolver import (
         huggingface_metadata_contract,
         reviewed_huggingface_contract,
@@ -158,7 +156,7 @@ def analyze_huggingface(value: str, *, revision: str = "") -> dict:
             revision=revision_sha,
             allow_patterns=tuple(selected),
         ),
-        runtime=RuntimeRequirement(runtime, isolated=runtime == "custom-python"),
+        runtime=RuntimeRequirement(runtime),
         hardware=HardwareRequirement(
             backends=backends,
             minimum_vram_mb=minimum_vram,
@@ -171,7 +169,7 @@ def analyze_huggingface(value: str, *, revision: str = "") -> dict:
         gated=gated,
         expected_files=tuple(selected),
         expected_size_bytes=total_size or None,
-        needs_configuration=adapter == "python-worker" or bool(unresolved),
+        needs_configuration=bool(unresolved),
     )
     return _analysis(
         manifest,
@@ -243,8 +241,6 @@ def configure_manifest(raw: Mapping[str, Any]) -> ModelManifest:
         raise ManifestError("Remote repository code is disabled in Model platform settings.")
     if manifest.security.allow_pickle and not policy.allow_pickle_weights:
         raise ManifestError("Pickle-capable model weights are disabled in Model platform settings.")
-    if manifest.runtime.isolated and not policy.isolate_custom_dependencies:
-        raise ManifestError("Custom dependency isolation is disabled in Model platform settings.")
     issues = manifest.configuration_issues()
     if issues:
         raise ManifestError(
@@ -252,10 +248,6 @@ def configure_manifest(raw: Mapping[str, Any]) -> ModelManifest:
             + ", ".join(issues)
         )
     if manifest.source.type == "huggingface":
-        if manifest.adapter == "python-worker":
-            raise ManifestError(
-                "Custom Hugging Face execution code must be imported locally with a reviewed manifest."
-            )
         if manifest.adapter in {"diffusers", "transformers"} and not any(
             name.endswith(".safetensors") for name in manifest.expected_files
         ):
@@ -267,7 +259,6 @@ def configure_manifest(raw: Mapping[str, Any]) -> ModelManifest:
         "transformers-torch": "transformers",
         "paddle": "paddle",
         "midgard-native": "midgard-native",
-        "custom-python": "python-worker",
     }.get(manifest.runtime.profile)
     if runtime_adapter != manifest.adapter:
         raise ManifestError("The selected runtime profile does not match the model adapter.")

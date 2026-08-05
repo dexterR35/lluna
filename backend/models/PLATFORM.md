@@ -55,7 +55,6 @@ Midgard never attempts to run them as ordinary checkpoints.
 - `diffusers-torch`: Diffusers, Transformers, Accelerate, and the selected Torch build.
 - `transformers-torch`: Transformers and the selected Torch build.
 - `paddle`: the CPU or CUDA Paddle package selected by the installer.
-- `custom-python`: an isolated, explicitly approved experimental worker environment.
 
 Repository `requirements.txt` files are never executed automatically. Hugging
 Face installs are analyzed first, pinned to the returned commit, restricted to

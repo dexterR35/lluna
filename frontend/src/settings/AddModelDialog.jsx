@@ -41,7 +41,6 @@ const ADAPTERS = [
   ["diffusers", "diffusers-torch", "Diffusers + PyTorch"],
   ["transformers", "transformers-torch", "Transformers + PyTorch"],
   ["paddle", "paddle", "Paddle"],
-  ["python-worker", "custom-python", "Isolated Python worker"],
 ];
 
 /** @param {number | null | undefined} bytes */
@@ -130,11 +129,9 @@ export function AddModelDialog({ open, onClose }) {
     const suffix = ".safetensors";
     const hasSafeWeights = (manifest?.expectedFiles || []).some((/** @type {string} */ name) => name.endsWith(suffix));
     const blockingReasons = sourceType !== "huggingface" ? [] :
-      next === "python-worker"
-        ? ["Hugging Face repositories with custom execution code must be imported locally with a reviewed manifest."]
-        : ["diffusers", "transformers"].includes(next) && !hasSafeWeights
-          ? [`This repository does not expose ${suffix} weights that Midgard can load safely.`]
-          : [];
+      ["diffusers", "transformers"].includes(next) && !hasSafeWeights
+        ? [`This repository does not expose ${suffix} weights that Midgard can load safely.`]
+        : [];
     setAnalysis((current) => current ? { ...current, blockingReasons, installable: !blockingReasons.length } : current);
     setManifest((current) => ({
       ...current,
@@ -142,7 +139,6 @@ export function AddModelDialog({ open, onClose }) {
       runtime: {
         ...(current?.runtime || {}),
         profile: selected[1],
-        isolated: selected[1] === "custom-python",
       },
       needsConfiguration: true,
     }));

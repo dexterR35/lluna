@@ -3,17 +3,9 @@
 from __future__ import annotations
 
 import importlib.util
-import os
-import re
-import shutil
-import subprocess
-import sys
-import venv
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
 
-from backend.core.atomic import atomic_write_json
 from backend.core.paths import PATHS, AppPaths
 from backend.hardware.detector import get_hardware_profile
 from backend.hardware.policy import select_execution_policy
@@ -86,17 +78,6 @@ RUNTIME_PROFILES: dict[str, RuntimeProfile] = {
             description="PaddlePaddle and PaddleOCR models.",
         ),
         RuntimeProfile(
-            "custom-python",
-            "Isolated Python worker",
-            "python-worker",
-            (),
-            (),
-            ("cpu", "cuda", "directml", "mps"),
-            isolated=True,
-            experimental=True,
-            description="An isolated environment for explicitly reviewed custom adapters.",
-        ),
-        RuntimeProfile(
             "supir-python",
             "SUPIR isolated CUDA runtime",
             "supir",
@@ -119,10 +100,6 @@ def runtime_installed(profile: RuntimeProfile) -> bool:
     if profile.isolated:
         return (runtime_root() / profile.id / "runtime.json").is_file()
     return all(importlib.util.find_spec(module) is not None for module in profile.modules)
-
-
-def list_runtime_profiles() -> list[dict]:
-    return [profile.to_dict() for profile in RUNTIME_PROFILES.values()]
 
 
 def get_runtime_profile(profile_id: str) -> RuntimeProfile:
@@ -205,46 +182,3 @@ def runtime_status(manifest: ModelManifest) -> dict:
         "packages": list(runtime.packages if runtime else manifest.runtime.packages),
         "isolated": bool(runtime and runtime.isolated),
     }
-
-
-def create_isolated_runtime(
-    profile_id: str,
-    *,
-    approved_packages: Iterable[str] = (),
-    paths: AppPaths = PATHS,
-) -> Path:
-    """Create a reviewed worker environment; never accepts repository requirements files."""
-    profile = get_runtime_profile(profile_id)
-    if not profile.isolated:
-        raise ValueError("Only isolated profiles can be installed at runtime")
-    packages = tuple(str(item).strip() for item in approved_packages if str(item).strip())
-    pinned = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*==[A-Za-z0-9][A-Za-z0-9_.+!-]*$")
-    if any(not pinned.fullmatch(item) for item in packages):
-        raise ValueError("Custom runtime packages must be exact name==version pins.")
-    target = runtime_root(paths) / profile.id
-    staging = runtime_root(paths) / f".{profile.id}.staging"
-    if staging.exists():
-        shutil.rmtree(staging)
-    staging.parent.mkdir(parents=True, exist_ok=True)
-    venv.EnvBuilder(with_pip=True, clear=True).create(staging)
-    python = staging / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
-    requested = (*profile.packages, *packages)
-    if requested:
-        subprocess.run(  # noqa: S603 - executable and package pins are policy-controlled
-            [str(python), "-m", "pip", "install", "--disable-pip-version-check", *requested],
-            check=True,
-            timeout=1800,
-        )
-    atomic_write_json(
-        staging / "runtime.json",
-        {
-            "profile": profile.id,
-            "python": sys.version.split()[0],
-            "packages": list(requested),
-            "managedBy": "midgard",
-        },
-    )
-    if target.exists():
-        shutil.rmtree(target)
-    staging.replace(target)
-    return target

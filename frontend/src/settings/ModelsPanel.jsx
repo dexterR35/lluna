@@ -264,7 +264,7 @@ function DynamicModelConfiguration({ model, onSaved }) {
   const [manifest, setManifest] = useState(/** @type {Record<string, any>} */ ({
     ...(model.manifest || {}),
     task: String(model.task || model.manifest?.task || "custom"),
-    adapter: String(model.adapter || model.manifest?.adapter || "python-worker"),
+    adapter: String(model.adapter || model.manifest?.adapter || "transformers"),
   }));
   const [saving, setSaving] = useState(false);
   const task = manifest.task;
@@ -274,7 +274,6 @@ function DynamicModelConfiguration({ model, onSaved }) {
     diffusers: "diffusers-torch",
     transformers: "transformers-torch",
     paddle: "paddle",
-    "python-worker": "custom-python",
   })[adapter];
   async function save() {
     setSaving(true);
@@ -286,7 +285,6 @@ function DynamicModelConfiguration({ model, onSaved }) {
           runtime: {
             ...(manifest.runtime || {}),
             profile: runtime,
-            isolated: runtime === "custom-python",
           },
           needsConfiguration: false,
         }),
@@ -322,7 +320,6 @@ function DynamicModelConfiguration({ model, onSaved }) {
           options={[
             ["diffusers", "Diffusers + PyTorch"], ["transformers", "Transformers + PyTorch"],
             ["paddle", "Paddle"],
-            ["python-worker", "Isolated Python worker"],
           ].map(([value, label]) => ({ value, label }))}
         />
       </div>
@@ -419,7 +416,6 @@ function SupirSetup({ model, onChanged }) {
  *   expanded: boolean,
  *   onToggleExpand: () => void,
  *   onAction: (model: import("../types").ModelInventory, operation: "install"|"enable"|"disable"|"remove") => void,
- *   onInstallRuntime: (model: import("../types").ModelInventory) => void,
  *   onCancelInstall: (job: import("../types").DownloadJob) => void,
  *   onConfigured: () => void,
  * }} props
@@ -433,7 +429,6 @@ function ModelRow({
   expanded,
   onToggleExpand,
   onAction,
-  onInstallRuntime,
   onCancelInstall,
   onConfigured,
 }) {
@@ -518,17 +513,6 @@ function ModelRow({
               <Trash2 className="ui-icon-sm" /> Uninstall
             </CompactButton>
           )}
-          {model.runtime?.isolated &&
-            !model.runtime?.installed &&
-            model.id !== "supir" &&
-            !job && (
-              <CompactButton
-                variant="secondary"
-                onClick={() => void onInstallRuntime(model)}
-              >
-                <Download className="ui-icon-sm" /> Runtime
-              </CompactButton>
-            )}
           {((optionSpec && sectionValues) || model.capabilities || model.needs_configuration) && (
             <CompactButton onClick={onToggleExpand}>
               {expanded ? "Hide" : "Options"}
@@ -643,26 +627,6 @@ export function ModelsPanel() {
       );
     } finally {
       setRescanning(false);
-    }
-  }
-
-  async function installRuntime(
-    /** @type {import("../types").ModelInventory} */ model,
-  ) {
-    const profile = model.runtime?.profile;
-    if (!profile) return;
-    try {
-      await api(`/api/model-runtimes/${encodeURIComponent(profile)}/install`, {
-        method: "POST",
-        body: JSON.stringify({ packages: model.runtime?.packages || [] }),
-      });
-      await refreshDownloads();
-      toast.push("Runtime added to the installation queue.", "success");
-    } catch (error) {
-      toast.push(
-        error instanceof Error ? error.message : String(error),
-        "error",
-      );
     }
   }
 
@@ -799,15 +763,6 @@ export function ModelsPanel() {
             }
           />
           <Switch
-            label="Isolate custom dependencies"
-            checked={Boolean(settings.models.isolate_custom_dependencies)}
-            onChange={(value) =>
-              void updateSettings({
-                models: { isolate_custom_dependencies: value },
-              })
-            }
-          />
-          <Switch
             label="Allow legacy pickle weights"
             checked={Boolean(settings.models.allow_pickle_weights)}
             onChange={(value) =>
@@ -850,7 +805,6 @@ export function ModelsPanel() {
                         )
                       }
                       onAction={action}
-                      onInstallRuntime={installRuntime}
                       onCancelInstall={cancelInstall}
                       onConfigured={() => {
                         void refreshModels();

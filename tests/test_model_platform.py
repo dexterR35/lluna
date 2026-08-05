@@ -19,7 +19,6 @@ from backend.models.capability_resolver import reviewed_huggingface_contract
 from backend.models.dynamic_registry import DynamicModelRegistry
 from backend.models.importer import analyze_huggingface, configure_manifest, import_local
 from backend.models.manifest import MANIFEST_FILENAME, ManifestError, ModelManifest
-from backend.models.runtime_profiles import create_isolated_runtime
 
 
 def paths(root: Path) -> AppPaths:
@@ -46,7 +45,7 @@ def safetensors_manifest(identifier: str = "local-transformers") -> dict:
         "task": "image-restoration",
         "adapter": "transformers",
         "source": {"type": "local", "localName": "model.safetensors"},
-        "runtime": {"profile": "transformers-torch", "isolated": False},
+        "runtime": {"profile": "transformers-torch"},
         "hardware": {"backends": ["cpu"]},
         "security": {"trustRemoteCode": False, "allowPickle": False},
         "variant": {"kind": "base"},
@@ -79,6 +78,7 @@ def test_scanner_surfaces_unconfigured_folder_then_accepts_manifest(tmp_path) ->
     folder = registry.root / "restorer"
     folder.mkdir()
     (folder / "model.safetensors").write_bytes(b"weights")
+    (folder / "config.json").write_text("{}", encoding="utf-8")
 
     record = registry.scan()[0]
     assert record.manifest.id == "restorer"
@@ -177,15 +177,6 @@ def test_enabled_custom_diffusers_model_is_added_to_generate_node(tmp_path, monk
     generate = next(node for node in list_nodes() if node.schema_id == "midgard.generate.image")
     model = next(parameter for parameter in generate.parameters if parameter.id == "model")
     assert any(option["value"] == "custom:custom-image" for option in model.options)
-
-
-def test_isolated_runtime_rejects_unpinned_or_direct_url_dependencies(tmp_path) -> None:
-    with pytest.raises(ValueError, match="name==version"):
-        create_isolated_runtime(
-            "custom-python",
-            approved_packages=["unsafe-package>=1", "other @ https://example.test/pkg.whl"],
-            paths=paths(tmp_path),
-        )
 
 
 def test_reviewed_catalog_contract_precedes_metadata_and_is_complete() -> None:
@@ -398,9 +389,11 @@ def test_local_model_analyze_and_import_api(tmp_path, monkeypatch) -> None:
     registry = DynamicModelRegistry(paths(tmp_path))
     monkeypatch.setattr(DynamicModelRegistry, "_instance", registry)
     monkeypatch.setattr(DesktopGrantStore, "_instance", None)
-    source = tmp_path / "picked.safetensors"
-    source.write_bytes(b"safe-weights")
-    grant = DesktopGrantStore.instance().issue(source, mode="read")
+    source = tmp_path / "picked-transformers"
+    source.mkdir()
+    (source / "model.safetensors").write_bytes(b"safe-weights")
+    (source / "config.json").write_text("{}", encoding="utf-8")
+    grant = DesktopGrantStore.instance().issue(source, mode="directory")
     token = "model-platform-test-token-with-at-least-thirty-two-characters"  # noqa: S105
     headers = {"X-Midgard-Token": token}
 
@@ -414,19 +407,19 @@ def test_local_model_analyze_and_import_api(tmp_path, monkeypatch) -> None:
                 analyzed = await client.post(
                     "/api/models/analyze",
                     headers=headers,
-                    json={"sourceType": "local-file", "grantId": grant.grant_id},
+                    json={"sourceType": "local-folder", "grantId": grant.grant_id},
                 )
                 assert analyzed.status_code == 200, analyzed.text
                 manifest = analyzed.json()["manifest"]
                 manifest.update(task="image-restoration", adapter="transformers", needsConfiguration=False)
-                manifest["runtime"] = {"profile": "transformers-torch", "isolated": False}
+                manifest["runtime"] = {"profile": "transformers-torch"}
                 manifest["variant"] = {"kind": "base"}
                 manifest["capabilities"] = safetensors_manifest()["capabilities"]
                 imported = await client.post(
                     "/api/models/import",
                     headers=headers,
                     json={
-                        "sourceType": "local-file",
+                        "sourceType": "local-folder",
                         "grantId": grant.grant_id,
                         "manifest": manifest,
                     },

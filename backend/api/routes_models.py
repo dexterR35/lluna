@@ -34,10 +34,6 @@ class HuggingFaceConnectRequest(BaseModel):
     token: str = Field(min_length=8, max_length=4096)
 
 
-class RuntimeInstallRequest(BaseModel):
-    packages: list[str] = Field(default_factory=list, max_length=64)
-
-
 class SupirCheckpointRequest(BaseModel):
     grantId: str
     kind: Literal["Q", "F", "sdxl"]
@@ -114,37 +110,6 @@ def update_model_manifest(model_id: str, manifest: dict[str, Any]) -> dict:
         return DynamicModelRegistry.instance().get(model_id).to_inventory()
     except (OSError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-
-@router.get("/model-runtimes")
-def model_runtimes() -> list[dict]:
-    from backend.models.runtime_profiles import list_runtime_profiles
-
-    return list_runtime_profiles()
-
-
-@router.post("/model-runtimes/{profile_id}/install", status_code=202)
-def install_runtime(profile_id: str, request: RuntimeInstallRequest) -> dict:
-    from backend.models.runtime_profiles import create_isolated_runtime, get_runtime_profile
-
-    try:
-        profile = get_runtime_profile(profile_id)
-        if not profile.isolated:
-            raise ValueError("This runtime is managed by the Midgard application installer.")
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    queue = ModelDownloadQueue.instance()
-    ensure_download_queue_events(queue)
-
-    def work() -> None:
-        queue.report_current_progress(None, detail=f"Creating {profile.name}")
-        create_isolated_runtime(profile_id, approved_packages=request.packages)
-
-    position = queue.enqueue("runtime", profile_id, work, lambda _error: None)
-    job = next(
-        (item for item in queue.jobs() if item.kind == "runtime" and item.key == profile_id), None
-    )
-    return {"profileId": profile_id, "jobId": job.job_id if job else None, "position": position}
 
 
 @router.get("/huggingface/status")

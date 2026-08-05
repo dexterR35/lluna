@@ -21,7 +21,7 @@
       ]
     },
     "adapter": {
-      "enum": ["diffusers", "transformers", "paddle", "midgard-native", "python-worker", "supir"]
+      "enum": ["diffusers", "transformers", "paddle", "midgard-native", "supir"]
     },
     "license": { "type": "string" },
     "gated": { "type": "boolean" },
@@ -42,8 +42,7 @@
       "required": ["profile"],
       "properties": {
         "profile": { "type": "string" },
-        "packages": { "type": "array", "items": { "type": "string" } },
-        "isolated": { "type": "boolean" }
+        "packages": { "type": "array", "items": { "type": "string" } }
       }
     },
     "hardware": {

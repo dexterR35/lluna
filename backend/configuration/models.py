@@ -164,7 +164,6 @@ class ModelPlatformSettings:
     prefer_safetensors: bool = True
     allow_remote_code: bool = False
     allow_pickle_weights: bool = False
-    isolate_custom_dependencies: bool = True
     auto_enable_imports: bool = False
 
     def __post_init__(self) -> None:
@@ -173,7 +172,6 @@ class ModelPlatformSettings:
             "prefer_safetensors",
             "allow_remote_code",
             "allow_pickle_weights",
-            "isolate_custom_dependencies",
             "auto_enable_imports",
         ):
             if not isinstance(getattr(self, name), bool):
@@ -211,6 +209,12 @@ class ApplicationConfiguration:
             low_light=LowLightSettings(**dict(values.get("low_light", {}))),
             generation=GenerationSettings(**dict(values.get("generation", {}))),
             object_selection=ObjectSelectionSettings(**dict(values.get("object_selection", {}))),
-            models=ModelPlatformSettings(**dict(values.get("models", {}))),
+            models=ModelPlatformSettings(
+                **{
+                    key: value
+                    for key, value in dict(values.get("models", {})).items()
+                    if key in ModelPlatformSettings.__dataclass_fields__
+                }
+            ),
             save_directory=str(values.get("save_directory", "")),
         )
