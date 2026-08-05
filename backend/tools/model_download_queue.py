@@ -257,6 +257,7 @@ class ModelDownloadQueue:
                     return True
                 self._current.stop_requested = True
                 self._current.cancel_event.set()
+                self._current.detail = "Cancelling and rolling back installation…"
                 stopped_job = self._current
             else:
                 for index, job in enumerate(self._queue):

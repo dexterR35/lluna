@@ -159,6 +159,9 @@ def test_stopping_current_job_continues_with_next_queued_job(
 
     active_id = queue.jobs(include_finished=False)[0].job_id
     assert queue.stop_job(active_id)
+    stopping = next(job for job in queue.jobs() if job.key == "flux")
+    assert stopping.state == "stopping"
+    assert stopping.detail == "Cancelling and rolling back installation…"
     assert second_started.wait(timeout=2)
     _wait_until(lambda: not queue.is_busy())
     _wait_until(lambda: any(key == "flux" for key, _err in completed))

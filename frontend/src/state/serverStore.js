@@ -38,6 +38,31 @@ const createServerState = (set, get) => ({
     set({ downloads });
     return downloads;
   },
+  async cancelDownload(jobId) {
+    const normalized = Number(jobId);
+    if (!Number.isInteger(normalized) || normalized <= 0) {
+      throw new Error("This installation does not have a valid job ID.");
+    }
+    set((state) => ({
+      downloads: {
+        ...state.downloads,
+        active: state.downloads.active.map((job) =>
+          job.jobId === normalized
+            ? {
+                ...job,
+                state: "stopping",
+                detail: "Cancelling and rolling back installation…",
+              }
+            : job,
+        ),
+      },
+    }));
+    try {
+      await api(`/api/downloads/${normalized}/cancel`, { method: "POST" });
+    } finally {
+      await get().refreshDownloads();
+    }
+  },
   setModelLifecycleState(modelId, patch) {
     set((state) => ({
       models: state.models.map((model) =>

@@ -8,6 +8,7 @@ import {
   RefreshCw,
   Trash2,
   Upload,
+  X,
 } from "../icons";
 import { api } from "../api/client";
 import {
@@ -428,6 +429,7 @@ function SupirSetup({ model, onChanged }) {
  *   onToggleExpand: () => void,
  *   onAction: (model: import("../types").ModelInventory, operation: "install"|"enable"|"disable"|"remove") => void,
  *   onInstallRuntime: (model: import("../types").ModelInventory) => void,
+ *   onCancelInstall: (job: import("../types").DownloadJob) => void,
  *   onConfigured: () => void,
  * }} props
  */
@@ -441,6 +443,7 @@ function ModelRow({
   onToggleExpand,
   onAction,
   onInstallRuntime,
+  onCancelInstall,
   onConfigured,
 }) {
   const installing = job?.state === "active" || job?.state === "stopping";
@@ -495,7 +498,20 @@ function ModelRow({
           {job && (
             <CompactButton variant="secondary" disabled>
               {queued && <Clock3 className="ui-icon-sm" />}
-              {installing ? "Installing…" : `Queued · ${job.position}`}
+              {job.state === "stopping"
+                ? "Rolling back…"
+                : installing
+                  ? "Installing…"
+                  : `Queued · ${job.position}`}
+            </CompactButton>
+          )}
+          {job && job.state !== "stopping" && (
+            <CompactButton
+              variant="secondary"
+              onClick={() => void onCancelInstall(job)}
+              aria-label={`Cancel installation of ${model.display_name || model.id}`}
+            >
+              <X className="ui-icon-sm" /> Cancel
             </CompactButton>
           )}
           {!model.installed && !model.can_install && (
@@ -597,6 +613,7 @@ export function ModelsPanel() {
   const downloads = useServerStore((store) => store.downloads);
   const settings = useServerStore((store) => store.settings);
   const refreshDownloads = useServerStore((store) => store.refreshDownloads);
+  const cancelDownload = useServerStore((store) => store.cancelDownload);
   const setLifecycleState = useServerStore(
     (store) => store.setModelLifecycleState,
   );
@@ -606,6 +623,18 @@ export function ModelsPanel() {
   const updateSettings = useServerStore((store) => store.updateSettings);
   const refreshModels = useServerStore((store) => store.refreshModels);
   const sections = useMemo(() => groupModels(models), [models]);
+
+  async function cancelInstall(/** @type {import("../types").DownloadJob} */ job) {
+    try {
+      await cancelDownload(job.jobId);
+      toast.push("Cancellation requested. Partial installation is being rolled back.", "success");
+    } catch (error) {
+      toast.push(
+        error instanceof Error ? error.message : String(error),
+        "error",
+      );
+    }
+  }
 
   async function rescan() {
     setRescanning(true);
@@ -831,6 +860,7 @@ export function ModelsPanel() {
                       }
                       onAction={action}
                       onInstallRuntime={installRuntime}
+                      onCancelInstall={cancelInstall}
                       onConfigured={() => {
                         void refreshModels();
                       }}

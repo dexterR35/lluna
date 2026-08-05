@@ -347,13 +347,8 @@ def _model_description(model_id: str) -> dict:
 
         mode = BgRemoveMode(model_id.removeprefix("bg-remove:"))
         info = catalog_info(mode)
-        category = info.category if info else "Local model"
         detail = (info.description if info else "").strip()
-        purpose = (
-            f"Background removal · {category} · {detail}"
-            if detail
-            else f"Background removal · {category}"
-        )
+        purpose = detail or (info.category if info else "Local model")
         item = asdict(MODEL_REGISTRY["rembg"])
         item.update(
             id=model_id,

@@ -6,6 +6,7 @@ import {
   ListOrdered,
   ScrollText,
   Stethoscope,
+  X,
 } from "../icons";
 import {
   Badge,
@@ -14,6 +15,7 @@ import {
   Panel,
   ProgressBar,
   Tabs,
+  useToast,
 } from "../components";
 import { useDesktopStore } from "../state/desktopStore";
 import { useEditorStore } from "../state/editorStore";
@@ -102,6 +104,7 @@ function ProblemRow({ issue, label, onFocus }) {
 
 /** @param {{issues: import("../types").ValidationIssue[]}} props */
 export function BottomDrawer({ issues }) {
+  const toast = useToast();
   const tab = useDesktopStore((store) => store.drawerTab);
   const set = useDesktopStore((store) => store.setValue);
   const logs = useRunStore((store) => store.logs);
@@ -110,6 +113,7 @@ export function BottomDrawer({ issues }) {
   const history = useRunStore((store) => store.history);
   const cancelRun = useRunStore((store) => store.cancel);
   const downloads = useServerStore((store) => store.downloads);
+  const cancelDownload = useServerStore((store) => store.cancelDownload);
   const diagnostics = useServerStore((store) => store.diagnostics);
   const nodes = useEditorStore((store) => store.nodes);
   const focusNode = useEditorStore((store) => store.focusNode);
@@ -119,6 +123,17 @@ export function BottomDrawer({ issues }) {
       node.data.label || node.data.definition?.name || node.data.schemaId,
     ]),
   );
+  async function cancelInstall(/** @type {number} */ jobId) {
+    try {
+      await cancelDownload(jobId);
+      toast.push("Cancellation requested. Partial installation is being rolled back.", "success");
+    } catch (error) {
+      toast.push(
+        error instanceof Error ? error.message : String(error),
+        "error",
+      );
+    }
+  }
   const downloadCount =
     (downloads?.active?.length || 0) +
     (downloads?.pending?.length || 0) +
@@ -301,8 +316,20 @@ export function BottomDrawer({ issues }) {
                           ? "Installed"
                           : item.state === "queued"
                             ? `Queued · ${item.position}`
-                            : "Installing"}
+                            : item.state === "stopping"
+                              ? "Rolling back"
+                              : "Installing"}
                   </Badge>
+                  {["active", "queued"].includes(item.state) && (
+                    <Button
+                      variant="ghost"
+                      className="min-h-7 px-2 text-[10px]"
+                      onClick={() => void cancelInstall(item.jobId)}
+                      aria-label={`Cancel installation of ${item.modelId || item.key}`}
+                    >
+                      <X className="ui-icon-sm" /> Cancel
+                    </Button>
+                  )}
                 </div>
                 {["active", "stopping", "queued"].includes(item.state) && (
                   <ProgressBar

@@ -420,6 +420,7 @@ export interface ServerState {
   refreshModels(): Promise<ModelInventory[]>;
   refreshNodes(): Promise<NodeDefinition[]>;
   refreshDownloads(): Promise<DownloadQueueState>;
+  cancelDownload(jobId: number): Promise<void>;
   setModelLifecycleState(id: string, patch: Partial<ModelInventory>): void;
   updateSettings(patch: Record<string, any>): Promise<void>;
   resetSettings(section: string): Promise<void>;

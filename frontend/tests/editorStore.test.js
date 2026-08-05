@@ -202,6 +202,31 @@ test("flow boxes follow new downstream connections", () => {
     required(useEditorStore.getState().groups.find((group) => group.id === groupId)).nodeIds,
   ).toEqual([first, second, third]);
 });
+test("flow boxes absorb upstream nodes connected into the flow", () => {
+  const inside = addNode();
+  const outsider = addNode();
+  useEditorStore.setState((state) => ({
+    nodes: state.nodes.map((node) => ({
+      ...node,
+      selected: node.id === inside,
+    })),
+  }));
+  const groupId = useEditorStore.getState().createFlowFromSelected();
+  expect(
+    required(useEditorStore.getState().groups.find((group) => group.id === groupId)).nodeIds,
+  ).toEqual([inside]);
+  useEditorStore.getState().connect({
+    source: outsider,
+    sourceHandle: "value",
+    target: inside,
+    targetHandle: "value",
+  });
+  const group = required(
+    useEditorStore.getState().groups.find((item) => item.id === groupId),
+  );
+  expect(new Set(group.nodeIds)).toEqual(new Set([outsider, inside]));
+  expect(new Set(group.startNodeIds)).toEqual(new Set([outsider, inside]));
+});
 test("a processor cannot repeat along the same linked path", () => {
   const remove = /** @type {import("../src/types").NodeDefinition} */ ({
     ...definition,

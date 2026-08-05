@@ -299,6 +299,38 @@ function refreshFlowGroups(groups, nodes, edges) {
   });
 }
 
+/**
+ * When a free node is wired into a flow, absorb it so the box grows.
+ * Upstream outsiders become extra start seeds; downstream outsiders are
+ * picked up by refreshFlowGroups.
+ * @param {WorkflowGroup[]} groups
+ * @param {EditorNode[]} nodes
+ * @param {EditorEdge[]} edges
+ * @param {string} sourceId
+ * @param {string} targetId
+ */
+function absorbConnectedIntoFlows(groups, nodes, edges, sourceId, targetId) {
+  const memberFlows = (nodeId) =>
+    groups.filter(
+      (group) => group.kind === "flow" && group.nodeIds?.includes(nodeId),
+    );
+  const sourceFlows = memberFlows(sourceId);
+  const targetFlows = memberFlows(targetId);
+  let next = groups;
+
+  // Outside → into a flow member: treat the outsider as a new flow start.
+  if (!sourceFlows.length && targetFlows.length) {
+    const absorbIds = new Set(targetFlows.map((group) => group.id));
+    next = next.map((group) =>
+      absorbIds.has(group.id)
+        ? expandFlowGroup(group, [sourceId], nodes, edges)
+        : group,
+    );
+  }
+
+  return refreshFlowGroups(next, nodes, edges);
+}
+
 /** @param {EditorNode[]} nodes @param {string[]} nodeIds */
 export function boundsForNodes(nodes, nodeIds) {
   const members = nodes.filter((node) => nodeIds.includes(node.id));
@@ -580,7 +612,13 @@ const createEditorState = (set, get) => ({
       );
       return history(state, {
         edges,
-        groups: refreshFlowGroups(state.groups, state.nodes, edges),
+        groups: absorbConnectedIntoFlows(
+          state.groups,
+          state.nodes,
+          edges,
+          connection.source,
+          connection.target,
+        ),
       });
     });
     return result;
