@@ -13,7 +13,6 @@ def profile(
     cuda: bool = False,
     directml: bool = False,
     mps: bool = False,
-    onnx: tuple[str, ...] = ("CPUExecutionProvider",),
     vram_mb: float = 0,
     ram_mb: float = 16384,
 ) -> HardwareProfile:
@@ -44,7 +43,6 @@ def profile(
             torch_cuda=cuda,
             torch_directml=directml,
             torch_mps=mps,
-            onnx_providers=onnx,
         ),
         ffmpeg_available=True,
         available_disk_mb=100_000,
@@ -55,4 +53,3 @@ CPU_ONLY = profile()
 CUDA = profile(cuda=True, vram_mb=12288)
 DIRECTML = profile(directml=True, vram_mb=8192)
 MPS = profile(mps=True, vram_mb=16384)
-ONNX_ACCELERATOR = profile(onnx=("CUDAExecutionProvider", "CPUExecutionProvider"))

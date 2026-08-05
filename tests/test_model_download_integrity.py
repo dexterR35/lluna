@@ -87,7 +87,7 @@ def test_select_object_downloads_only_transformers_safetensors_layout() -> None:
     for info in SELECT_OBJECT_CATALOG:
         assert "model.safetensors" in info.download_allow_patterns
         assert not any(
-            pattern.endswith((".bin", ".pt", ".onnx")) for pattern in info.download_allow_patterns
+            pattern.endswith((".bin", ".pt")) for pattern in info.download_allow_patterns
         )
 
 

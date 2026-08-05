@@ -40,7 +40,6 @@ const TASKS = [
 const ADAPTERS = [
   ["diffusers", "diffusers-torch", "Diffusers + PyTorch"],
   ["transformers", "transformers-torch", "Transformers + PyTorch"],
-  ["onnx", "onnx-runtime", "ONNX Runtime"],
   ["paddle", "paddle", "Paddle"],
   ["python-worker", "custom-python", "Isolated Python worker"],
 ];
@@ -128,12 +127,12 @@ export function AddModelDialog({ open, onClose }) {
   function changeAdapter(/** @type {string} */ next) {
     const selected = ADAPTERS.find(([id]) => id === next) || ADAPTERS.at(-1);
     if (!selected) return;
-    const suffix = next === "onnx" ? ".onnx" : ".safetensors";
+    const suffix = ".safetensors";
     const hasSafeWeights = (manifest?.expectedFiles || []).some((/** @type {string} */ name) => name.endsWith(suffix));
     const blockingReasons = sourceType !== "huggingface" ? [] :
       next === "python-worker"
         ? ["Hugging Face repositories with custom execution code must be imported locally with a reviewed manifest."]
-        : ["diffusers", "transformers", "onnx"].includes(next) && !hasSafeWeights
+        : ["diffusers", "transformers"].includes(next) && !hasSafeWeights
           ? [`This repository does not expose ${suffix} weights that Midgard can load safely.`]
           : [];
     setAnalysis((current) => current ? { ...current, blockingReasons, installable: !blockingReasons.length } : current);

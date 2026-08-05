@@ -5,19 +5,6 @@ import torch
 
 logger = logging.getLogger(__name__)
 
-_SUPPORTED_ONNX_ACCELERATORS = frozenset(
-    {
-        "DmlExecutionProvider",
-        "ROCMExecutionProvider",
-        "MIGraphXExecutionProvider",
-        "VitisAIExecutionProvider",
-        "OpenVINOExecutionProvider",
-        "MetalExecutionProvider",
-        "CoreMLExecutionProvider",
-        "CUDAExecutionProvider",
-    }
-)
-
 
 class HardwareAccelerator:
 
@@ -36,7 +23,6 @@ class HardwareAccelerator:
         self.__cuda = False
         self.__dml = False
         self.__mps = False
-        self.__onnx_providers = []
         self.__enabled = True
         self.__device = None
 
@@ -48,11 +34,6 @@ class HardwareAccelerator:
         self.__dml = profile.capabilities.torch_directml
         self.__cuda = profile.capabilities.torch_cuda
         self.__mps = profile.capabilities.torch_mps
-        self.__onnx_providers = [
-            provider
-            for provider in profile.capabilities.onnx_providers
-            if provider in _SUPPORTED_ONNX_ACCELERATORS
-        ]
 
     def check_directml_available(self):
         self.__dml = importlib.util.find_spec("torch_directml") is not None
@@ -63,27 +44,10 @@ class HardwareAccelerator:
     def check_mps_available(self):
         self.__mps = torch.backends.mps.is_available() and torch.backends.mps.is_built()
 
-    def load_onnx_providers(self):
-        try:
-            import onnxruntime as ort
-            available_providers = ort.get_available_providers()
-            for provider in available_providers:
-                if provider in [
-                    "CPUExecutionProvider"
-                ]:
-                    continue
-                if provider not in _SUPPORTED_ONNX_ACCELERATORS:
-                    logger.info("Unsupported ONNX provider skipped: %s", provider)
-                    continue
-                logger.info("ONNX execution provider detected: %s", provider)
-                self.__onnx_providers.append(provider)
-        except ModuleNotFoundError:
-            logger.info("ONNX Runtime is not installed; CPU framework fallback remains")
-
     def has_accelerator(self):
         if not self.__enabled:
             return False
-        return self.__cuda or self.__dml or self.__mps or len(self.__onnx_providers) > 0
+        return self.__cuda or self.__dml or self.__mps
 
     @property
     def accelerator_name(self):
@@ -95,67 +59,7 @@ class HardwareAccelerator:
             return "DirectML"
         if self.__mps:
             return "MPS"
-        elif len(self.__onnx_providers) > 0:
-            return ", ".join(self.__onnx_providers)
-        else:
-            return "CPU"
-
-    @property
-    def onnx_providers(self):
-        if not self.__enabled:
-            return ["CPUExecutionProvider"]
-        # GPU search skips CPU; always keep it as the fallback provider.
-        providers = list(self.__onnx_providers)
-        if "CPUExecutionProvider" not in providers:
-            providers.append("CPUExecutionProvider")
-        return providers
-
-    def get_onnx_execution_providers(self):
-        """
-        Ordered ONNX Runtime providers for InferenceSession (CUDA first when available).
-        Always ends with CPUExecutionProvider as fallback.
-        """
-        if not self.__enabled:
-            return ["CPUExecutionProvider"]
-        providers = []
-        # Initialization already filters ORT's compiled-in provider list by
-        # native-library readiness. Do not re-read get_available_providers()
-        # here: it can advertise CUDA/TensorRT even when their DLLs cannot load.
-        available = set(self.__onnx_providers)
-
-        preferred = [
-            "CUDAExecutionProvider",
-            "ROCMExecutionProvider",
-            "MIGraphXExecutionProvider",
-            "DmlExecutionProvider",
-            "VitisAIExecutionProvider",
-            "MetalExecutionProvider",
-            "CoreMLExecutionProvider",
-            "OpenVINOExecutionProvider",
-        ]
-        for name in preferred:
-            if name in available and name not in providers:
-                # Only enable CUDA/ROCM providers when Torch also sees a matching accelerator,
-                # matching the rest of the app's "check CUDA first" policy.
-                if name == "CUDAExecutionProvider" and not self.__cuda:
-                    continue
-                if name in ("ROCMExecutionProvider", "MIGraphXExecutionProvider") and not self.__cuda:
-                    # ROCm often shows up similarly; keep if ORT has it and HW accel is on
-                    pass
-                providers.append(name)
-
-        # Any other detected accelerators from initialize()
-        for name in self.__onnx_providers:
-            if (
-                name in _SUPPORTED_ONNX_ACCELERATORS
-                and name not in providers
-                and name in available
-            ):
-                providers.append(name)
-
-        if "CPUExecutionProvider" not in providers:
-            providers.append("CPUExecutionProvider")
-        return providers or ["CPUExecutionProvider"]
+        return "CPU"
 
     def has_cuda(self):
         if not self.__enabled:
@@ -202,18 +106,6 @@ class HardwareAccelerator:
 
     @property
     def device(self):
-        """
-        onnxruntime-directml 1.21.1-1.22.0 (higher not tested) and torch-directml cannot be
-        initialized at the same time; they interfere with each other.
-        Error from site-packages/onnxruntime/capi/onnxruntime_inference_collection.py", line 266, in run
-                return self._sess.run(output_names, input_feed, run_options)
-                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-            UnicodeDecodeError: 'utf-8' codec can't decode byte 0xb2 in position 344: invalid start bn 344: invalid start byte
-        onnxruntime-directml 1.21.1 works, but fails on Win10 and works on Win11.
-        To avoid conflicts between provider runtimes, use lazy initialization and keep
-        onnxruntime-directml 1.20.1.
-        Running SubtitleDetect in a separate process is also a valid approach.
-        """
         if self.__enabled:
             if self.__cuda:
                 return torch.device("cuda:0")

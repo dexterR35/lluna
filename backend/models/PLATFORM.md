@@ -54,7 +54,6 @@ Midgard never attempts to run them as ordinary checkpoints.
 - `midgard-native`: reviewed inference code shipped with Midgard.
 - `diffusers-torch`: Diffusers, Transformers, Accelerate, and the selected Torch build.
 - `transformers-torch`: Transformers and the selected Torch build.
-- `onnx-runtime`: the CPU, CUDA, or DirectML ONNX package selected by the installer.
 - `paddle`: the CPU or CUDA Paddle package selected by the installer.
 - `custom-python`: an isolated, explicitly approved experimental worker environment.
 

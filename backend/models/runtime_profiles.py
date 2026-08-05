@@ -77,15 +77,6 @@ RUNTIME_PROFILES: dict[str, RuntimeProfile] = {
             description="Curated Transformers vision, language, and audio models.",
         ),
         RuntimeProfile(
-            "onnx-runtime",
-            "ONNX Runtime",
-            "onnx",
-            ("onnxruntime",),
-            (),
-            ("cpu", "cuda", "directml"),
-            description="Portable ONNX inference with the installed hardware provider.",
-        ),
-        RuntimeProfile(
             "paddle",
             "Paddle",
             "paddle",

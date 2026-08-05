@@ -1,4 +1,3 @@
 # Install Torch/Torchvision from the CUDA index selected by install.py first.
-# install.py also selects the matching ONNX Runtime CUDA-major wheel/feed.
 -r requirements.txt
 paddlepaddle==3.0.0

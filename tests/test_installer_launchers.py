@@ -26,15 +26,6 @@ def test_explicit_hardware_modes():
     assert install.choose_mode(cuda, "mps", True) == ("mps", "")
 
 
-def test_onnxruntime_gpu_package_matches_torch_cuda_major():
-    assert install.onnxruntime_gpu_install_args("cu118") == [
-        "onnxruntime-gpu==1.20.1",
-        "--index-url",
-        install.ORT_CUDA11_INDEX,
-    ]
-    assert install.onnxruntime_gpu_install_args("cu126") == ["onnxruntime-gpu==1.22.0"]
-
-
 def test_source_installer_bootstraps_electron_not_legacy_launchers():
     source = Path("install.py").read_text(encoding="utf-8")
     assert '"install", "--allow-git=all"' in source

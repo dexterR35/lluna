@@ -47,24 +47,3 @@ def test_cuda_has_priority_when_multiple_torch_backends_are_reported() -> None:
 
     assert accelerator.device == torch.device("cuda:0")
     assert accelerator.accelerator_name == "GPU"
-
-
-def test_tensorrt_is_never_forwarded_to_onnx_sessions(monkeypatch) -> None:
-    fake_ort = types.SimpleNamespace(
-        get_available_providers=lambda: [
-            "TensorrtExecutionProvider",
-            "CUDAExecutionProvider",
-            "CPUExecutionProvider",
-        ]
-    )
-    monkeypatch.setitem(sys.modules, "onnxruntime", fake_ort)
-    accelerator = _accelerator(dml=False, cuda=True)
-    accelerator._HardwareAccelerator__onnx_providers = [
-        "TensorrtExecutionProvider",
-        "CUDAExecutionProvider",
-    ]
-
-    assert accelerator.get_onnx_execution_providers() == [
-        "CUDAExecutionProvider",
-        "CPUExecutionProvider",
-    ]

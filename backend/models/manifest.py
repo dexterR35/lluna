@@ -12,7 +12,6 @@ MANIFEST_FILENAME = "midgard-model.json"
 MANIFEST_SCHEMA_VERSION = 1
 MODEL_FILE_EXTENSIONS = {
     ".safetensors",
-    ".onnx",
     ".pth",
     ".pt",
     ".ckpt",
@@ -23,7 +22,6 @@ MODEL_FILE_EXTENSIONS = {
 SUPPORTED_ADAPTERS = {
     "diffusers",
     "transformers",
-    "onnx",
     "paddle",
     "midgard-native",
     "python-worker",
@@ -575,8 +573,6 @@ def model_files(path: Path) -> tuple[Path, ...]:
 def infer_adapter(path: Path) -> tuple[str, str, str]:
     files = model_files(path)
     suffixes = {item.suffix.lower() for item in files}
-    if ".onnx" in suffixes:
-        return "onnx", "onnx-runtime", "custom"
     if (path / "model_index.json").is_file() if path.is_dir() else False:
         return "diffusers", "diffusers-torch", "text-to-image"
     if (path / "config.json").is_file() if path.is_dir() else False:

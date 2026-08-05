@@ -121,7 +121,7 @@ function installIpc() {
   ipcMain.handle("files:dropped", async (_event, /** @type {string[]} */ paths) => Promise.all(paths.map(async (filePath) => ({ ...(await registerPathGrant(filePath, "read")), name: path.basename(filePath) }))));
   ipcMain.handle("files:videos", () => chooseFiles("Videos", ["mp4", "mov", "mkv", "webm", "avi"]));
   ipcMain.handle("files:mask", async () => (await chooseFiles("Mask", ["png", "jpg", "jpeg", "webp"])).at(0) || null);
-  ipcMain.handle("models:file", async () => (await chooseFiles("Model", ["safetensors", "onnx", "pth", "pt", "ckpt", "bin"])).at(0) || null);
+  ipcMain.handle("models:file", async () => (await chooseFiles("Model", ["safetensors", "pth", "pt", "ckpt", "bin"])).at(0) || null);
   ipcMain.handle("models:folder", async () => {
     if (!mainWindow) throw new Error("Main window is unavailable");
     const result = await dialog.showOpenDialog(mainWindow, { title: "Select model folder", properties: ["openDirectory"] });

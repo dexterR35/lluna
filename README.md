@@ -163,7 +163,7 @@ Open **Settings → Local model manager → Add model** to:
 
 - paste a Hugging Face repository link;
 - import a local model folder; or
-- import a `.safetensors`, `.onnx`, `.pth`, `.pt`, `.ckpt`, or `.bin` weight file.
+- import a `.safetensors`, `.pth`, `.pt`, `.ckpt`, or `.bin` weight file.
 
 Midgard analyzes repository metadata, license, download size, runtime, disk, RAM,
 VRAM, and backend compatibility before installation. Hugging Face downloads are

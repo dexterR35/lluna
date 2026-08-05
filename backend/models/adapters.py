@@ -149,28 +149,8 @@ class TransformersAdapter(RuntimeAdapter):
         return result
 
 
-class OnnxAdapter(RuntimeAdapter):
-    id = "onnx"
-
-    def load(self, record: DynamicModelRecord) -> Any:
-        import onnxruntime
-
-        candidates = sorted(record.path.rglob("*.onnx"))
-        if not candidates:
-            raise AdapterError("No ONNX graph was found in the model folder.")
-        return onnxruntime.InferenceSession(str(candidates[0]))
-
-    def run(self, loaded: Any, inputs: dict[str, Any], *, progress: Progress = None, cancel_event: CancelEvent = None) -> Any:
-        if cancel_event is not None and cancel_event.is_set():
-            raise AdapterError("__cancelled__")
-        result = loaded.run(None, inputs)
-        if progress:
-            progress(100)
-        return result
-
-
 ADAPTERS: dict[str, RuntimeAdapter] = {
-    adapter.id: adapter for adapter in (DiffusersAdapter(), TransformersAdapter(), OnnxAdapter())
+    adapter.id: adapter for adapter in (DiffusersAdapter(), TransformersAdapter())
 }
 
 

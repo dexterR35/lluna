@@ -32,7 +32,6 @@ def main() -> int:
             "--index-url",
             "https://download.pytorch.org/whl/cu128",
         )
-        run("install", "onnxruntime-gpu==1.22.0")
         requirements = "requirements-cuda.txt"
     else:
         requirements = {

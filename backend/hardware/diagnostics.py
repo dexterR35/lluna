@@ -20,7 +20,6 @@ def render_hardware_report(profile: HardwareProfile) -> str:
         ),
         f"GPU: {gpu.vendor} {gpu.model}".strip() if gpu else "GPU: not detected",
         f"Recommended backend: {policy.backend}",
-        f"ONNX providers: {', '.join(profile.capabilities.onnx_providers) or 'none'}",
         f"FFmpeg: {'available' if profile.ffmpeg_available else 'missing'}",
         f"Disk available: {profile.available_disk_mb:.0f} MB",
     ]

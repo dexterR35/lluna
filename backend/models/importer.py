@@ -31,7 +31,7 @@ _HF_URL = re.compile(
 )
 _SAFE_METADATA_EXTENSIONS = {
     ".json", ".txt", ".model", ".tiktoken", ".md", ".yaml", ".yml",
-    ".safetensors", ".onnx", ".vocab", ".merges",
+    ".safetensors", ".vocab", ".merges",
 }
 
 
@@ -58,8 +58,6 @@ def _adapter_for(library: str, pipeline: str, filenames: list[str]) -> tuple[str
             "automatic-speech-recognition", "text-to-image",
         }
         return "transformers", "transformers-torch", pipeline if pipeline in known else "custom"
-    if any(name.endswith(".onnx") for name in filenames):
-        return "onnx", "onnx-runtime", pipeline if pipeline else "custom"
     return "python-worker", "custom-python", "custom"
 
 
@@ -96,10 +94,10 @@ def analyze_huggingface(value: str, *, revision: str = "") -> dict:
     ]
     # Avoid executing or unpickling arbitrary repository contents by default.
     selected = [name for name in selected if not name.endswith((".bin", ".pth", ".pt", ".ckpt", ".py"))]
-    safe_weight_suffix = ".onnx" if adapter == "onnx" else ".safetensors"
+    safe_weight_suffix = ".safetensors"
     has_safe_weights = any(name.endswith(safe_weight_suffix) for name in selected)
     blocking_reasons = []
-    if adapter in {"diffusers", "transformers", "onnx"} and not has_safe_weights:
+    if adapter in {"diffusers", "transformers"} and not has_safe_weights:
         blocking_reasons.append(
             f"This repository does not expose {safe_weight_suffix} weights that Midgard can load safely."
         )
@@ -189,7 +187,7 @@ def analyze_local(path: Path) -> dict:
     if not source.exists():
         raise FileNotFoundError(source)
     if source.is_file() and not model_files(source):
-        raise ValueError("Choose a supported model file (.safetensors, .onnx, .pth, .pt, .ckpt, or .bin).")
+        raise ValueError("Choose a supported model file (.safetensors, .pth, .pt, .ckpt, or .bin).")
     manifest_path = source / MANIFEST_FILENAME if source.is_dir() else None
     manifest = (
         ModelManifest.from_file(manifest_path)
@@ -258,17 +256,15 @@ def configure_manifest(raw: Mapping[str, Any]) -> ModelManifest:
             raise ManifestError(
                 "Custom Hugging Face execution code must be imported locally with a reviewed manifest."
             )
-        suffix = ".onnx" if manifest.adapter == "onnx" else ".safetensors"
-        if manifest.adapter in {"diffusers", "transformers", "onnx"} and not any(
-            name.endswith(suffix) for name in manifest.expected_files
+        if manifest.adapter in {"diffusers", "transformers"} and not any(
+            name.endswith(".safetensors") for name in manifest.expected_files
         ):
             raise ManifestError(
-                f"The Hugging Face repository has no safe {suffix} weights for this adapter."
+                "The Hugging Face repository has no safe .safetensors weights for this adapter."
             )
     runtime_adapter = {
         "diffusers-torch": "diffusers",
         "transformers-torch": "transformers",
-        "onnx-runtime": "onnx",
         "paddle": "paddle",
         "midgard-native": "midgard-native",
         "custom-python": "python-worker",

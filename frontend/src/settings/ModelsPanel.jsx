@@ -273,7 +273,6 @@ function DynamicModelConfiguration({ model, onSaved }) {
   const runtime = /** @type {Record<string, string>} */ ({
     diffusers: "diffusers-torch",
     transformers: "transformers-torch",
-    onnx: "onnx-runtime",
     paddle: "paddle",
     "python-worker": "custom-python",
   })[adapter];
@@ -322,7 +321,7 @@ function DynamicModelConfiguration({ model, onSaved }) {
           onChange={(event) => setManifest({ ...manifest, adapter: event.target.value })}
           options={[
             ["diffusers", "Diffusers + PyTorch"], ["transformers", "Transformers + PyTorch"],
-            ["onnx", "ONNX Runtime"], ["paddle", "Paddle"],
+            ["paddle", "Paddle"],
             ["python-worker", "Isolated Python worker"],
           ].map(([value, label]) => ({ value, label }))}
         />

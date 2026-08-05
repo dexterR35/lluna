@@ -32,7 +32,7 @@ def _dir_has_weights(path: str | Path) -> bool:
         if not p.is_dir():
             return False
         for name in p.iterdir():
-            if name.is_file() and name.suffix.lower() in (".pth", ".pt", ".onnx", ".pdiparams"):
+            if name.is_file() and name.suffix.lower() in (".pth", ".pt", ".pdiparams"):
                 if name.stat().st_size > 0:
                     return True
         return False
@@ -276,7 +276,6 @@ def _report_runtime_errors() -> None:
     deps = [
         ("torch", "torch"),
         ("huggingface_hub", "huggingface_hub"),
-        ("onnxruntime", "onnxruntime"),
         ("cv2", "cv2"),
         ("PIL", "PIL"),
     ]

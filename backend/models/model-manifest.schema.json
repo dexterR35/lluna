@@ -21,7 +21,7 @@
       ]
     },
     "adapter": {
-      "enum": ["diffusers", "transformers", "onnx", "paddle", "midgard-native", "python-worker", "supir"]
+      "enum": ["diffusers", "transformers", "paddle", "midgard-native", "python-worker", "supir"]
     },
     "license": { "type": "string" },
     "gated": { "type": "boolean" },

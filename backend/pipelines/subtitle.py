@@ -607,13 +607,9 @@ class SubtitleRemover:
         self.append_output(
             f"Subtitle removal model: {model_friendly_name} ({model_device})"
         )
-        providers = ", ".join(self.hardware_accelerator.onnx_providers)
-        providers_str = f" ({providers})" if providers else ""
         detect_mode = SubtitleDetectMode(self.settings.subtitle_detect_mode)
         detect_mode_name = SUBTITLE_DETECT_MODE_NAMES[detect_mode]
-        self.append_output(
-            f"Subtitle detection model: {detect_mode_name}{providers_str}"
-        )
+        self.append_output(f"Subtitle detection model: {detect_mode_name}")
 
     def merge_audio_to_video(self):
         # Temporary audio file; on Windows delete=True can cause permission denied

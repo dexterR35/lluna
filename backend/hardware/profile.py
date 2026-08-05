@@ -40,7 +40,6 @@ class FrameworkCapabilities:
     torch_cuda: bool = False
     torch_directml: bool = False
     torch_mps: bool = False
-    onnx_providers: tuple[str, ...] = ()
     paddle_gpu: bool = False
     cpu: bool = True
 

@@ -76,7 +76,6 @@ def test_generate_downloads_keep_only_one_runtime_weight_layout() -> None:
         assert ".bin" not in patterns
         assert ".ckpt" not in patterns
         assert "safety_checker" not in patterns
-        assert "onnx" not in patterns
         assert "non_ema" not in patterns
 
     flux = catalog_info(GenerateMode.FLUX2_KLEIN_BASE_4B)

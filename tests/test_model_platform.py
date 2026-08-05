@@ -37,16 +37,16 @@ def paths(root: Path) -> AppPaths:
     )
 
 
-def onnx_manifest(identifier: str = "local-onnx") -> dict:
+def safetensors_manifest(identifier: str = "local-transformers") -> dict:
     return {
         "schema": 1,
         "id": identifier,
-        "name": "Local ONNX",
+        "name": "Local Transformers",
         "description": "Test model",
         "task": "image-restoration",
-        "adapter": "onnx",
-        "source": {"type": "local", "localName": "model.onnx"},
-        "runtime": {"profile": "onnx-runtime", "isolated": False},
+        "adapter": "transformers",
+        "source": {"type": "local", "localName": "model.safetensors"},
+        "runtime": {"profile": "transformers-torch", "isolated": False},
         "hardware": {"backends": ["cpu"]},
         "security": {"trustRemoteCode": False, "allowPickle": False},
         "variant": {"kind": "base"},
@@ -57,18 +57,18 @@ def onnx_manifest(identifier: str = "local-onnx") -> dict:
             "outputs": ["image"],
             "dtypes": ["fp32"],
         },
-        "expectedFiles": ["model.onnx"],
+        "expectedFiles": ["model.safetensors"],
         "needsConfiguration": False,
     }
 
 
 def test_manifest_rejects_traversal_and_remote_code_policy() -> None:
-    raw = onnx_manifest()
-    raw["expectedFiles"] = ["../outside.onnx"]
+    raw = safetensors_manifest()
+    raw["expectedFiles"] = ["../outside.safetensors"]
     with pytest.raises(ManifestError, match="inside"):
         ModelManifest.from_mapping(raw)
 
-    raw = onnx_manifest()
+    raw = safetensors_manifest()
     raw["security"]["trustRemoteCode"] = True
     with pytest.raises(ManifestError, match="disabled"):
         configure_manifest(raw)
@@ -78,14 +78,14 @@ def test_scanner_surfaces_unconfigured_folder_then_accepts_manifest(tmp_path) ->
     registry = DynamicModelRegistry(paths(tmp_path))
     folder = registry.root / "restorer"
     folder.mkdir()
-    (folder / "model.onnx").write_bytes(b"onnx")
+    (folder / "model.safetensors").write_bytes(b"weights")
 
     record = registry.scan()[0]
     assert record.manifest.id == "restorer"
     assert record.manifest.needs_configuration
     assert record.installed
 
-    raw = onnx_manifest("restorer")
+    raw = safetensors_manifest("restorer")
     registry.configure("restorer", ModelManifest.from_mapping(raw))
     configured = registry.get("restorer")
     assert not configured.manifest.needs_configuration
@@ -95,13 +95,13 @@ def test_scanner_surfaces_unconfigured_folder_then_accepts_manifest(tmp_path) ->
 def test_local_file_import_is_promoted_into_managed_folder(tmp_path, monkeypatch) -> None:
     registry = DynamicModelRegistry(paths(tmp_path))
     monkeypatch.setattr(DynamicModelRegistry, "_instance", registry)
-    source = tmp_path / "outside" / "model.onnx"
+    source = tmp_path / "outside" / "model.safetensors"
     source.parent.mkdir()
-    source.write_bytes(b"onnx-weights")
+    source.write_bytes(b"safe-weights")
 
-    manifest = import_local(source, onnx_manifest())
+    manifest = import_local(source, safetensors_manifest())
     target = registry.root / manifest.id
-    assert (target / "model.onnx").read_bytes() == b"onnx-weights"
+    assert (target / "model.safetensors").read_bytes() == b"safe-weights"
     assert (target / ".midgard-installed").is_file()
     assert registry.get(manifest.id).installed
 
@@ -398,8 +398,8 @@ def test_local_model_analyze_and_import_api(tmp_path, monkeypatch) -> None:
     registry = DynamicModelRegistry(paths(tmp_path))
     monkeypatch.setattr(DynamicModelRegistry, "_instance", registry)
     monkeypatch.setattr(DesktopGrantStore, "_instance", None)
-    source = tmp_path / "picked.onnx"
-    source.write_bytes(b"onnx")
+    source = tmp_path / "picked.safetensors"
+    source.write_bytes(b"safe-weights")
     grant = DesktopGrantStore.instance().issue(source, mode="read")
     token = "model-platform-test-token-with-at-least-thirty-two-characters"  # noqa: S105
     headers = {"X-Midgard-Token": token}
@@ -418,10 +418,10 @@ def test_local_model_analyze_and_import_api(tmp_path, monkeypatch) -> None:
                 )
                 assert analyzed.status_code == 200, analyzed.text
                 manifest = analyzed.json()["manifest"]
-                manifest.update(task="image-restoration", adapter="onnx", needsConfiguration=False)
-                manifest["runtime"] = {"profile": "onnx-runtime", "isolated": False}
+                manifest.update(task="image-restoration", adapter="transformers", needsConfiguration=False)
+                manifest["runtime"] = {"profile": "transformers-torch", "isolated": False}
                 manifest["variant"] = {"kind": "base"}
-                manifest["capabilities"] = onnx_manifest()["capabilities"]
+                manifest["capabilities"] = safetensors_manifest()["capabilities"]
                 imported = await client.post(
                     "/api/models/import",
                     headers=headers,

@@ -66,9 +66,6 @@ class SubtitleDetect:
         paddle.disable_signal_handler()
         from paddleocr import TextDetection
         # enable_hpi requires the optional paddlex ultra-infer plugin.
-        # Do not infer it from onnx_providers: when HW accel is off,
-        # onnx_providers falls back to ["CPUExecutionProvider"] and would
-        # incorrectly turn HPI on, then crash.
         enable_hpi = False
         try:
             from paddlex.utils.deps import is_hpip_available

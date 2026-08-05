@@ -42,12 +42,6 @@ TORCH_INDEX = {
     "cu126": "https://download.pytorch.org/whl/cu126",
     "cu128": "https://download.pytorch.org/whl/cu128",
 }
-ORT_CUDA11_INDEX = (
-    "https://aiinfra.pkgs.visualstudio.com/PublicPackages/"
-    "_packaging/onnxruntime-cuda-11/pypi/simple/"
-)
-
-
 # PyTorch CUDA wheel tags Midgard ships (see TORCH_INDEX). Highest first.
 TORCH_CUDA_TAGS = ("cu128", "cu126", "cu118")
 _TAG_RANK = {t: i for i, t in enumerate(reversed(TORCH_CUDA_TAGS))}
@@ -588,17 +582,6 @@ def pip_uninstall(py: Path, packages: list[str]) -> None:
     run([str(py), "-m", "pip", "uninstall", "--yes", *packages])
 
 
-def onnxruntime_gpu_install_args(torch_tag: str) -> list[str]:
-    """Select an ORT wheel built for the same CUDA major as PyTorch."""
-    if torch_tag == "cu118":
-        return [
-            "onnxruntime-gpu==1.20.1",
-            "--index-url",
-            ORT_CUDA11_INDEX,
-        ]
-    return ["onnxruntime-gpu==1.22.0"]
-
-
 def installed_torch_backend(py: Path) -> tuple[str, str]:
     """Return (backend, CUDA tag) for the environment's current Torch build."""
     script = (
@@ -656,13 +639,6 @@ def install_packages(py: Path, mode: str, torch_tag: str) -> None:
     prepare_pip(py)
     if not torch_backend_matches(py, mode, torch_tag):
         pip_uninstall(py, ["torch", "torchvision", "torch-directml"])
-    # These distributions expose the same ``onnxruntime`` import and must not
-    # coexist. Removing all variants also repairs environments that drifted to
-    # an incompatible CUDA-major wheel.
-    pip_uninstall(
-        py,
-        ["onnxruntime", "onnxruntime-gpu", "onnxruntime-directml"],
-    )
     if mode == "cuda" and torch_tag == "cu118":
         pip_uninstall(py, ["paddlepaddle"])
     else:
@@ -702,16 +678,11 @@ def install_packages(py: Path, mode: str, torch_tag: str) -> None:
                 TORCH_INDEX[torch_tag],
             ],
         )
-        if platform.system() in {"Linux", "Windows"}:
-            # CUDA 11.8 builds live on Microsoft's dedicated feed; CUDA 12
-            # builds use the normal PyPI package.
-            pip_install(py, onnxruntime_gpu_install_args(torch_tag))
     elif mode == "directml":
         if platform.system() != "Windows":
             raise SystemExit("DirectML installation is supported only on Windows.")
         pip_install(py, [f"paddlepaddle=={PADDLE_VERSION}", "-i", PADDLE_CPU_INDEX])
         pip_install(py, ["torch-directml==0.2.5.dev240914"])
-        pip_install(py, ["onnxruntime-directml==1.20.1"])
     elif mode == "mps":
         if platform.system() != "Darwin":
             raise SystemExit("MPS installation is supported only on macOS.")
@@ -720,7 +691,6 @@ def install_packages(py: Path, mode: str, torch_tag: str) -> None:
             py,
             [f"torch=={TORCH_VERSION}", f"torchvision=={TORCHVISION_VERSION}"],
         )
-        pip_install(py, ["onnxruntime==1.22.0"])
     else:
         pip_install(
             py,
@@ -739,8 +709,6 @@ def install_packages(py: Path, mode: str, torch_tag: str) -> None:
                 TORCH_INDEX["cpu"],
             ],
         )
-        # CPU ONNX Runtime for OCR helpers.
-        pip_install(py, ["onnxruntime==1.22.0"])
 
     pip_install(
         py,
@@ -780,7 +748,6 @@ checks = [
         "from transformers import AutoModelForZeroShotObjectDetection, AutoProcessor",
         False,
     ),
-    ("onnxruntime", "import onnxruntime", False),
 ]
 failed = []
 for name, stmt, required in checks:
