@@ -97,15 +97,6 @@ def builtin_contract(model_id: str) -> tuple[ModelVariant, ModelCapabilities]:
         reviewed = reviewed_huggingface_contract(repo_by_value.get(value, ""))
         if reviewed:
             return reviewed
-    if model_id.startswith("bg-remove:"):
-        inputs, outputs = _io_for_task("image-segmentation")
-        return ModelVariant("base"), ModelCapabilities(
-            provenance="reviewed-catalog",
-            tasks=("image-segmentation",),
-            inputs=inputs,
-            outputs=outputs,
-            dtypes=("fp32",),
-        )
     if model_id in {"realesrgan-x2", "realesrgan-x4"}:
         inputs, outputs = _io_for_task("image-upscaling")
         scale = 2 if model_id.endswith("x2") else 4

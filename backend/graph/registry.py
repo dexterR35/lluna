@@ -31,80 +31,6 @@ def option(value: str, label: str, model_id: str, description: str = "") -> dict
     return {"value": value, "label": label, "modelId": model_id, "description": description}
 
 
-BACKGROUND_MODELS = [
-    option(
-        "birefnet-general",
-        "BiRefNet General",
-        "bg-remove:birefnet-general",
-        "All-around photo and product cutouts. Best default for most images.",
-    ),
-    option(
-        "birefnet-general-lite",
-        "BiRefNet Lite",
-        "bg-remove:birefnet-general-lite",
-        "Faster BiRefNet with less memory. Best when quality must stay high but speed matters.",
-    ),
-    option(
-        "birefnet-portrait",
-        "BiRefNet Portrait",
-        "bg-remove:birefnet-portrait",
-        "Tuned for faces and portraits. Best for headshots and people with fine hair edges.",
-    ),
-    option(
-        "birefnet-massive",
-        "BiRefNet Massive",
-        "bg-remove:birefnet-massive",
-        "Largest BiRefNet for maximum detail. Best when accuracy matters more than speed or VRAM.",
-    ),
-    option(
-        "u2net_human_seg",
-        "U²-Net Human",
-        "bg-remove:u2net_human_seg",
-        "Fast body and person segmentation. Best for quick people cutouts.",
-    ),
-    option(
-        "u2net_cloth_seg",
-        "U²-Net Clothing",
-        "bg-remove:u2net_cloth_seg",
-        "Separates clothing categories. Best for apparel and fashion cutouts.",
-    ),
-    option(
-        "isnet-anime",
-        "IS-Net Anime",
-        "bg-remove:isnet-anime",
-        "Illustration and anime artwork. Best for drawn characters, manga, and stylized art.",
-    ),
-    option(
-        "isnet-general-use",
-        "IS-Net General",
-        "bg-remove:isnet-general-use",
-        "Balanced classic segmentation. Best when you want a lighter alternative to BiRefNet.",
-    ),
-    option(
-        "bria-rmbg",
-        "BRIA RMBG",
-        "bg-remove:bria-rmbg",
-        "High-quality general RMBG. Best for clean product and studio-style photos.",
-    ),
-    option(
-        "birefnet-hrsod",
-        "BiRefNet HRSOD",
-        "bg-remove:birefnet-hrsod",
-        "High-resolution salient object detection. Best for small or finely detailed subjects.",
-    ),
-    option(
-        "birefnet-dis",
-        "BiRefNet DIS",
-        "bg-remove:birefnet-dis",
-        "Dichotomous image segmentation. Best for complex edges and high-contrast subjects.",
-    ),
-    option(
-        "birefnet-cod",
-        "BiRefNet COD",
-        "bg-remove:birefnet-cod",
-        "Camouflaged object detection. Best when the subject blends into the background.",
-    ),
-]
 UPSCALE_MODELS = [
     option(
         "RealESRGAN_x2plus",
@@ -643,28 +569,6 @@ _NODES = [
         required_models=["realesrgan-x2"],
         supports_preview=True,
         adapter="enhance",
-    ),
-    node(
-        "midgard.image.remove_background",
-        "Remove Background",
-        "Image/Remove",
-        "Produces transparent cutouts from one image or an ordered image queue.",
-        icon="scissors",
-        inputs=[
-            port("image", "Image queue", PortType.IMAGE, required=True, multiple=True),
-            port("protectMask", "Protect Mask", PortType.MASK),
-        ],
-        outputs=[
-            port("image", "Cutouts", PortType.IMAGE, multiple=True),
-            port("alpha", "Alpha", PortType.ALPHA, multiple=True),
-        ],
-        parameters=[
-            parameter("model", "Model", "model", "birefnet-general", options=BACKGROUND_MODELS)
-        ],
-        capabilities=["onnx"],
-        required_models=["rembg"],
-        supports_preview=True,
-        adapter="bg_remove",
     ),
     node(
         "midgard.image.low_light",

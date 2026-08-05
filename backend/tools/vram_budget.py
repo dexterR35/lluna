@@ -11,7 +11,6 @@ TILE_CANDIDATES: Tuple[int, ...] = (512, 256, 128, 64)
 # Approximate footprints (MB) - calibrated-ish constants, not exact allocator accounting.
 _ENHANCE_WEIGHTS_MB = {2: 70.0, 4: 70.0}
 _ENHANCE_TILE_ACT_PER_PX = 0.00012  # MB per input tile pixel (incl. pad/scale scratch)
-_REMBG_SESSION_MB = 900.0
 _LAMA_WEIGHTS_MB = 200.0
 _LAMA_PER_MPX = 180.0
 _SELECT_OBJECT_TINY_MB = 4500.0
@@ -113,23 +112,6 @@ def next_smaller_tile(tile: int, candidates: Sequence[int] = TILE_CANDIDATES) ->
             return ordered[i + 1]
     smaller = [t for t in ordered if t < int(tile)]
     return smaller[0] if smaller else None
-
-
-def preflight_rembg(h: int, w: int, max_long_edge: int = 0) -> GenericBudget:
-    long_edge = max(h, w)
-    if max_long_edge and max_long_edge > 0 and long_edge > max_long_edge:
-        # Caller may resize; still allow when uncapped (0).
-        pass
-    if not _has_cuda_budget():
-        return GenericBudget(estimated_mb=0.0, free_mb=0.0)
-    free, _ = _free_total_mb()
-    est = _REMBG_SESSION_MB + (h * w * 8e-6)
-    if _with_headroom(est) > free and free < 500:
-        raise VramBudgetError(
-            f"Not enough GPU memory for background removal "
-            f"(need ~{_with_headroom(est):.0f} MB free, have {free:.0f} MB)."
-        )
-    return GenericBudget(estimated_mb=est, free_mb=free)
 
 
 def preflight_lama(h: int, w: int) -> GenericBudget:

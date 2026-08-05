@@ -1,4 +1,4 @@
-"""Persistent shared inference worker process (enhance / rembg / LAMA / subtitle)."""
+"""Persistent shared inference worker process (enhance / generate / LAMA / subtitle)."""
 
 from __future__ import annotations
 
@@ -80,13 +80,6 @@ def _release_all_except(keep: Optional[str] = None) -> None:
             from backend.tools.image_generate import release_generate_models
 
             release_generate_models(blocking=True, timeout=5.0)
-        except Exception:
-            traceback.print_exc()
-    if keep != JobType.BG_REMOVE.value:
-        try:
-            from backend.tools.bg_remove import release_bg_sessions
-
-            release_bg_sessions()
         except Exception:
             traceback.print_exc()
     if keep not in (JobType.LAMA_RETOUCH.value, JobType.SUBTITLE.value):
@@ -201,10 +194,6 @@ def infer_worker_main(cmd_queue, evt_queue, hardware_accel: bool = True) -> None
                     on_progress,
                     heartbeat_log,
                     job_evt_queue,
-                )
-            elif job_type == JobType.BG_REMOVE.value:
-                _job_bg_remove(
-                    run_id, payload, on_progress, heartbeat_log, job_evt_queue
                 )
             elif job_type == JobType.LAMA_RETOUCH.value:
                 _job_lama_retouch(
@@ -623,68 +612,12 @@ def _job_generate(run_id, payload, cancel_event, on_progress, heartbeat_log, evt
     _emit(evt_queue, result(run_id, output_path))
 
 
-def _job_bg_remove(run_id, payload, on_progress, heartbeat_log, evt_queue) -> None:
-    from backend.tools.bg_remove import run_bg_remove_job
-    from backend.tools.constant import BgRemoveMode
-    from backend.tools.job_config import apply_hardware_from_payload
-    from backend.tools.vram_budget import VramBudgetError, preflight_rembg
-    from PIL import Image
-
-    apply_hardware_from_payload(payload)
-
-    input_path = payload["input_path"]
-    output_path = payload["output_path"]
-    mode_value = payload.get("mode")
-    if not mode_value:
-        _emit(evt_queue, error(run_id, "Background-remove model was not selected."))
-        return
-    mode = BgRemoveMode(mode_value)
-
-    heartbeat_log(run_id, f"Preparing background removal ({mode.value})…")
-    on_progress(run_id, 5)
-    try:
-        with Image.open(input_path) as im:
-            w, h = im.size
-        preflight_rembg(h, w)
-    except VramBudgetError as e:
-        _emit(evt_queue, error(run_id, str(e)))
-        return
-
-    def prog(p: int):
-        on_progress(run_id, int(p))
-
-    def on_log(msg: str):
-        heartbeat_log(run_id, msg)
-
-    protect_mask_path = payload.get("protect_mask_path") or None
-    if protect_mask_path and not os.path.isfile(protect_mask_path):
-        _emit(evt_queue, error(run_id, f"Protect mask missing: {protect_mask_path}"))
-        return
-
-    try:
-        run_bg_remove_job(
-            input_path,
-            output_path,
-            mode=mode,
-            progress=prog,
-            log=on_log,
-            protect_mask_path=protect_mask_path,
-        )
-    except Exception as e:
-        traceback.print_exc()
-        _emit(evt_queue, error(run_id, str(e)))
-        return
-    on_progress(run_id, 100)
-    _emit(evt_queue, result(run_id, output_path))
-
-
 def _lama_rgb_context(rgba_arr):
     """
-    Build RGB for LaMa on a cutout (post Remove BG).
+    Build RGB for LaMa when the input contains transparency.
 
     Transparent pixels are usually RGB=0. Never composite onto white (that made
-    Fill paint white), and never bring back the pre-rembg photo background —
-    LaMa should only see the subject. Voids are filled with the subject mean
+    Fill paint white). Voids are filled with the visible-pixel mean
     so the model treats removed BG as empty, not as a real scene.
     """
     import numpy as np

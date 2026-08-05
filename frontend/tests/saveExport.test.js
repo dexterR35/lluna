@@ -7,19 +7,16 @@ import {
   fileStem,
 } from "../src/preview/saveExport";
 
-test("export suffixes follow remove-background and remove-text schemas", () => {
-  expect(exportSuffixForSchema("midgard.image.remove_background")).toBe(
-    "_nobg",
-  );
+test("export suffixes follow processing schemas", () => {
   expect(exportSuffixForSchema("midgard.image.remove_text")).toBe("_nosub");
   expect(exportSuffixForSchema("midgard.video.remove_text")).toBe("_nosub");
   expect(exportSuffixForSchema("midgard.image.upscale")).toBe("_upscale");
   expect(
     exportSuffixForSchemas([
-      "midgard.image.remove_background",
+      "midgard.image.low_light",
       "midgard.image.upscale",
     ]),
-  ).toBe("_nobg_upscale");
+  ).toBe("_lowlight_upscale");
   expect(exportSuffixForSchema("midgard.generate.image")).toBe("");
 });
 

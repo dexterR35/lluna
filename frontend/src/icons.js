@@ -221,7 +221,6 @@ export const SECTION_ICONS = Object.freeze({
   editor: Monitor,
   runtime: Cpu,
   subtitle: Subtitles,
-  background_removal: Image,
   enhancement: Sparkles,
   low_light: Moon,
   generation: Wand2,

@@ -228,10 +228,10 @@ test("flow boxes absorb upstream nodes connected into the flow", () => {
   expect(new Set(group.startNodeIds)).toEqual(new Set([outsider, inside]));
 });
 test("a processor cannot repeat along the same linked path", () => {
-  const remove = /** @type {import("../src/types").NodeDefinition} */ ({
+  const normalize = /** @type {import("../src/types").NodeDefinition} */ ({
     ...definition,
-    schemaId: "test.remove-background",
-    name: "Remove Background",
+    schemaId: "test.normalize-image",
+    name: "Normalize Image",
     kind: "processor",
   });
   const upscale = /** @type {import("../src/types").NodeDefinition} */ ({
@@ -240,13 +240,13 @@ test("a processor cannot repeat along the same linked path", () => {
     name: "Upscale",
     kind: "processor",
   });
-  useEditorStore.getState().setDefinitions([definition, remove, upscale]);
-  const firstRemove = addNode(remove.schemaId);
+  useEditorStore.getState().setDefinitions([definition, normalize, upscale]);
+  const firstNormalize = addNode(normalize.schemaId);
   const scale = addNode(upscale.schemaId);
-  const secondRemove = addNode(remove.schemaId);
+  const secondNormalize = addNode(normalize.schemaId);
   expect(
     useEditorStore.getState().connect({
-      source: firstRemove,
+      source: firstNormalize,
       sourceHandle: "value",
       target: scale,
       targetHandle: "value",
@@ -255,12 +255,12 @@ test("a processor cannot repeat along the same linked path", () => {
   const repeated = useEditorStore.getState().connect({
     source: scale,
     sourceHandle: "value",
-    target: secondRemove,
+    target: secondNormalize,
     targetHandle: "value",
   });
   expect(repeated.valid).toBe(false);
   expect(repeated.reason).toBe(
-    "Remove Background already exists in this linked path.",
+    "Normalize Image already exists in this linked path.",
   );
   expect(useEditorStore.getState().edges).toHaveLength(1);
 });

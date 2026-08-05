@@ -203,7 +203,7 @@ class DynamicModelRegistry:
     def register(self, manifest: ModelManifest) -> Path:
         from backend.models.registry import MODEL_REGISTRY
 
-        if manifest.id in MODEL_REGISTRY or manifest.id.startswith(("generate:", "bg-remove:")):
+        if manifest.id in MODEL_REGISTRY or manifest.id.startswith("generate:"):
             raise ManifestError(f"Model id {manifest.id!r} is reserved by Midgard.")
         target = self.root / manifest.id
         target.mkdir(parents=True, exist_ok=True)

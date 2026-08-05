@@ -29,12 +29,12 @@ test("Electron starts its control plane and renders the backend-owned node catal
   await expect(page.getByRole("button", { name: /^Workflow Note\b/ })).toHaveCount(0);
   await expect(page.getByText("Backend ready", { exact: true })).toBeVisible();
 
-  await page.getByRole("button", { name: /Remove Background/ }).click();
-  const removeBackgroundNode = page.getByLabel("Remove Background node");
-  await expect(removeBackgroundNode.getByRole("button", { name: "Run from here Remove Background" })).toBeVisible();
+  await page.getByRole("button", { name: /Upscale Image/ }).click();
+  const upscaleNode = page.getByLabel("Upscale Image node");
+  await expect(upscaleNode.getByRole("button", { name: "Run from here Upscale Image" })).toBeVisible();
   const viewport = page.locator(".react-flow__viewport");
   await expect(viewport).toHaveAttribute("style", /scale\(0\.85\)/);
-  const nodeBoxBeforeZoom = await removeBackgroundNode.boundingBox();
+  const nodeBoxBeforeZoom = await upscaleNode.boundingBox();
   const zoomPoint = { x: nodeBoxBeforeZoom.x + nodeBoxBeforeZoom.width / 2, y: nodeBoxBeforeZoom.y + nodeBoxBeforeZoom.height / 2 };
   await page.mouse.move(zoomPoint.x, zoomPoint.y);
   await page.mouse.wheel(0, -240);
@@ -44,11 +44,11 @@ test("Electron starts its control plane and renders the backend-owned node catal
   await page.mouse.wheel(0, -240);
   await page.keyboard.up("Control");
   await expect.poll(async () => Number((await viewport.getAttribute("style")).match(/scale\(([^)]+)\)/)?.[1])).toBeGreaterThan(0.85);
-  const nodeBoxAfterZoom = await removeBackgroundNode.boundingBox();
+  const nodeBoxAfterZoom = await upscaleNode.boundingBox();
   expect(Math.abs(nodeBoxAfterZoom.x + nodeBoxAfterZoom.width / 2 - zoomPoint.x)).toBeLessThan(3);
   expect(Math.abs(nodeBoxAfterZoom.y + nodeBoxAfterZoom.height / 2 - zoomPoint.y)).toBeLessThan(3);
   const scaleBeforeDoubleClick = (await viewport.getAttribute("style")).match(/scale\(([^)]+)\)/)?.[1];
-  await removeBackgroundNode.dblclick();
+  await upscaleNode.dblclick();
   await page.waitForTimeout(350);
   const scaleAfterDoubleClick = (await viewport.getAttribute("style")).match(/scale\(([^)]+)\)/)?.[1];
   expect(scaleAfterDoubleClick).toBe(scaleBeforeDoubleClick);
@@ -63,13 +63,13 @@ test("Electron starts its control plane and renders the backend-owned node catal
   await page.mouse.up();
   await page.keyboard.up("Space");
   await expect.poll(async () => viewport.getAttribute("style")).not.toBe(transformBeforePan);
-  await expect(page.getByRole("dialog", { name: "Remove Background" })).toHaveCount(0);
-  await removeBackgroundNode.getByRole("button", { name: "Open Remove Background options" }).click();
-  const nodeEditor = page.getByRole("dialog", { name: "Remove Background" });
-  await expect(nodeEditor.getByRole("button", { name: /BiRefNet General/ })).toBeVisible();
-  await nodeEditor.getByRole("button", { name: /IS-Net Anime/ }).click();
+  await expect(page.getByRole("dialog", { name: "Upscale Image" })).toHaveCount(0);
+  await upscaleNode.getByRole("button", { name: "Open Upscale Image options" }).click();
+  const nodeEditor = page.getByRole("dialog", { name: "Upscale Image" });
+  await expect(nodeEditor.getByRole("button", { name: /Real-ESRGAN ×2/ })).toBeVisible();
+  await nodeEditor.getByRole("button", { name: /Real-ESRGAN ×4/ }).click();
   await nodeEditor.getByRole("button", { name: "Done" }).click();
-  await expect(page.getByLabel("Remove Background node").getByText("IS-Net Anime")).toBeVisible();
+  await expect(page.getByLabel("Upscale Image node").getByText("Real-ESRGAN ×4")).toBeVisible();
 
   const security = await electronApp.evaluate(({ BrowserWindow }) => {
     const window = BrowserWindow.getAllWindows()[0];

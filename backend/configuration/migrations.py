@@ -9,7 +9,6 @@ from backend.configuration.models import SCHEMA_VERSION
 _MODERN_SECTIONS = {
     "runtime",
     "subtitle",
-    "background_removal",
     "enhancement",
     "low_light",
     "generation",
@@ -33,7 +32,6 @@ def migrate_mapping(raw: Mapping[str, Any]) -> dict[str, Any]:
     infer = dict(raw.get("Infer", {}))
     sttn = dict(raw.get("Sttn", {}))
     propainter = dict(raw.get("ProPainter", {}))
-    background = dict(raw.get("BgRemove", {}))
     enhancement = dict(raw.get("Enhance", {}))
     low_light = dict(raw.get("LowLight", {}))
     generation = dict(raw.get("Generate", {}))
@@ -62,12 +60,6 @@ def migrate_mapping(raw: Mapping[str, Any]) -> dict[str, Any]:
             "vertical_box_tolerance_px": main.get("SubtitleYXAxisDifferencePixel", 10),
             "box_tolerance_x_px": main.get("SubtitleAreaPixelToleranceXPixel", 20),
             "box_tolerance_y_px": main.get("SubtitleAreaPixelToleranceYPixel", 20),
-        },
-        "background_removal": {
-            "mode": background.get("Mode", "birefnet-general"),
-            "enabled_models": background.get(
-                "EnabledModels", "birefnet-general,u2net_human_seg,isnet-anime,u2net_cloth_seg"
-            ),
         },
         "enhancement": {
             "mode": enhancement.get("Mode", "RealESRGAN_x2plus"),

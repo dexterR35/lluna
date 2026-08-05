@@ -23,7 +23,6 @@ def settings_schema() -> dict:
         "sections": [
             "subtitle",
             "runtime",
-            "background_removal",
             "enhancement",
             "low_light",
             "generation",

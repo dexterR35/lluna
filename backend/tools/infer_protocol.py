@@ -15,7 +15,6 @@ class JobType(str, Enum):
     SUPIR = "supir"
     LOW_LIGHT = "low_light"
     GENERATE = "generate"
-    BG_REMOVE = "bg_remove"
     LAMA_RETOUCH = "lama_retouch"
     SELECT_SUBJECT = "select_subject"
     SUBTITLE = "subtitle"

@@ -15,7 +15,6 @@ def test_required_model_inventory_is_unique() -> None:
         "propainter",
         "paddleocr-server",
         "paddleocr-mobile",
-        "rembg",
         "realesrgan-x2",
         "realesrgan-x4",
         "supir",

@@ -2,7 +2,6 @@ import { api, artifactObjectUrl, saveArtifact } from "../api/client";
 
 /** @type {Record<string, string>} */
 const SCHEMA_SUFFIXES = {
-  "midgard.image.remove_background": "_nobg",
   "midgard.image.remove_text": "_nosub",
   "midgard.video.remove_text": "_nosub",
   "midgard.image.upscale": "_upscale",

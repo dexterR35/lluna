@@ -103,16 +103,6 @@ class SubtitleSettings:
 
 
 @dataclass(frozen=True)
-class BackgroundRemovalSettings:
-    mode: str = "birefnet-general"
-    enabled_models: str = "birefnet-general,u2net_human_seg,isnet-anime,u2net_cloth_seg"
-
-    def __post_init__(self) -> None:
-        _string(self.mode, "background_removal.mode")
-        _string(self.enabled_models, "background_removal.enabled_models")
-
-
-@dataclass(frozen=True)
 class EnhancementSettings:
     mode: str = "RealESRGAN_x2plus"
     enabled_models: str = "RealESRGAN_x2plus"
@@ -196,7 +186,6 @@ class ApplicationConfiguration:
     schema_version: int = SCHEMA_VERSION
     runtime: RuntimeSettings = field(default_factory=RuntimeSettings)
     subtitle: SubtitleSettings = field(default_factory=SubtitleSettings)
-    background_removal: BackgroundRemovalSettings = field(default_factory=BackgroundRemovalSettings)
     enhancement: EnhancementSettings = field(default_factory=EnhancementSettings)
     low_light: LowLightSettings = field(default_factory=LowLightSettings)
     generation: GenerationSettings = field(default_factory=GenerationSettings)
@@ -218,9 +207,6 @@ class ApplicationConfiguration:
             schema_version=int(values.get("schema_version", SCHEMA_VERSION)),
             runtime=RuntimeSettings(**dict(values.get("runtime", {}))),
             subtitle=SubtitleSettings.from_mapping(values.get("subtitle", {})),
-            background_removal=BackgroundRemovalSettings(
-                **dict(values.get("background_removal", {}))
-            ),
             enhancement=EnhancementSettings(**dict(values.get("enhancement", {}))),
             low_light=LowLightSettings(**dict(values.get("low_light", {}))),
             generation=GenerationSettings(**dict(values.get("generation", {}))),

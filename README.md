@@ -22,7 +22,6 @@ Local node editor for image and video work. Drag nodes on a canvas, wire them to
 |---|---|
 | 🖼️ | Load one image or a batch (up to 10) |
 | 🎬 | Load video |
-| ✂️ | Remove backgrounds |
 | 🧽 | Remove burned-in subtitles / text from images and video |
 | ⬆️ | Upscale with Real-ESRGAN |
 | 🌙 | Fix low-light shots |
@@ -109,13 +108,13 @@ Electron starts, then boots the local Python backend on a loopback port. No sepa
 First session tip:
 
 1. Open **Settings → Local model manager**
-2. Install something small to start (e.g. **birefnet-general** for background removal)
+2. Install a model needed by the workflow you want to run
 3. Enable it so it shows up in node dropdowns
 4. Drop nodes from the library, connect them, press **Run**
 
 Example graph:
 
-`Load Images` → `Remove Background` → `Preview Image` → `Save Image`
+`Load Images` → `Upscale Image` → `Preview Image` → `Save Image`
 
 ---
 
@@ -151,7 +150,6 @@ Everything below runs **locally**. Check each license before use ([third-party n
 
 | Group | Examples | Job |
 |---|---|---|
-| **Background removal** | BiRefNet, U²-Net, ISNet, BRIA | Cut subjects out of photos |
 | **Upscale** | Real-ESRGAN ×2 / ×4 | Sharper, larger images |
 | **Low light** | MIRNet | Brighten / clean dark shots |
 | **Generation** | FLUX.2 Klein, FLUX.2 Dev, Qwen-Image | Text → image (needs VRAM + disk) |
@@ -196,7 +194,7 @@ files are never installed into Midgard's main environment. See
 
 **Input** — Load Image, Load Images (max 10), Load Video, Load Mask, Prompt  
 
-**Process** — Remove Background, Generate Image, Upscale Image, Fix Low Light, Select Object, Remove Text from Image / Video, Composite Background  
+**Process** — Generate Image, Upscale Image, Fix Low Light, Select Object, Remove Text from Image / Video, Composite Background
 
 **Output** — Preview Image / Video, Save Image / Video  
 

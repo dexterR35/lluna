@@ -14,7 +14,6 @@ def test_catalog_contains_all_existing_ai_adapters():
     assert {
         "generate",
         "subtitle",
-        "bg_remove",
         "enhance",
         "low_light",
         "select_subject",
@@ -28,7 +27,6 @@ def test_catalog_contains_all_existing_ai_adapters():
 def test_processing_nodes_publish_explicit_model_choices_and_defaults():
     catalog = {item.schema_id: item for item in list_nodes()}
     expected = {
-        "midgard.image.remove_background": "birefnet-general",
         "midgard.image.upscale": "RealESRGAN_x2plus",
         "midgard.generate.image": "FLUX.2-klein-base-4B",
     }
@@ -73,10 +71,10 @@ def test_supir_is_a_reviewed_upscale_option_with_model_specific_controls():
 def test_image_queue_and_composite_nodes_publish_batch_contracts():
     catalog = {item.schema_id: item for item in list_nodes()}
     source = catalog["midgard.input.images"]
-    remove = catalog["midgard.image.remove_background"]
+    upscale = catalog["midgard.image.upscale"]
     composite = catalog["midgard.image.composite"]
     assert source.outputs[0].multiple
-    assert next(port for port in remove.inputs if port.id == "image").multiple
+    assert next(port for port in upscale.inputs if port.id == "image").multiple
     assert all(port.multiple for port in composite.inputs)
     assert composite.adapter == "composite"
 
@@ -88,7 +86,6 @@ def test_only_media_nodes_publish_preview_support():
         "midgard.input.images",
         "midgard.input.video",
         "midgard.generate.image",
-        "midgard.image.remove_background",
         "midgard.output.preview_image",
         "midgard.output.preview_video",
     ):
@@ -213,9 +210,9 @@ def test_known_batch_can_flow_into_batch_save_output():
 def test_repeated_processor_is_rejected_only_inside_the_planned_path():
     source = node("midgard.input.image", "source")
     source.parameters = {"pathGrantId": "grant"}
-    first_remove = node("midgard.image.remove_background", "first-remove")
-    enhance = node("midgard.image.upscale", "enhance")
-    second_remove = node("midgard.image.remove_background", "second-remove")
+    first_remove = node("midgard.image.upscale", "first-upscale")
+    enhance = node("midgard.image.low_light", "low-light")
+    second_remove = node("midgard.image.upscale", "second-upscale")
     preview = node("midgard.output.preview_image", "preview")
     workflow = WorkflowDocument(
         nodes=[source, first_remove, enhance, second_remove, preview],
@@ -223,23 +220,23 @@ def test_repeated_processor_is_rejected_only_inside_the_planned_path():
             WorkflowEdge(
                 source_node_id="source",
                 source_port_id="image",
-                target_node_id="first-remove",
+                target_node_id="first-upscale",
                 target_port_id="image",
             ),
             WorkflowEdge(
-                source_node_id="first-remove",
+                source_node_id="first-upscale",
                 source_port_id="image",
-                target_node_id="enhance",
+                target_node_id="low-light",
                 target_port_id="image",
             ),
             WorkflowEdge(
-                source_node_id="enhance",
+                source_node_id="low-light",
                 source_port_id="image",
-                target_node_id="second-remove",
+                target_node_id="second-upscale",
                 target_port_id="image",
             ),
             WorkflowEdge(
-                source_node_id="second-remove",
+                source_node_id="second-upscale",
                 source_port_id="image",
                 target_node_id="preview",
                 target_port_id="image",
@@ -249,11 +246,11 @@ def test_repeated_processor_is_rejected_only_inside_the_planned_path():
     full = validate_workflow(workflow)
     assert not full.valid
     assert any(
-        issue.code == "REPEATED_OPERATION" and issue.node_id == "second-remove"
+        issue.code == "REPEATED_OPERATION" and issue.node_id == "second-upscale"
         for issue in full.issues
     )
     enhance.result = {"status": "SUCCEEDED", "artifactIds": ["enhanced-image"]}
-    selected = validate_workflow(workflow, mode="selected", selected_node_ids=["second-remove"])
+    selected = validate_workflow(workflow, mode="selected", selected_node_ids=["second-upscale"])
     assert not any(issue.code == "REPEATED_OPERATION" for issue in selected.issues)
 
 
@@ -293,7 +290,7 @@ def test_orphan_nodes_do_not_block_output_chain():
 
 def test_run_modes_reuse_upstream_outputs_without_scheduling_upstream_nodes():
     source = node("midgard.input.image", "source")
-    remove = node("midgard.image.remove_background", "remove")
+    remove = node("midgard.image.low_light", "low-light")
     enhance = node("midgard.image.upscale", "enhance")
     preview = node("midgard.output.preview_image", "preview")
     source.parameters = {"pathGrantId": "test-grant"}
@@ -304,11 +301,11 @@ def test_run_modes_reuse_upstream_outputs_without_scheduling_upstream_nodes():
             WorkflowEdge(
                 source_node_id="source",
                 source_port_id="image",
-                target_node_id="remove",
+                target_node_id="low-light",
                 target_port_id="image",
             ),
             WorkflowEdge(
-                source_node_id="remove",
+                source_node_id="low-light",
                 source_port_id="image",
                 target_node_id="enhance",
                 target_port_id="image",

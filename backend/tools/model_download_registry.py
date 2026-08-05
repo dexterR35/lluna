@@ -19,7 +19,6 @@ PendingItem = Tuple[str, str]
 KIND_ENHANCE = "enhance"
 KIND_LOW_LIGHT = "low_light"
 KIND_GENERATE = "generate"
-KIND_BG_REMOVE = "bg_remove"
 KIND_SELECT_OBJECT = "select_object"
 _progress_context = threading.local()
 
@@ -247,11 +246,6 @@ def discard_partial(kind: str, key: str) -> None:
         from backend.tools import generate_models as m
 
         m.discard_partial(GenerateMode(key))
-    elif kind == KIND_BG_REMOVE:
-        from backend.tools.constant import BgRemoveMode
-        from backend.tools import bg_remove_models as m
-
-        m.discard_partial(BgRemoveMode(key))
     elif kind == KIND_SELECT_OBJECT:
         from backend.tools.select_object_models import SelectObjectPairId
         from backend.tools import select_object_models as m
@@ -408,7 +402,7 @@ def huggingface_progress_tqdm():
 
 
 def pooch_progress_tqdm():
-    """Return a quiet tqdm class for rembg/pooch byte progress."""
+    """Return a quiet tqdm class for model download byte progress."""
     from tqdm.auto import tqdm
 
     class _PoochDownloadTqdm(tqdm):

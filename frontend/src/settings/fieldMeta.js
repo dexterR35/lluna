@@ -68,11 +68,6 @@ export const FIELD_META = {
   "subtitle.box_tolerance_x_px": { label: "Box tolerance X (px)" },
   "subtitle.box_tolerance_y_px": { label: "Box tolerance Y (px)" },
 
-  "background_removal.mode": {
-    label: "Default model",
-    description: "Preferred background removal model when several are enabled.",
-  },
-
   "enhancement.mode": {
     label: "Default model",
     description: "Preferred upscaling model.",
@@ -158,11 +153,6 @@ export const PREFERENCE_SECTIONS = [
     id: "subtitle",
     label: "Subtitle",
     description: "Detection and inpainting defaults for subtitle removal.",
-  },
-  {
-    id: "background_removal",
-    label: "Background Removal",
-    description: "Defaults for subject cutout and background removal.",
   },
   {
     id: "enhancement",

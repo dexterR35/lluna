@@ -78,44 +78,6 @@ def _report_hardware() -> None:
         pass
 
 
-def _report_bg_remove_models() -> None:
-    diag.start("── models: background remove ──")
-    try:
-        from backend.configuration.service import get_settings
-        from backend.tools import bg_remove_models as bgm
-
-        settings = get_settings().background_removal
-        enabled = bgm.parse_enabled_values(settings.enabled_models)
-        selected = settings.mode
-        ok_n = miss_n = 0
-        for info in bgm.MODEL_CATALOG:
-            mode = info.mode
-            installed = bgm.is_model_installed(mode)
-            if installed:
-                ok_n += 1
-            else:
-                miss_n += 1
-            name = mode.value
-            flags = []
-            if mode.value in enabled:
-                flags.append("on")
-            else:
-                flags.append("off")
-            if mode.value == selected:
-                flags.append("selected")
-            if info.is_default:
-                flags.append("default")
-            path = bgm.model_file_path(mode)
-            _line(
-                name,
-                "OK" if installed else "MISSING",
-                f"[{', '.join(flags)}]  {path.name}",
-            )
-        diag.model(f"{'bg-remove summary':<28}  {ok_n} OK / {miss_n} MISSING")
-    except Exception as e:
-        diag.warn(f"bg-remove model check failed  {e}")
-
-
 def _report_enhance_models() -> None:
     diag.start("── models: enhance (Real-ESRGAN) ──")
     try:
@@ -314,7 +276,6 @@ def _report_runtime_errors() -> None:
     deps = [
         ("torch", "torch"),
         ("huggingface_hub", "huggingface_hub"),
-        ("rembg", "rembg"),
         ("onnxruntime", "onnxruntime"),
         ("cv2", "cv2"),
         ("PIL", "PIL"),
@@ -335,7 +296,6 @@ def report_startup(*, include_deps: bool = True) -> None:
     diag.start("startup health check")
     diag.start("════════════════════════════════════════")
     _report_hardware()
-    _report_bg_remove_models()
     _report_enhance_models()
     _report_select_object_models()
     _report_video_models()

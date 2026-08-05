@@ -107,17 +107,6 @@ MODEL_REGISTRY: dict[str, M] = {
             compatible_backends=("cpu", "cuda"),
         ),
         M(
-            "rembg",
-            "rembg model catalog",
-            "Background removal",
-            "ONNX Runtime",
-            "rembg upstream catalog",
-            _UPSTREAM,
-            False,
-            "~/.u2net",
-            compatible_backends=("cpu", "cuda", "directml"),
-        ),
-        M(
             "realesrgan-x2",
             "Real-ESRGAN x2",
             "Image upscaling",

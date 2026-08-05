@@ -1,7 +1,6 @@
 """Typed model settings and hardware-aware preset resolution."""
 
 from backend.settings.model_schemas import (
-    BackgroundRemovalSettings,
     GenerateSettings,
     LamaSettings,
     LowLightSettings,
@@ -13,7 +12,6 @@ from backend.settings.model_schemas import (
 from backend.settings.presets import Preset, ResolutionContext, SettingsResolution, resolve
 
 __all__ = [
-    "BackgroundRemovalSettings",
     "GenerateSettings",
     "LamaSettings",
     "LowLightSettings",

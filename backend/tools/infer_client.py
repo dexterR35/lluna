@@ -105,7 +105,6 @@ class InferClient:
     _lock = threading.Lock()
 
     HARD_CANCEL_TYPES = {
-        JobType.BG_REMOVE.value,
         JobType.LAMA_RETOUCH.value,
         JobType.SELECT_SUBJECT.value,
         JobType.GENERATE.value,

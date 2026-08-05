@@ -67,9 +67,6 @@ function formatTransfer(job) {
  * @returns {{section: string, keys: string[]} | null}
  */
 function optionsForModel(modelId) {
-  if (modelId.startsWith("bg-remove:")) {
-    return { section: "background_removal", keys: ["mode"] };
-  }
   if (modelId.startsWith("generate:")) {
     return { section: "generation", keys: ["mode", "width", "height", "steps"] };
   }
@@ -122,11 +119,6 @@ function optionsForModel(modelId) {
 
 /** @type {{id: string, label: string, match: (model: import("../types").ModelInventory) => boolean}[]} */
 const MODEL_SECTIONS = [
-  {
-    id: "background",
-    label: "Background removal",
-    match: (model) => model.id.startsWith("bg-remove:"),
-  },
   {
     id: "generation",
     label: "Image generation",

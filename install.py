@@ -739,7 +739,7 @@ def install_packages(py: Path, mode: str, torch_tag: str) -> None:
                 TORCH_INDEX["cpu"],
             ],
         )
-        # CPU onnxruntime for rembg / OCR helpers
+        # CPU ONNX Runtime for OCR helpers.
         pip_install(py, ["onnxruntime==1.22.0"])
 
     pip_install(
@@ -780,7 +780,6 @@ checks = [
         "from transformers import AutoModelForZeroShotObjectDetection, AutoProcessor",
         False,
     ),
-    ("rembg", "import rembg", False),
     ("onnxruntime", "import onnxruntime", False),
 ]
 failed = []
@@ -853,7 +852,7 @@ def verify_models() -> None:
     log("Model check complete.")
 
 
-def seed_default_model_downloads(py: Path, *, skip_rembg: bool = False) -> None:
+def seed_default_model_downloads(py: Path) -> None:
     """Schedule default models for the Electron model queue on first launch."""
     log("\nScheduling default model downloads for first Electron launch…")
     script = r"""
@@ -861,10 +860,10 @@ import sys
 sys.path.insert(0, sys.argv[1])
 from backend.tools.first_run_downloads import seed_first_run_downloads
 
-n = seed_first_run_downloads(skip_rembg=sys.argv[2] == "1")
+n = seed_first_run_downloads()
 print(f"  Scheduled {n} default model(s) for the model download queue.")
 """
-    run([str(py), "-c", script, str(ROOT), "1" if skip_rembg else "0"])
+    run([str(py), "-c", script, str(ROOT)])
 
 
 def write_runtime(

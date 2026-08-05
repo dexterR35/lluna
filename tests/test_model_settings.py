@@ -4,7 +4,6 @@ import pytest
 
 from backend.settings.metadata import SettingsLevel
 from backend.settings.model_schemas import (
-    BackgroundRemovalSettings,
     GenerateSettings,
     LowLightSettings,
     ObjectSelectionSettings,
@@ -22,7 +21,6 @@ from tests.fakes.hardware import CPU_ONLY, CUDA, DIRECTML, MPS, profile
         GenerateSettings(),
         ProPainterSettings(),
         STTNSettings(),
-        BackgroundRemovalSettings(),
         UpscaleSettings(),
         LowLightSettings(),
         ObjectSelectionSettings(),

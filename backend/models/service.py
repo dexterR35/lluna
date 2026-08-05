@@ -101,17 +101,15 @@ def _set_enabled_override(model_id: str, enabled: bool) -> None:
 
 
 def _variant_ids() -> list[str]:
-    from backend.tools.bg_remove_models import MODEL_CATALOG as background_models
     from backend.tools.generate_models import MODEL_CATALOG as generation_models
 
     return [
-        *(f"bg-remove:{item.mode.value}" for item in background_models),
         *(f"generate:{item.mode.value}" for item in generation_models),
     ]
 
 
 def known_model_ids() -> set[str]:
-    generic = set(MODEL_REGISTRY) - {"rembg"} - _GENERATION_REGISTRY_IDS
+    generic = set(MODEL_REGISTRY) - _GENERATION_REGISTRY_IDS
     dynamic = {
         record.manifest.id
         for record in _dynamic_records()
@@ -153,11 +151,6 @@ def _installed(model_id: str) -> bool:
     dynamic = _dynamic_record(model_id)
     if dynamic is not None:
         return dynamic.installed
-    if model_id.startswith("bg-remove:"):
-        from backend.tools.bg_remove_models import is_model_installed
-        from backend.tools.constant import BgRemoveMode
-
-        return is_model_installed(BgRemoveMode(model_id.removeprefix("bg-remove:")))
     if model_id.startswith("generate:"):
         from backend.tools.constant import GenerateMode
         from backend.tools.generate_models import is_model_installed
@@ -206,7 +199,7 @@ def list_models() -> list[dict]:
         item["state"] = "installed" if item["installed"] else "not_installed"
         item["enabled"] = _enabled(model_id)
         item["disk_usage_bytes"] = _disk_usage(Path(item["resolved_path"]))
-        lifecycle_managed = model_id.startswith(("bg-remove:", "generate:")) or model_id in {
+        lifecycle_managed = model_id.startswith("generate:") or model_id in {
             "realesrgan-x2",
             "realesrgan-x4",
             "supir",
@@ -232,8 +225,6 @@ def _builtin_platform_fields(model_id: str, item: dict) -> dict:
     variant, capabilities = builtin_contract(model_id)
     if model_id.startswith("generate:"):
         task, adapter, profile = "text-to-image", "diffusers", "diffusers-torch"
-    elif model_id.startswith("bg-remove:"):
-        task, adapter, profile = "image-segmentation", "onnx", "onnx-runtime"
     elif model_id.startswith("realesrgan"):
         task, adapter, profile = "image-upscaling", "midgard-native", "midgard-native"
     elif model_id == "supir":
@@ -341,22 +332,6 @@ def _model_description(model_id: str) -> dict:
         item = asdict(MODEL_REGISTRY[model_id])
         item.update(resolved_path=str(supir_root()), setup=readiness())
         return item
-    if model_id.startswith("bg-remove:"):
-        from backend.tools.bg_remove_models import catalog_info, model_file_path
-        from backend.tools.constant import BgRemoveMode
-
-        mode = BgRemoveMode(model_id.removeprefix("bg-remove:"))
-        info = catalog_info(mode)
-        detail = (info.description if info else "").strip()
-        purpose = detail or (info.category if info else "Local model")
-        item = asdict(MODEL_REGISTRY["rembg"])
-        item.update(
-            id=model_id,
-            display_name=mode.value,
-            purpose=purpose,
-            resolved_path=str(model_file_path(mode)),
-        )
-        return item
     if model_id.startswith("generate:"):
         from backend.tools.constant import GenerateMode
         from backend.tools.generate_models import catalog_info, model_dir
@@ -402,10 +377,6 @@ def _enabled(model_id: str) -> bool:
 
         return dynamic.enabled and runtime_status(dynamic.manifest)["compatible"]
     settings = get_settings()
-    if model_id.startswith("bg-remove:"):
-        from backend.tools.bg_remove_models import get_enabled_values
-
-        return model_id.removeprefix("bg-remove:") in get_enabled_values()
     if model_id.startswith("generate:"):
         from backend.tools.generate_models import get_enabled_values
 
@@ -446,15 +417,6 @@ def _action(model_id: str, operation: str) -> None:
                 raise ValueError("This model is not ready to enable.")
             DynamicModelRegistry.instance().set_enabled(model_id, operation == "enable")
         return
-    if model_id.startswith("bg-remove:"):
-        from backend.tools.bg_remove_models import install_model, set_model_enabled, uninstall_model
-        from backend.tools.constant import BgRemoveMode
-
-        mode = BgRemoveMode(model_id.removeprefix("bg-remove:"))
-        {"install": install_model, "remove": uninstall_model}.get(
-            operation, lambda value: set_model_enabled(value, operation == "enable")
-        )(mode)
-        return
     if model_id.startswith("generate:"):
         from backend.tools.constant import GenerateMode
         from backend.tools.generate_models import install_model, set_model_enabled, uninstall_model
@@ -492,15 +454,6 @@ def _action(model_id: str, operation: str) -> None:
         from backend.tools.low_light_models import install_model, set_model_enabled, uninstall_model
 
         mode = LowLightMode.MIRNET_LOL
-        {"install": install_model, "remove": uninstall_model}.get(
-            operation, lambda value: set_model_enabled(value, operation == "enable")
-        )(mode)
-        return
-    if model_id == "rembg":
-        from backend.tools.bg_remove_models import install_model, set_model_enabled, uninstall_model
-        from backend.tools.constant import BgRemoveMode
-
-        mode = BgRemoveMode(settings.background_removal.mode)
         {"install": install_model, "remove": uninstall_model}.get(
             operation, lambda value: set_model_enabled(value, operation == "enable")
         )(mode)

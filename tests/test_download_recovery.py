@@ -43,7 +43,7 @@ def test_startup_recovery_clears_stale_cancel_and_keeps_retry_items(
     monkeypatch.setenv("MIDGARD_CONFIG_DIR", str(config_dir))
     (config_dir / "model_download_cancel.flag").write_text("1", encoding="utf-8")
     (config_dir / "pending_model_downloads.json").write_text(
-        '[{"kind":"bg_remove","key":"u2net"}]',
+        '[{"kind":"enhance","key":"RealESRGAN_x2plus"}]',
         encoding="utf-8",
     )
     registry = ModelDownloadRegistry()
@@ -51,6 +51,10 @@ def test_startup_recovery_clears_stale_cancel_and_keeps_retry_items(
 
     recovered = prepare_restart_pending()
 
-    assert [(item.kind, item.key) for item in recovered] == [("bg_remove", "u2net")]
+    assert [(item.kind, item.key) for item in recovered] == [
+        ("enhance", "RealESRGAN_x2plus")
+    ]
     assert not registry.is_cancelled()
-    assert [(item.kind, item.key) for item in registry.list_pending()] == [("bg_remove", "u2net")]
+    assert [(item.kind, item.key) for item in registry.list_pending()] == [
+        ("enhance", "RealESRGAN_x2plus")
+    ]

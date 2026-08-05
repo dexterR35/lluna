@@ -102,9 +102,9 @@ def test_image_queue_saves_lineage_names_and_requires_explicit_replace(monkeypat
         schema_id="midgard.input.images",
         parameters={"pathGrantIds": [item.grant_id for item in source_grants]},
     )
-    remove_background = WorkflowNode(
-        id="remove-background",
-        schema_id="midgard.image.remove_background",
+    low_light = WorkflowNode(
+        id="low-light",
+        schema_id="midgard.image.low_light",
         parameters={"model": "test"},
     )
     upscale = WorkflowNode(
@@ -121,16 +121,16 @@ def test_image_queue_saves_lineage_names_and_requires_explicit_replace(monkeypat
         },
     )
     workflow = WorkflowDocument(
-        nodes=[source, remove_background, upscale, save],
+        nodes=[source, low_light, upscale, save],
         edges=[
             WorkflowEdge(
                 source_node_id="load",
                 source_port_id="images",
-                target_node_id="remove-background",
+                target_node_id="low-light",
                 target_port_id="image",
             ),
             WorkflowEdge(
-                source_node_id="remove-background",
+                source_node_id="low-light",
                 source_port_id="image",
                 target_node_id="upscale",
                 target_port_id="image",
@@ -146,7 +146,7 @@ def test_image_queue_saves_lineage_names_and_requires_explicit_replace(monkeypat
 
     first_run = wait_for_run(manager, manager.start(workflow).run_id)
     assert first_run.status == "COMPLETED", first_run.error
-    expected = {"portrait_nobg_upscale.png", "product_nobg_upscale.png"}
+    expected = {"portrait_lowlight_upscale.png", "product_lowlight_upscale.png"}
     assert {item.name for item in destination.iterdir()} == expected
     assert len(first_run.nodes["save"].artifact_ids) == 2
     assert [item["status"] for item in first_run.nodes["save"].save_items] == [
@@ -405,8 +405,8 @@ def test_image_queue_maps_one_processor_over_ordered_artifacts(monkeypatch, tmp_
         parameters={"pathGrantIds": grant_ids},
     )
     remove = WorkflowNode(
-        id="remove",
-        schema_id="midgard.image.remove_background",
+        id="low-light",
+        schema_id="midgard.image.low_light",
         parameters={"model": "test"},
     )
     preview = WorkflowNode(id="preview", schema_id="midgard.output.preview_image")
@@ -416,11 +416,11 @@ def test_image_queue_maps_one_processor_over_ordered_artifacts(monkeypatch, tmp_
             WorkflowEdge(
                 source_node_id="load-many",
                 source_port_id="images",
-                target_node_id="remove",
+                target_node_id="low-light",
                 target_port_id="image",
             ),
             WorkflowEdge(
-                source_node_id="remove",
+                source_node_id="low-light",
                 source_port_id="image",
                 target_node_id="preview",
                 target_port_id="image",
@@ -430,13 +430,13 @@ def test_image_queue_maps_one_processor_over_ordered_artifacts(monkeypatch, tmp_
 
     run = _wait_for_run(manager, manager.start(workflow).run_id)
     assert run.status == "COMPLETED", run.error
-    assert len(run.nodes["remove"].artifact_ids) == 3
+    assert len(run.nodes["low-light"].artifact_ids) == 3
     outputs = [
         ArtifactStore.instance().get(artifact_id)
-        for artifact_id in run.nodes["remove"].artifact_ids
+        for artifact_id in run.nodes["low-light"].artifact_ids
     ]
     assert [artifact.width for artifact in outputs] == [3, 5, 7]
-    assert run.nodes["preview"].artifact_ids == run.nodes["remove"].artifact_ids
+    assert run.nodes["preview"].artifact_ids == run.nodes["low-light"].artifact_ids
 
 
 def test_composite_broadcasts_one_background_across_foreground_queue(tmp_path):

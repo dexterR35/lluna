@@ -286,7 +286,7 @@ def test_pooch_byte_adapter_updates_active_metrics(monkeypatch) -> None:
         assert release.wait(timeout=2)
         bar.close()
 
-    queue.enqueue("bg_remove", "birefnet-general", work, lambda _err: None)
+    queue.enqueue("enhance", "RealESRGAN_x2plus", work, lambda _err: None)
     assert reported.wait(timeout=2)
     job = queue.jobs(include_finished=False)[0]
     assert job.progress == 38

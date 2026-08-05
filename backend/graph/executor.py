@@ -882,7 +882,6 @@ class RunManager:
     @staticmethod
     def _operation_suffix(schema_id: str) -> str:
         return {
-            "midgard.image.remove_background": "nobg",
             "midgard.image.remove_text": "nosub",
             "midgard.video.remove_text": "nosub",
             "midgard.image.upscale": "upscale",
@@ -1256,7 +1255,6 @@ class RunManager:
             "enhance": JobType.ENHANCE,
             "low_light": JobType.LOW_LIGHT,
             "generate": JobType.GENERATE,
-            "bg_remove": JobType.BG_REMOVE,
             "lama_retouch": JobType.LAMA_RETOUCH,
             "select_subject": JobType.SELECT_SUBJECT,
             "subtitle": JobType.SUBTITLE,
@@ -1397,13 +1395,6 @@ class RunManager:
                 payload["negative_prompt"] = str(params["negativePrompt"]).strip()
             if capabilities.get("seed") is True and int(params.get("seed", -1)) >= 0:
                 payload["seed"] = int(params["seed"])
-        elif adapter == "bg_remove":
-            payload.update(
-                input_path=artifact_path("image"),
-                mode=params.get("model") or settings.background_removal.mode,
-            )
-            if artifact_path("protectMask"):
-                payload["protect_mask_path"] = artifact_path("protectMask")
         elif adapter == "lama_retouch":
             from backend.models.paths import SubtitleModelPaths, prepare_bundled_subtitle_models
 
