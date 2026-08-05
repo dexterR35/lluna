@@ -807,6 +807,7 @@ def _job_birefnet(run_id, payload, cancel_event, on_progress, heartbeat_log, evt
         "feather": int(payload.get("feather") or 0),
         "output_mode": str(payload.get("output_mode") or "transparent"),
         "background_color": str(payload.get("background_color") or "#ffffff"),
+        "model_path": payload.get("model_path"),
     }
     if not input_path:
         _emit(evt_queue, error(run_id, "BiRefNet input is missing."))
@@ -824,7 +825,14 @@ def _job_birefnet(run_id, payload, cancel_event, on_progress, heartbeat_log, evt
                 **params,
             )
         else:
-            process_image(input_path, output_path, model_id=model_id, **params)
+            process_image(
+                input_path,
+                output_path,
+                model_id=model_id,
+                mask_output_path=f"{output_path}.mask.png",
+                alpha_output_path=f"{output_path}.alpha.png",
+                **params,
+            )
             on_progress(run_id, 95)
     except RuntimeError as exc:
         if str(exc) == "__cancelled__":

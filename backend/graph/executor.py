@@ -93,6 +93,19 @@ def _artifact_values(value: Any) -> list[ArtifactRecord]:
     return []
 
 
+def _primary_artifact_values(value: Any) -> list[ArtifactRecord]:
+    """Return the visual/main output used by the node preview and status UI."""
+    if isinstance(value, dict):
+        for port_id in ("image", "video", "output"):
+            if port_id in value:
+                return _primary_artifact_values(value[port_id])
+        first = next(iter(value.values()), None)
+        return _primary_artifact_values(first)
+    if isinstance(value, (list, tuple)):
+        return [item for entry in value for item in _primary_artifact_values(entry)]
+    return [value] if isinstance(value, ArtifactRecord) else []
+
+
 def _stable_value_hash(value: Any) -> str:
     encoded = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode(
         "utf-8"
@@ -668,7 +681,7 @@ class RunManager:
         else:
             result = self._run_inference(control, node, inputs, input_artifacts, cache_key)
         self._node_state(control, node.id, "SUCCEEDED", 100)
-        artifact_ids = [artifact.artifact_id for artifact in _artifact_values(result)]
+        artifact_ids = [artifact.artifact_id for artifact in _primary_artifact_values(result)]
         with control.lock:
             control.snapshot.nodes[node.id].artifact_ids = artifact_ids
         self._events.publish(
@@ -681,7 +694,7 @@ class RunManager:
         control: _RunControl,
         node: WorkflowNode,
         inputs: dict[str, Any],
-    ) -> list[ArtifactRecord]:
+    ) -> Any:
         """Map a batch-capable node over ordered inputs using ZIP semantics."""
         lists = {
             name: list(value) for name, value in inputs.items() if isinstance(value, (list, tuple))
@@ -695,7 +708,7 @@ class RunManager:
                 "Connected image queues must contain the same number of items.",
             )
         count = lengths.pop()
-        outputs: list[ArtifactRecord] = []
+        outputs: list[Any] = []
         definition = NODE_REGISTRY[node.schema_id]
         for index in range(count):
             self._wait_if_paused(control)
@@ -781,6 +794,9 @@ class RunManager:
                     },
                 )
             outputs.append(artifact)
+        if outputs and all(isinstance(item, dict) for item in outputs):
+            keys = tuple(outputs[0].keys())
+            return {key: [item[key] for item in outputs] for key in keys}
         return outputs
 
     def _resolve_grant(self, grant_id: str, *, mode: str, empty_message: str) -> Path:
@@ -1134,7 +1150,7 @@ class RunManager:
         progress_span: float = 100,
         item_index: int = 0,
         item_count: int = 1,
-    ) -> ArtifactRecord:
+    ) -> Any:
         foreground = inputs.get("foreground")
         background = inputs.get("background")
         if not isinstance(foreground, ArtifactRecord) or not isinstance(background, ArtifactRecord):
@@ -1582,6 +1598,25 @@ class RunManager:
             inputs=input_artifacts,
             parameters_hash=cache_key,
         )
+        result: Any = artifact
+        if node.schema_id == "midgard.image.remove_background":
+            auxiliary: dict[str, ArtifactRecord] = {}
+            for port_id, suffix in (("mask", ".mask.png"), ("alpha", ".alpha.png")):
+                auxiliary_path = Path(f"{final_path}{suffix}")
+                if not auxiliary_path.is_file():
+                    continue
+                auxiliary[port_id] = self._artifacts.commit(
+                    auxiliary_path,
+                    run_id=run_id,
+                    node_id=node.id,
+                    schema_id=node.schema_id,
+                    inputs=input_artifacts,
+                    media_type="image/png",
+                    parameters_hash=cache_key,
+                )
+                auxiliary_path.unlink(missing_ok=True)
+            if auxiliary:
+                result = {"image": artifact, **auxiliary}
         Path(output_path).unlink(missing_ok=True)
         self._events.publish(
             "artifact.created",
@@ -1593,7 +1628,7 @@ class RunManager:
                 "itemCount": item_count,
             },
         )
-        return artifact
+        return result
 
     def _fake_inference(
         self,

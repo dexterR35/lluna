@@ -210,6 +210,12 @@ color. Transparent images are saved as PNG; transparent video is encoded as a
 MOV with an alpha channel, while solid-color video is encoded as MP4 and keeps
 source audio when FFmpeg can mux it.
 
+The image node also exposes separate **Mask** and **Alpha** outputs. The mask is
+the model's raw grayscale segmentation result; alpha is the thresholded and
+optionally feathered channel used by the transparent cut-out. Connect them to
+**Preview Mask** or **Preview Alpha** to inspect them, or to downstream masking
+nodes.
+
 Fine-tuned or privately trained BiRefNet checkpoints can be added through
 **Settings → Models → Add model → Local folder**. Select the BiRefNet adapter,
 review the segmentation capability contract, enable remote-code execution only

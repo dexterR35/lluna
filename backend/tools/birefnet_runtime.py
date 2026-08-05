@@ -150,9 +150,18 @@ def process_image(
     background_color: str = "#ffffff",
     model_path: str | None = None,
     precision: str = "auto",
+    mask_output_path: str | None = None,
+    alpha_output_path: str | None = None,
 ) -> None:
     source = Image.open(input_path).convert("RGB")
-    mask = _alpha_mask(_predict_mask(model_id, source, resolution, model_path, precision), threshold, feather)
+    raw_mask = _predict_mask(model_id, source, resolution, model_path, precision)
+    mask = _alpha_mask(raw_mask, threshold, feather)
+    if mask_output_path:
+        Path(mask_output_path).parent.mkdir(parents=True, exist_ok=True)
+        raw_mask.save(mask_output_path, format="PNG")
+    if alpha_output_path:
+        Path(alpha_output_path).parent.mkdir(parents=True, exist_ok=True)
+        mask.save(alpha_output_path, format="PNG")
     if output_mode == "transparent":
         result = source.convert("RGBA")
         result.putalpha(mask)
