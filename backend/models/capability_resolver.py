@@ -125,6 +125,9 @@ def builtin_contract(model_id: str) -> tuple[ModelVariant, ModelCapabilities]:
             tile_size=NumberCapability(512, 128, 1024),
         )
     task = (
+        "image-segmentation"
+        if model_id.startswith("birefnet")
+        else
         "image-restoration"
         if model_id == "mirnet"
         else "image-segmentation"

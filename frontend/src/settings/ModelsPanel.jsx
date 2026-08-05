@@ -146,6 +146,11 @@ const MODEL_SECTIONS = [
       model.task === "object-detection",
   },
   {
+    id: "background_removal",
+    label: "Background removal",
+    match: (model) => model.id.startsWith("birefnet") || model.task === "image-segmentation",
+  },
+  {
     id: "subtitle",
     label: "Subtitle & text",
     match: (model) =>
@@ -767,6 +772,13 @@ export function ModelsPanel() {
             checked={Boolean(settings.models.allow_pickle_weights)}
             onChange={(value) =>
               void updateSettings({ models: { allow_pickle_weights: value } })
+            }
+          />
+          <Switch
+            label="Allow trusted remote model code"
+            checked={Boolean(settings.models.allow_remote_code)}
+            onChange={(value) =>
+              void updateSettings({ models: { allow_remote_code: value } })
             }
           />
         </div>

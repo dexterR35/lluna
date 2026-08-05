@@ -1258,11 +1258,20 @@ class RunManager:
             "lama_retouch": JobType.LAMA_RETOUCH,
             "select_subject": JobType.SELECT_SUBJECT,
             "subtitle": JobType.SUBTITLE,
+            "birefnet": JobType.BIREFNET,
         }
         job_type = job_types.get(str(adapter))
         if job_type is None:
             raise ExecutionFailure("INTERNAL", f"No adapter for {node.schema_id}")
-        output_suffix = ".mp4" if "video" in node.schema_id else ".png"
+        output_suffix = (
+            ".mov"
+            if adapter == "birefnet"
+            and "video" in node.schema_id
+            and str(node.parameters.get("outputMode", "transparent")) == "transparent"
+            else ".mp4"
+            if "video" in node.schema_id
+            else ".png"
+        )
         fd, output_raw = tempfile.mkstemp(prefix="midgard-node-", suffix=output_suffix)
         os.close(fd)
         Path(output_raw).unlink(missing_ok=True)
@@ -1422,6 +1431,44 @@ class RunManager:
                 video_path=source,
                 options=params.get("options") or {},
                 config=settings.subtitle.to_payload(),
+            )
+        elif adapter == "birefnet":
+            model_value = str(params.get("model") or "BiRefNet")
+            model_parameter = next(
+                item for item in get_node(node.schema_id).parameters if item.id == "model"
+            )
+            selected_option = next(
+                (item for item in model_parameter.options if item.get("value") == model_value),
+                None,
+            )
+            model_id = str((selected_option or {}).get("modelId") or "birefnet")
+            model_path = None
+            if model_id not in {
+                "birefnet",
+                "birefnet-dynamic",
+                "birefnet-hr",
+                "birefnet-hr-matting",
+                "birefnet-lite-2k",
+                "birefnet-matting",
+            }:
+                try:
+                    from backend.models.dynamic_registry import DynamicModelRegistry
+
+                    model_path = str(DynamicModelRegistry.instance().get(model_id).path)
+                except (KeyError, OSError, ValueError) as exc:
+                    raise ExecutionFailure("MODEL_UNAVAILABLE", f"Custom BiRefNet model is unavailable: {model_id}") from exc
+            input_name = "video" if "video" in node.schema_id else "image"
+            payload.update(
+                input_path=artifact_path(input_name),
+                media_type="video" if input_name == "video" else "image",
+                model_id=model_id,
+                model_path=model_path,
+                resolution=int(params.get("resolution") or 1024),
+                precision=str(params.get("precision") or "auto"),
+                threshold=float(params.get("threshold", 0.5)),
+                feather=int(params.get("feather") or 0),
+                output_mode=str(params.get("outputMode") or "transparent"),
+                background_color=str(params.get("backgroundColor") or "#ffffff"),
             )
         return self._invoke_worker(
             control,

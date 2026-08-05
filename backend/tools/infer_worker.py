@@ -111,6 +111,13 @@ def _release_all_except(keep: Optional[str] = None) -> None:
             release_select_object_models(blocking=True, timeout=5.0)
         except Exception:
             traceback.print_exc()
+    if keep != JobType.BIREFNET.value:
+        try:
+            from backend.tools.birefnet_runtime import release_models
+
+            release_models()
+        except Exception:
+            traceback.print_exc()
     empty_cuda_cache()
 
 
@@ -205,6 +212,15 @@ def infer_worker_main(cmd_queue, evt_queue, hardware_accel: bool = True) -> None
                 )
             elif job_type == JobType.SUBTITLE.value:
                 _job_subtitle(
+                    run_id,
+                    payload,
+                    cancel_event,
+                    on_progress,
+                    heartbeat_log,
+                    job_evt_queue,
+                )
+            elif job_type == JobType.BIREFNET.value:
+                _job_birefnet(
                     run_id,
                     payload,
                     cancel_event,
@@ -774,6 +790,53 @@ def _job_select_subject(run_id, payload, on_progress, heartbeat_log, evt_queue) 
         _emit(evt_queue, error(run_id, str(e)))
         return
 
+    on_progress(run_id, 100)
+    _emit(evt_queue, result(run_id, output_path))
+
+
+def _job_birefnet(run_id, payload, cancel_event, on_progress, heartbeat_log, evt_queue) -> None:
+    from backend.tools.birefnet_runtime import process_image, process_video
+
+    model_id = str(payload.get("model_id") or "birefnet")
+    input_path = str(payload.get("input_path") or "")
+    output_path = str(payload.get("output_path") or _temp_png("birefnet"))
+    params = {
+        "resolution": int(payload.get("resolution") or 1024),
+        "precision": str(payload.get("precision") or "auto"),
+        "threshold": float(payload.get("threshold", 0.5)),
+        "feather": int(payload.get("feather") or 0),
+        "output_mode": str(payload.get("output_mode") or "transparent"),
+        "background_color": str(payload.get("background_color") or "#ffffff"),
+    }
+    if not input_path:
+        _emit(evt_queue, error(run_id, "BiRefNet input is missing."))
+        return
+    heartbeat_log(run_id, f"BiRefNet model: {model_id}")
+    on_progress(run_id, 5)
+    try:
+        if payload.get("media_type") == "video":
+            process_video(
+                input_path,
+                output_path,
+                model_id=model_id,
+                progress=lambda value: on_progress(run_id, 10 + int(value * 0.85)),
+                cancel_event=cancel_event,
+                **params,
+            )
+        else:
+            process_image(input_path, output_path, model_id=model_id, **params)
+            on_progress(run_id, 95)
+    except RuntimeError as exc:
+        if str(exc) == "__cancelled__":
+            _emit(evt_queue, error(run_id, "__cancelled__"))
+            return
+        traceback.print_exc()
+        _emit(evt_queue, error(run_id, str(exc)))
+        return
+    except Exception as exc:
+        traceback.print_exc()
+        _emit(evt_queue, error(run_id, str(exc)))
+        return
     on_progress(run_id, 100)
     _emit(evt_queue, result(run_id, output_path))
 

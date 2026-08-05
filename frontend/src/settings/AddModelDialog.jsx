@@ -40,6 +40,7 @@ const TASKS = [
 const ADAPTERS = [
   ["diffusers", "diffusers-torch", "Diffusers + PyTorch"],
   ["transformers", "transformers-torch", "Transformers + PyTorch"],
+  ["birefnet", "birefnet-torch", "BiRefNet + PyTorch"],
   ["paddle", "paddle", "Paddle"],
 ];
 
@@ -139,6 +140,10 @@ export function AddModelDialog({ open, onClose }) {
       runtime: {
         ...(current?.runtime || {}),
         profile: selected[1],
+      },
+      security: {
+        ...(current?.security || {}),
+        trustRemoteCode: selected[0] === "birefnet",
       },
       needsConfiguration: true,
     }));

@@ -149,8 +149,24 @@ class TransformersAdapter(RuntimeAdapter):
         return result
 
 
+class BiRefNetAdapter(RuntimeAdapter):
+    """Manifest-backed custom BiRefNet checkpoints use the native cut-out runtime."""
+
+    id = "birefnet"
+
+    def load(self, record: DynamicModelRecord) -> Any:
+        # Native workflow execution owns the shared worker and loads by path.
+        # Keep this adapter as a capability marker for the model platform.
+        if not (record.path / "config.json").is_file():
+            raise AdapterError("A BiRefNet model folder must contain config.json.")
+        return str(record.path)
+
+    def run(self, loaded: Any, inputs: dict[str, Any], *, progress: Progress = None, cancel_event: CancelEvent = None) -> Any:
+        raise AdapterError("Custom BiRefNet checkpoints run through the Remove Background workflow nodes.")
+
+
 ADAPTERS: dict[str, RuntimeAdapter] = {
-    adapter.id: adapter for adapter in (DiffusersAdapter(), TransformersAdapter())
+    adapter.id: adapter for adapter in (DiffusersAdapter(), TransformersAdapter(), BiRefNetAdapter())
 }
 
 

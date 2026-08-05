@@ -69,6 +69,20 @@ RUNTIME_PROFILES: dict[str, RuntimeProfile] = {
             description="Curated Transformers vision, language, and audio models.",
         ),
         RuntimeProfile(
+            "birefnet-torch",
+            "BiRefNet + PyTorch",
+            "birefnet",
+            ("torch", "torchvision", "transformers", "timm", "kornia", "einops"),
+            (
+                "transformers>=5.5.0",
+                "timm>=1.0.0",
+                "kornia>=0.7.0",
+                "einops>=0.8.0",
+            ),
+            ("cpu", "cuda", "mps"),
+            description="Official BiRefNet image/video segmentation and matting runtime.",
+        ),
+        RuntimeProfile(
             "paddle",
             "Paddle",
             "paddle",

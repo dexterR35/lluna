@@ -51,6 +51,14 @@ UPSCALE_MODELS = [
         "Professional photo-realistic restoration with quality/fidelity tuning (CUDA).",
     ),
 ]
+BIREFNET_MODELS = [
+    option("BiRefNet", "BiRefNet · general", "birefnet", "Official general-purpose model."),
+    option("BiRefNet_dynamic", "BiRefNet · dynamic", "birefnet-dynamic", "Better across mixed image resolutions."),
+    option("BiRefNet_HR", "BiRefNet · HR", "birefnet-hr", "High-resolution background removal."),
+    option("BiRefNet_HR-matting", "BiRefNet · HR matting", "birefnet-hr-matting", "High-resolution soft-alpha matting."),
+    option("BiRefNet_lite-2K", "BiRefNet · Lite 2K", "birefnet-lite-2k", "Lower-memory 2K model."),
+    option("BiRefNet-matting", "BiRefNet · matting", "birefnet-matting", "Trimap-free soft-alpha matting."),
+]
 SUPIR_POSITIVE_PROMPT = (
     "Cinematic, High Contrast, highly detailed, taken using a Canon EOS R camera, "
     "hyper detailed photo - realistic maximum detail, 32k, Color Grading, ultra HD, "
@@ -571,6 +579,41 @@ _NODES = [
         adapter="enhance",
     ),
     node(
+        "midgard.image.remove_background",
+        "Remove Background",
+        "Image/Remove",
+        "Creates a transparent foreground using an installed BiRefNet variant.",
+        icon="layers",
+        inputs=[port("image", "Image queue", PortType.IMAGE, required=True, multiple=True)],
+        outputs=[port("image", "Transparent images", PortType.IMAGE, multiple=True)],
+        parameters=[
+            parameter("model", "Model", "model", "BiRefNet", options=BIREFNET_MODELS),
+            parameter("resolution", "Inference resolution", "integer", 1024, minimum=256, maximum=2304, step=32),
+            parameter(
+                "precision", "Inference precision", "select", "auto",
+                options=[
+                    {"value": "auto", "label": "Auto"},
+                    {"value": "fp16", "label": "FP16 · faster/lower VRAM"},
+                    {"value": "fp32", "label": "FP32 · maximum compatibility"},
+                ],
+            ),
+            parameter("threshold", "Alpha threshold", "number", 0.5, minimum=0, maximum=1, step=0.01),
+            parameter("feather", "Edge feather", "integer", 0, minimum=0, maximum=32, step=1),
+            parameter(
+                "outputMode", "Output", "select", "transparent",
+                options=[
+                    {"value": "transparent", "label": "Transparent PNG"},
+                    {"value": "white", "label": "White background"},
+                    {"value": "black", "label": "Black background"},
+                    {"value": "custom", "label": "Custom color"},
+                ],
+            ),
+            parameter("backgroundColor", "Custom background", "text", "#ffffff"),
+        ],
+        supports_preview=True,
+        adapter="birefnet",
+    ),
+    node(
         "midgard.image.low_light",
         "Fix Low Light",
         "Image/Enhance",
@@ -689,6 +732,41 @@ _NODES = [
         adapter="subtitle",
     ),
     node(
+        "midgard.video.remove_background",
+        "Remove Background from Video",
+        "Video/Remove",
+        "Runs BiRefNet on every frame, preserving the source frame rate and audio when possible.",
+        icon="layers",
+        inputs=[port("video", "Video", PortType.VIDEO, required=True)],
+        outputs=[port("video", "Foreground video", PortType.VIDEO)],
+        parameters=[
+            parameter("model", "Model", "model", "BiRefNet", options=BIREFNET_MODELS),
+            parameter("resolution", "Inference resolution", "integer", 1024, minimum=256, maximum=2304, step=32),
+            parameter(
+                "precision", "Inference precision", "select", "auto",
+                options=[
+                    {"value": "auto", "label": "Auto"},
+                    {"value": "fp16", "label": "FP16 · faster/lower VRAM"},
+                    {"value": "fp32", "label": "FP32 · maximum compatibility"},
+                ],
+            ),
+            parameter("threshold", "Alpha threshold", "number", 0.5, minimum=0, maximum=1, step=0.01),
+            parameter("feather", "Edge feather", "integer", 0, minimum=0, maximum=32, step=1),
+            parameter(
+                "outputMode", "Output", "select", "transparent",
+                options=[
+                    {"value": "transparent", "label": "Transparent MOV"},
+                    {"value": "white", "label": "White background MP4"},
+                    {"value": "black", "label": "Black background MP4"},
+                    {"value": "custom", "label": "Custom color MP4"},
+                ],
+            ),
+            parameter("backgroundColor", "Custom background", "text", "#ffffff"),
+        ],
+        supports_preview=True,
+        adapter="birefnet",
+    ),
+    node(
         "midgard.output.preview_image",
         "Preview Image",
         "Output/Preview",
@@ -803,6 +881,36 @@ def list_nodes() -> list[NodeDefinition]:
             generate = next(item for item in values if item.schema_id == "midgard.generate.image")
             model_parameter = next(item for item in generate.parameters if item.id == "model")
             model_parameter.options.extend(custom)
+    except (ImportError, OSError, ValueError):
+        pass
+    try:
+        from backend.models.dynamic_registry import DynamicModelRegistry
+        from backend.models.runtime_profiles import runtime_status
+
+        custom_records = [
+            record
+            for record in DynamicModelRegistry.instance().records()
+            if record.installed
+            and record.enabled
+            and record.manifest.is_configured()
+            and runtime_status(record.manifest)["compatible"]
+            and record.manifest.adapter == "birefnet"
+            and record.manifest.task == "image-segmentation"
+        ]
+        if custom_records:
+            custom_options = [
+                option(
+                    f"custom:{record.manifest.id}",
+                    record.manifest.name,
+                    record.manifest.id,
+                    record.manifest.description or "Custom BiRefNet checkpoint.",
+                )
+                for record in custom_records
+            ]
+            for schema_id in ("midgard.image.remove_background", "midgard.video.remove_background"):
+                definition = next(item for item in values if item.schema_id == schema_id)
+                model_parameter = next(item for item in definition.parameters if item.id == "model")
+                model_parameter.options.extend(custom_options)
     except (ImportError, OSError, ValueError):
         pass
     return values

@@ -25,6 +25,12 @@ def test_required_model_inventory_is_unique() -> None:
         "flux2-dev",
         "flux2-klein-9b-fp8",
         "qwen-image",
+        "birefnet",
+        "birefnet-dynamic",
+        "birefnet-hr",
+        "birefnet-hr-matting",
+        "birefnet-lite-2k",
+        "birefnet-matting",
     }
     assert required == set(MODEL_REGISTRY)
     assert all(model.source and model.license for model in MODEL_REGISTRY.values())

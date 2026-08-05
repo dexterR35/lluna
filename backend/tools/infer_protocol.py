@@ -18,6 +18,7 @@ class JobType(str, Enum):
     LAMA_RETOUCH = "lama_retouch"
     SELECT_SUBJECT = "select_subject"
     SUBTITLE = "subtitle"
+    BIREFNET = "birefnet"
 
 
 @unique

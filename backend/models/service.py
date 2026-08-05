@@ -16,6 +16,14 @@ from backend.models.registry import MODEL_REGISTRY
 from backend.tools.model_download_queue import ModelDownloadQueue
 
 _GENERATION_REGISTRY_IDS = {"flux", "flux2-dev", "flux2-klein-9b-fp8", "qwen-image"}
+_BIREFNET_IDS = {
+    "birefnet",
+    "birefnet-dynamic",
+    "birefnet-hr",
+    "birefnet-hr-matting",
+    "birefnet-lite-2k",
+    "birefnet-matting",
+}
 _STATE_LOCK = threading.RLock()
 _QUEUE_EVENT_LOCK = threading.Lock()
 _QUEUE_EVENT_SOURCE: ModelDownloadQueue | None = None
@@ -180,6 +188,10 @@ def _installed(model_id: str) -> bool:
         from backend.tools.supir_models import is_model_installed
 
         return is_model_installed()
+    if model_id in _BIREFNET_IDS:
+        from backend.tools.birefnet_models import is_model_installed
+
+        return is_model_installed(model_id)
     path = _model_path(metadata.local_path)
     if metadata.expected_files:
         return all(
@@ -206,7 +218,7 @@ def list_models() -> list[dict]:
             "mirnet",
             "sam2",
             "grounding-dino",
-        }
+        } | _BIREFNET_IDS
         item["can_install"] = lifecycle_managed
         item["can_uninstall"] = lifecycle_managed
         item["can_toggle"] = True
@@ -229,6 +241,8 @@ def _builtin_platform_fields(model_id: str, item: dict) -> dict:
         task, adapter, profile = "image-upscaling", "midgard-native", "midgard-native"
     elif model_id == "supir":
         task, adapter, profile = "image-upscaling", "supir", "supir-python"
+    elif model_id in _BIREFNET_IDS:
+        task, adapter, profile = "image-segmentation", "birefnet", "birefnet-torch"
     elif model_id == "mirnet":
         task, adapter, profile = "image-restoration", "midgard-native", "midgard-native"
     elif model_id == "sam2":
@@ -250,7 +264,14 @@ def _builtin_platform_fields(model_id: str, item: dict) -> dict:
     runtime_reasons: list[str] = []
     runtime_warnings: list[str] = []
     runtime_isolated = False
-    if model_id == "supir":
+    if model_id in _BIREFNET_IDS:
+        runtime_packages = [
+            "transformers>=5.5.0",
+            "timm>=1.0.0",
+            "kornia>=0.7.0",
+            "einops>=0.8.0",
+        ]
+    elif model_id == "supir":
         from backend.hardware.detector import get_hardware_profile
         from backend.hardware.policy import select_execution_policy
         from backend.tools.supir_models import SUPIR_PACKAGES
@@ -298,7 +319,7 @@ def _builtin_platform_fields(model_id: str, item: dict) -> dict:
             "minimumDiskMb": (int(item.get("expected_size_bytes", 0) or 0) // (1024 * 1024)),
         },
         "security": {
-            "trustRemoteCode": False,
+            "trustRemoteCode": model_id in _BIREFNET_IDS,
             "preferSafetensors": model_id != "supir",
             "allowPickle": model_id == "supir",
         },
@@ -434,6 +455,22 @@ def _action(model_id: str, operation: str) -> None:
         {"install": install_model, "remove": uninstall_model}.get(
             operation, lambda value: set_model_enabled(value, operation == "enable")
         )(mode)
+        return
+    if model_id in _BIREFNET_IDS:
+        from backend.tools.birefnet_models import discard_partial, install_model
+
+        if operation == "install":
+            install_model(model_id)
+            _set_enabled_override(model_id, True)
+        elif operation == "remove":
+            discard_partial(model_id)
+            _set_enabled_override(model_id, False)
+        elif operation == "enable":
+            if not _installed(model_id):
+                raise ValueError("BiRefNet is not installed.")
+            _set_enabled_override(model_id, True)
+        elif operation == "disable":
+            _set_enabled_override(model_id, False)
         return
     if model_id == "supir":
         from backend.tools.supir_models import install_model, uninstall_model

@@ -22,6 +22,7 @@ MODEL_FILE_EXTENSIONS = {
 SUPPORTED_ADAPTERS = {
     "diffusers",
     "transformers",
+    "birefnet",
     "paddle",
     "midgard-native",
     "supir",

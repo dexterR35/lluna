@@ -154,6 +154,7 @@ Everything below runs **locally**. Check each license before use ([third-party n
 | **Low light** | MIRNet | Brighten / clean dark shots |
 | **Generation** | FLUX.2 Klein, FLUX.2 Dev, Qwen-Image | Text → image (needs VRAM + disk) |
 | **Object selection** | SAM2, Grounding DINO | Point / text-driven masks |
+| **Background removal** | BiRefNet, BiRefNet Dynamic, HR, Lite-2K, and matting variants | Transparent images and foreground video |
 
 Install only what you need. One model downloads at a time; the queue is in **Activity → Downloads**.
 
@@ -199,6 +200,22 @@ files are never installed into Midgard's main environment. See
 **Output** — Preview Image / Video, Save Image / Video  
 
 If a node’s model list is empty: install the model, turn it **Enabled**, then reopen the node options.
+
+### BiRefNet background removal
+
+BiRefNet variants are installed from **Settings → Models**. The image and video
+**Remove Background** nodes expose model choice, inference resolution, alpha
+threshold, edge feathering, transparent/solid output, and custom background
+color. Transparent images are saved as PNG; transparent video is encoded as a
+MOV with an alpha channel, while solid-color video is encoded as MP4 and keeps
+source audio when FFmpeg can mux it.
+
+Fine-tuned or privately trained BiRefNet checkpoints can be added through
+**Settings → Models → Add model → Local folder**. Select the BiRefNet adapter,
+review the segmentation capability contract, enable remote-code execution only
+for a checkpoint you trust, and then select the installed custom checkpoint in
+the Remove Background node. The upstream project’s training layout (`im` and
+`gt` folders) and PyTorch 2.5+ training requirements remain applicable.
 
 ---
 

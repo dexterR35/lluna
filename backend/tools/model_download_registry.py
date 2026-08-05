@@ -20,6 +20,7 @@ KIND_ENHANCE = "enhance"
 KIND_LOW_LIGHT = "low_light"
 KIND_GENERATE = "generate"
 KIND_SELECT_OBJECT = "select_object"
+KIND_BIREFNET = "birefnet"
 _progress_context = threading.local()
 
 
@@ -251,6 +252,10 @@ def discard_partial(kind: str, key: str) -> None:
         from backend.tools import select_object_models as m
 
         m.discard_pair_partial(SelectObjectPairId(key))
+    elif kind == KIND_BIREFNET:
+        from backend.tools import birefnet_models as m
+
+        m.discard_partial(key)
     else:
         raise ValueError(f"Unknown download kind: {kind}")
 
