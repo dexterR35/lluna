@@ -30,6 +30,15 @@ _SUPIR_LLAVA_FP16_EXTRA_MB = 8000.0  # automatic captioning at fp16 (~20GB total
 _SUPIR_LLAVA_8BIT_EXTRA_MB = 4000.0  # automatic captioning, 8-bit quantized
 _SEEDVR_MINIMUM_VRAM_MB = {"seedvr2-3b": 24576.0, "seedvr2-7b": 49152.0}
 
+# BiRefNet (a Swin-transformer segmentation model) processes every image at a
+# fixed square `resolution` regardless of the source image's native size, so
+# VRAM scales with that inference resolution, not the input file's megapixels
+# - unlike LAMA/enhance above. Applies to every BiRefNet variant, including
+# custom ones added later, since the architecture (and this cost curve) is
+# shared across variants; only the resolution parameter varies.
+_BIREFNET_WEIGHTS_MB = 800.0
+_BIREFNET_PER_MPX_MB = 600.0
+
 
 class VramBudgetError(RuntimeError):
     """Job cannot fit in available VRAM (or size caps)."""
@@ -134,6 +143,23 @@ def preflight_lama(h: int, w: int) -> GenericBudget:
         raise VramBudgetError(
             f"Not enough GPU memory for LAMA retouch "
             f"(need ~{_with_headroom(est):.0f} MB free, have {free:.0f} MB)."
+        )
+    return GenericBudget(estimated_mb=est, free_mb=free)
+
+
+def preflight_birefnet(resolution: int, *, precision: str = "auto") -> GenericBudget:
+    if not _has_cuda_budget():
+        return GenericBudget(estimated_mb=0.0, free_mb=0.0)
+    free, _ = _free_total_mb()
+    side = max(64, int(resolution))
+    mpx = (side * side) / 1_000_000.0
+    scale = 1.0 if precision == "fp32" else 0.6  # "auto" resolves to fp16 on CUDA
+    est = (_BIREFNET_WEIGHTS_MB + _BIREFNET_PER_MPX_MB * mpx) * scale
+    if _with_headroom(est) > free:
+        raise VramBudgetError(
+            f"Not enough GPU memory for Remove Background "
+            f"(need ~{_with_headroom(est):.0f} MB free, have {free:.0f} MB). "
+            f"Lower Inference resolution or free up GPU memory."
         )
     return GenericBudget(estimated_mb=est, free_mb=free)
 

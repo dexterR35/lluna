@@ -359,6 +359,8 @@ export interface NodeRunState {
   artifactIds?: string[];
   completedAt?: string;
   saveItems?: SaveProgressItem[];
+  /** Live mid-generation preview frame as a data: URL, cleared on the next run start. */
+  previewImage?: string | null;
 }
 
 export interface RunSnapshot {

@@ -250,6 +250,7 @@ function LlunaNodeComponent({ id, data, selected }) {
   const HeaderIcon = resolveNodeIcon(definition.icon);
   const accent = resolveCategoryColor(definition.category);
   const busy = status === "RUNNING" || status === "QUEUED";
+  const previewImage = state?.previewImage;
   const showPorts = selected || hovered || busy;
   const nodeLabel = data.label || definition.name;
   const runLabel = definition.kind === "input" ? "Run" : "Run from here";
@@ -584,7 +585,15 @@ function LlunaNodeComponent({ id, data, selected }) {
           </div>
         ) : (
           <>
-            {showPreview && artifactIds.length > 1 ? (
+            {showPreview && busy && previewImage ? (
+              // Live mid-generation frame takes priority over any stale
+              // completed-result thumbnail from a previous run of this node.
+              <img
+                src={previewImage}
+                alt={`${nodeLabel} generating…`}
+                className={`min-h-[196px] flex-1 ${String(appearance.imageFit || "cover") === "contain" ? "object-contain" : "object-cover"}`}
+              />
+            ) : showPreview && artifactIds.length > 1 ? (
               <ArtifactThumbGrid
                 artifactIds={artifactIds}
                 schemaId={data.schemaId}

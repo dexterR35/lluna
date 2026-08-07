@@ -861,6 +861,15 @@ def _job_birefnet(run_id, payload, cancel_event, on_progress, heartbeat_log, evt
     if not input_path:
         _emit(evt_queue, error(run_id, "BiRefNet input is missing."))
         return
+
+    from backend.tools.shared.memory import VramBudgetError, preflight_birefnet
+
+    try:
+        preflight_birefnet(params["resolution"], precision=params["precision"])
+    except VramBudgetError as e:
+        _emit(evt_queue, error(run_id, str(e)))
+        return
+
     heartbeat_log(run_id, f"BiRefNet model: {model_id}")
     on_progress(run_id, 5)
     try:

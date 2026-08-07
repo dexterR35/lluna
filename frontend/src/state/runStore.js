@@ -163,6 +163,27 @@ const createRunState = (set, get) => ({
     )
       void get().loadActivity();
     if (event.runId && current && event.runId !== current.runId) return;
+    if (event.type === "node.preview") {
+      // Handled separately from the generic `node.*` dispatcher below: that
+      // one derives a node *status* from the event type's second segment
+      // (`node.completed` -> "COMPLETED", etc.), and "preview" isn't a
+      // status - falling through would incorrectly stamp the node's real
+      // status as the literal string "PREVIEW" mid-run.
+      const previewNodeId = event.nodeId;
+      const previewImage = event.payload?.image;
+      if (previewNodeId && previewImage) {
+        set((state) => ({
+          nodeStates: {
+            ...state.nodeStates,
+            [previewNodeId]: {
+              ...state.nodeStates[previewNodeId],
+              previewImage,
+            },
+          },
+        }));
+      }
+      return;
+    }
     if (event.type === "node.log")
       set((state) => ({
         logs: [
@@ -199,6 +220,12 @@ const createRunState = (set, get) => ({
             progress,
             message: event.payload?.message || previous.message,
             artifactIds: incomingArtifacts || previous.artifactIds || [],
+            // Clear a stale preview only when a *new* run actually begins -
+            // not on every "node.progress" tick (which also maps to
+            // RUNNING), or the frame just delivered by "node.preview" would
+            // be wiped out the moment the next progress event arrives.
+            previewImage:
+              event.type === "node.started" ? null : previous.previewImage,
             completedAt: ["SUCCEEDED", "CACHED"].includes(status)
               ? event.timestamp || new Date().toISOString()
               : previous.completedAt,
