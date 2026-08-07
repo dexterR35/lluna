@@ -1,31 +1,30 @@
 @import "tailwindcss";
 
 @theme {
-  /* 0a0b0f */
-  --color-mg-app: #12141a;  
-  --color-mg-panel: #12141a;
-  --color-mg-elevated: #2a2f3a;
-  --color-mg-node: #14161c;
-  --color-mg-selected: #1a2233;
-  --color-mg-border: #2a2f3a;
-  --color-mg-subtle: #1e222b;
-  --color-mg-focus: #60a5fa;
-  --color-mg-primary: #f1f2f6;
-  --color-mg-secondary: #9298a7;
-  --color-mg-muted: #646b79;
-  --color-mg-accent: #3b82f6;
-  --color-mg-success: #5bcb98;
-  --color-mg-warning: #e8b768;
-  --color-mg-error: #ef7182;
-  --color-mg-running: #38bdf8;
-  --color-mg-cached: #b493f5;
+  --color-mg-app: #0b0e12;
+  --color-mg-panel: #101419;
+  --color-mg-elevated: #181e26;
+  --color-mg-node: #14191f;
+  --color-mg-selected: #1b2939;
+  --color-mg-border: #29323c;
+  --color-mg-subtle: #202832;
+  --color-mg-focus: #8eafd3;
+  --color-mg-primary: #f2f4f7;
+  --color-mg-secondary: #a7b0bc;
+  --color-mg-muted: #6f7b89;
+  --color-mg-accent: #8eafd3;
+  --color-mg-success: #6dc69d;
+  --color-mg-warning: #d8b36b;
+  --color-mg-error: #e47c88;
+  --color-mg-running: #73b9d2;
+  --color-mg-cached: #ad9ad4;
 
 
 
 
-  --radius-mg-sm: 8px;
-  --radius-mg: 12px;
-  --radius-mg-lg: 18px;
+  --radius-mg-sm: 5px;
+  --radius-mg: 7px;
+  --radius-mg-lg: 9px;
 
 
   --font-sans: Inter, "SF Pro Text", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
@@ -66,7 +65,8 @@ body {
   color: var(--mg-text-primary);
   font-family: var(--font-sans);
   font-size: 13px;
-  line-height: 1.45;
+  line-height: 1.5;
+  letter-spacing: .002em;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
 }
@@ -95,22 +95,22 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
 @layer components {
   .ui-panel { @apply flex min-h-0 flex-col bg-mg-panel; }
   .ui-panel-header {
-    @apply flex h-11 shrink-0 items-center gap-2.5 border-b border-mg-border px-3.5;
+    @apply flex h-12 shrink-0 items-center gap-2.5 border-b border-mg-border px-4;
   }
   .ui-panel-title {
     @apply min-w-0 truncate text-[12px] font-semibold tracking-tight text-mg-primary;
   }
   .ui-panel-subtitle { @apply truncate text-[10px] text-mg-muted; }
-  .ui-card { @apply rounded-2xl border border-mg-border bg-mg-node; }
-  .ui-section { @apply rounded-2xl border border-mg-border bg-mg-elevated; }
-  .ui-stage { @apply overflow-hidden rounded-xl border border-mg-border bg-mg-app; }
+  .ui-card { @apply rounded-mg-lg border border-mg-border bg-mg-node; }
+  .ui-section { @apply rounded-mg-lg border border-mg-border bg-mg-elevated; }
+  .ui-stage { @apply overflow-hidden rounded-mg border border-mg-border bg-mg-app; }
   .ui-row {
-    @apply flex min-h-10 w-full items-center gap-2.5 rounded-xl border border-transparent px-2.5 text-left transition;
+    @apply flex min-h-10 w-full items-center gap-2.5 rounded-mg border border-transparent px-2.5 text-left transition;
   }
-  .ui-row:hover { @apply border-mg-border bg-mg-elevated; }
+  .ui-row:hover { @apply border-transparent bg-mg-elevated; }
   .ui-row:focus-visible { @apply outline-none ring-2 ring-mg-focus/40; }
   .ui-input {
-    @apply h-9 w-full rounded-xl border border-mg-border bg-mg-app px-3 text-xs text-mg-primary outline-none transition placeholder:text-mg-muted hover:border-mg-secondary/50 focus:border-mg-focus focus:ring-2 focus:ring-mg-focus/20 disabled:cursor-not-allowed disabled:opacity-50;
+    @apply h-9 w-full rounded-mg border border-mg-border bg-mg-app px-3 text-xs text-mg-primary outline-none transition placeholder:text-mg-muted hover:border-mg-secondary/50 focus:border-mg-focus focus:ring-2 focus:ring-mg-focus/20 disabled:cursor-not-allowed disabled:opacity-50;
   }
   .ui-input.is-bare {
     @apply h-7 max-w-52 min-w-28 truncate border-transparent bg-transparent px-1.5 font-semibold tracking-tight hover:border-mg-border focus:border-mg-secondary/40 focus:bg-mg-elevated focus:ring-0;
@@ -122,7 +122,7 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
     @apply border-mg-error;
   }
   .ui-search {
-    @apply flex h-9 w-full items-center gap-2 rounded-xl border border-mg-border bg-mg-app px-2 text-xs text-mg-primary transition hover:border-mg-secondary/50 focus-within:border-mg-focus focus-within:ring-2 focus-within:ring-mg-focus/20;
+    @apply flex h-9 w-full items-center gap-2 rounded-mg border border-mg-border bg-mg-app px-2 text-xs text-mg-primary transition hover:border-mg-secondary/50 focus-within:border-mg-focus focus-within:ring-2 focus-within:ring-mg-focus/20;
   }
   /* .ui-search input {
     @apply min-w-0 flex-1 bg-transparent text-xs text-mg-primary outline-none placeholder:text-mg-muted;
@@ -137,7 +137,7 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
     @apply flex h-11 items-center gap-1 border-b border-mg-border px-2.5;
   }
   .ui-tab {
-    @apply inline-flex h-7 items-center gap-1.5 rounded-full px-2.5 text-[11px] font-medium text-mg-muted transition hover:bg-mg-app hover:text-mg-secondary;
+    @apply inline-flex h-7 items-center gap-1.5 rounded-mg px-2.5 text-[11px] font-medium text-mg-muted transition hover:bg-mg-app hover:text-mg-secondary;
   }
   .ui-tab.is-active { @apply bg-mg-elevated text-mg-primary; }
   .ui-tab-count {
@@ -157,13 +157,13 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   .ui-switch-thumb.is-on { @apply left-[17px]; }
   .ui-switch-thumb.is-off { @apply left-0.5; }
   .ui-dropzone {
-    @apply grid min-h-28 place-items-center rounded-2xl border border-dashed border-mg-border bg-mg-app/45 px-4 py-3 text-center transition hover:border-mg-secondary/60;
+    @apply grid min-h-28 place-items-center rounded-mg-lg border border-dashed border-mg-border bg-mg-app/45 px-4 py-3 text-center transition hover:border-mg-secondary/60;
   }
   .ui-dropzone.is-active {
     @apply border-mg-accent bg-mg-accent/10;
   }
   .ui-preview {
-    @apply overflow-hidden rounded-2xl border border-mg-border bg-mg-app;
+    @apply overflow-hidden rounded-mg-lg border border-mg-border bg-mg-app;
   }
   .ui-preview-bar {
     @apply flex min-h-9 items-center gap-2 border-mg-border px-2.5;
@@ -191,10 +191,10 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   .ui-stack-sm { @apply grid gap-2.5; }
   .ui-stack-xs { @apply grid gap-0.5; }
   .ui-kicker {
-    @apply px-2.5 text-[9px] font-semibold uppercase tracking-wide text-mg-muted;
+    @apply px-2.5 text-[9px] font-semibold uppercase tracking-[.12em] text-mg-muted;
   }
   .ui-kicker-plain {
-    @apply text-[10px] font-medium uppercase tracking-wide text-mg-muted;
+    @apply text-[10px] font-medium uppercase tracking-[.1em] text-mg-muted;
   }
   .ui-inline {
     @apply flex flex-wrap items-center gap-x-4 gap-y-2;
@@ -206,12 +206,12 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   .ui-list { @apply divide-y divide-mg-border; }
   .ui-list-item { @apply py-3 first:pt-0 last:pb-0; }
   .ui-copy-title {
-    @apply text-[13px] font-semibold tracking-tight text-mg-primary;
+    @apply text-[13px] font-semibold leading-tight tracking-tight text-mg-primary;
   }
-  .ui-copy-body { @apply text-[11px] text-mg-secondary; }
-  .ui-copy-muted { @apply text-[10px] text-mg-muted; }
+  .ui-copy-body { @apply text-[11px] leading-[1.45] text-mg-secondary; }
+  .ui-copy-muted { @apply text-[10px] leading-[1.4] text-mg-muted; }
   .ui-nav-item {
-    @apply mb-0.5 flex min-h-8 w-full items-center gap-2 rounded-xl px-2.5 text-left text-[11px] text-mg-secondary transition hover:bg-mg-elevated hover:text-mg-primary;
+    @apply mb-0.5 flex min-h-8 w-full items-center gap-2 rounded-mg px-2.5 text-left text-[11px] text-mg-secondary transition hover:bg-mg-elevated hover:text-mg-primary;
   }
   .ui-nav-item.is-active {
     @apply bg-mg-accent/15 font-medium text-mg-accent hover:bg-mg-accent/15 hover:text-mg-accent;
@@ -259,14 +259,14 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   width: 380px;
   flex-direction: column;
   overflow: visible;
-  border: 1px solid #2c313c;
-  border-radius: 22px;
-  background: #16181f;
+  border: 1px solid var(--mg-border);
+  border-radius: var(--mg-radius-lg);
+  background: var(--mg-bg-node);
   color: var(--mg-text-primary);
   transition: border-color .15s ease, opacity .15s ease;
 }
 .lluna-node.is-selected {
-  border-color: color-mix(in srgb, var(--node-accent, var(--mg-accent)) 70%, #2c313c);
+  border-color: color-mix(in srgb, var(--node-accent, var(--mg-accent)) 72%, var(--mg-border));
 }
 .lluna-node.is-disabled { opacity: .5; }
 .lluna-node-chrome {
@@ -274,7 +274,7 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   min-height: 0;
   align-items: center;
   gap: 8px;
-  padding: 12px 14px 0;
+  padding: 11px 13px 0;
 }
 .lluna-node.is-prompt .lluna-node-chrome {
   padding-bottom: 0;
@@ -285,16 +285,16 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   height: 28px;
   flex-shrink: 0;
   place-items: center;
-  border: 1px solid #2c313c;
-  border-radius: var(--mg-radius-pill);
+  border: 1px solid var(--mg-border);
+  border-radius: var(--mg-radius-sm);
   background: var(--mg-bg-elevated);
   color: var(--mg-text-secondary);
   cursor: pointer;
   transition: color .15s ease, background-color .15s ease, border-color .15s ease;
 }
 .lluna-node-chip:hover {
-  border-color: #3a4150;
-  background: #222632;
+  border-color: var(--mg-secondary);
+  background: var(--mg-bg-node-selected);
   color: var(--mg-text-primary);
 }
 .lluna-node-chip > svg {
@@ -309,7 +309,7 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   white-space: nowrap;
   font-size: 12px;
   font-weight: 600;
-  letter-spacing: .01em;
+  letter-spacing: .005em;
 }
 .lluna-node-body {
   position: relative;
@@ -320,7 +320,7 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   margin: 10px 12px 0;
   overflow: hidden;
   border: 1px solid var(--mg-border-subtle);
-  border-radius: 16px;
+  border-radius: var(--mg-radius-md);
   background: var(--mg-bg-app);
 }
 .lluna-node-body.is-prompt {
@@ -332,7 +332,7 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
 .lluna-node-body.is-settings {
   min-height: 0;
   overflow: auto;
-  background: #12151c;
+  background: var(--mg-bg-app);
 }
 .lluna-node-body.is-save {
   min-height: 0;
@@ -389,8 +389,8 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
 .lluna-node-settings {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 12px;
+  gap: 11px;
+  padding: 13px;
 }
 .lluna-node-settings-field {
   display: flex;
@@ -400,7 +400,7 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   color: var(--mg-text-secondary);
   font-size: 10px;
   font-weight: 600;
-  letter-spacing: .02em;
+  letter-spacing: .015em;
 }
 .lluna-node-settings-field.is-inline {
   flex-direction: row;
@@ -414,8 +414,8 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
 .lluna-node-settings-field .ui-input {
   height: auto;
   width: 100%;
-  border: 1px solid var(--mg-border-subtle);
-  border-radius: 8px;
+  border: 1px solid var(--mg-border);
+  border-radius: var(--mg-radius-sm);
   background: var(--mg-bg-node);
   color: var(--mg-text-primary);
   font-size: 11px;
@@ -484,7 +484,7 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
 }
 .lluna-node-body:not(.is-prompt) .lluna-node-prompt {
   border-top: 1px solid var(--mg-border-subtle);
-  background: #12151c;
+  background: var(--mg-bg-app);
   padding: 10px 12px;
 }
 .lluna-node-prompt textarea {
@@ -525,8 +525,8 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   align-items: center;
   gap: 4px;
   overflow: hidden;
-  border: 1px solid #2c313c;
-  border-radius: var(--mg-radius-pill);
+  border: 1px solid var(--mg-border);
+  border-radius: var(--mg-radius-sm);
   background: var(--mg-bg-elevated);
   color: var(--mg-text-secondary);
   padding: 0 10px 0 12px;
@@ -534,8 +534,8 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   transition: border-color .15s ease, background-color .15s ease, color .15s ease;
 }
 .lluna-node-pill:hover {
-  border-color: #3a4150;
-  background: #222632;
+  border-color: var(--mg-secondary);
+  background: var(--mg-bg-node-selected);
   color: var(--mg-text-primary);
 }
 .lluna-node-pill-label {
@@ -568,8 +568,8 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   min-height: 32px;
   align-items: center;
   gap: 2px;
-  border: 1px solid #2c313c;
-  border-radius: var(--mg-radius-pill);
+  border: 1px solid var(--mg-border);
+  border-radius: var(--mg-radius-sm);
   background: var(--mg-bg-elevated);
   color: var(--mg-text-secondary);
   padding: 0 4px;
@@ -588,14 +588,14 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   height: 24px;
   place-items: center;
   border: 0;
-  border-radius: var(--mg-radius-pill);
+  border-radius: var(--mg-radius-sm);
   background: transparent;
   color: inherit;
   cursor: pointer;
   transition: background-color .15s ease, color .15s ease;
 }
 .lluna-node-stepper > button:hover:not(:disabled) {
-  background: #222632;
+  background: var(--mg-bg-node-selected);
   color: var(--mg-text-primary);
 }
 .lluna-node-stepper > button:disabled {
@@ -608,8 +608,8 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
 }
 .lluna-node-llava-toggle {
   padding: 0 8px 0 10px;
-  border: 1px solid #2c313c;
-  border-radius: var(--mg-radius-pill);
+  border: 1px solid var(--mg-border);
+  border-radius: var(--mg-radius-sm);
   background: var(--mg-bg-elevated);
 }
 .lluna-node-llava-toggle .ui-switch {
@@ -636,16 +636,16 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   width: 34px;
   height: 34px;
   place-items: center;
-  border: 1px solid #2c313c;
-  border-radius: var(--mg-radius-pill);
+  border: 1px solid var(--mg-border);
+  border-radius: var(--mg-radius-sm);
   background: var(--mg-bg-elevated);
   color: var(--mg-text-secondary);
   cursor: pointer;
   transition: color .15s ease, background-color .15s ease, border-color .15s ease;
 }
 .lluna-node-icon-btn:hover {
-  border-color: #3a4150;
-  background: #222632;
+  border-color: var(--mg-secondary);
+  background: var(--mg-bg-node-selected);
   color: var(--mg-text-primary);
 }
 .lluna-node-icon-btn > svg {
@@ -657,14 +657,14 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   width: 38px;
   height: 38px;
   place-items: center;
-  border: 1px solid #2c313c;
-  border-radius: var(--mg-radius-pill);
-  background: #222632;
+  border: 1px solid color-mix(in srgb, var(--mg-accent) 50%, var(--mg-border));
+  border-radius: var(--mg-radius-sm);
+  background: color-mix(in srgb, var(--mg-accent) 18%, var(--mg-bg-elevated));
   color: var(--mg-text-primary);
   cursor: pointer;
   transition: filter .15s ease, opacity .15s ease, background-color .15s ease;
 }
-.lluna-node-run:hover { background: #2a303c; filter: brightness(1.05); }
+.lluna-node-run:hover { background: color-mix(in srgb, var(--mg-accent) 28%, var(--mg-bg-elevated)); }
 .lluna-node-run:disabled { cursor: not-allowed; opacity: .45; }
 .lluna-node-run > svg {
   width: 15px;
@@ -674,19 +674,19 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
 
 .react-flow__handle.lluna-port-handle {
   display: grid;
-  width: 30px !important;
-  height: 30px !important;
+  width: 24px !important;
+  height: 24px !important;
   place-items: center;
   overflow: visible !important;
-  border: 1px solid #2c313c !important;
-  border-radius: var(--mg-radius-pill) !important;
+  border: 1px solid color-mix(in srgb, var(--port-color) 55%, var(--mg-border)) !important;
+  border-radius: var(--mg-radius-sm) !important;
   background: var(--mg-bg-elevated) !important;
   outline: none !important;
-  opacity: .82;
+  opacity: .88;
   transition: opacity .15s ease, border-color .15s ease, background-color .15s ease;
 }
-.react-flow__handle-left.lluna-port-handle { left: -7px !important; }
-.react-flow__handle-right.lluna-port-handle { right: -7px !important; }
+.react-flow__handle-left.lluna-port-handle { left: -6px !important; }
+.react-flow__handle-right.lluna-port-handle { right: -6px !important; }
 .lluna-node.is-ports-open .react-flow__handle.lluna-port-handle,
 .react-flow__handle.lluna-port-handle.is-active,
 .react-flow__handle.lluna-port-handle.connecting,
@@ -695,8 +695,8 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   opacity: 1;
 }
 .react-flow__handle.lluna-port-handle:hover {
-  border-color: #3a4150 !important;
-  background: #222632 !important;
+  border-color: var(--port-color) !important;
+  background: var(--mg-bg-node-selected) !important;
 }
 .lluna-port-glyph {
   width: 10px;
@@ -704,11 +704,11 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   pointer-events: none;
 }
 
-.react-flow__edge-path { stroke: #626a7d; stroke-width: 1.8; }
+.react-flow__edge-path { stroke-width: 2; vector-effect: non-scaling-stroke; }
 .react-flow__edge:hover .react-flow__edge-path,
 .react-flow__edge.selected .react-flow__edge-path {
   stroke: var(--mg-accent);
-  stroke-width: 2.4;
+  stroke-width: 2.6;
 }
 .react-flow__selection,
 .react-flow__nodesselection-rect {
@@ -718,7 +718,7 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
 .react-flow__controls {
   overflow: hidden;
   border: 1px solid var(--mg-border);
-  border-radius: var(--mg-radius-md);
+  border-radius: var(--mg-radius-sm);
 
 }
 .react-flow__controls-button {
@@ -732,7 +732,7 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
 .react-flow.artboard-panning .react-flow__pane:active { cursor: grabbing; }
 .react-flow__minimap {
   border: 1px solid var(--mg-border);
-  border-radius: var(--mg-radius-md);
+  border-radius: var(--mg-radius-sm);
   background: var(--mg-bg-panel);
   overflow: hidden;
  

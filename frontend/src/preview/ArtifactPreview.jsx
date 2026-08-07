@@ -182,7 +182,7 @@ export function ArtifactThumbnail({
           <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-black/70 to-transparent opacity-0 transition group-hover/preview:opacity-100" />
           <button
             type="button"
-            className="nodrag absolute bottom-1.5 right-1.5 grid size-7 place-items-center rounded-lg border border-white/10 bg-black/65 text-white opacity-0 backdrop-blur transition hover:bg-black/90 group-hover/preview:opacity-100 focus-visible:opacity-100"
+            className="nodrag absolute bottom-1.5 right-1.5 grid size-7 place-items-center rounded-mg border border-white/10 bg-black/65 text-white opacity-0 transition hover:bg-black/90 group-hover/preview:opacity-100 focus-visible:opacity-100"
             aria-label={`Save ${label}`}
             onPointerDown={(event) => event.stopPropagation()}
             onClick={(event) => {
@@ -356,7 +356,7 @@ export function ArtifactPreview({
             points.map((point, index) => (
               <span
                 key={`${point.x}-${point.y}-${index}`}
-                className={`pointer-events-none absolute grid size-4 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-2 border-white text-[8px] font-bold text-white shadow ${point.label === 0 ? "bg-mg-error" : "bg-mg-success"}`}
+              className={`pointer-events-none absolute grid size-4 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-2 border-white text-[8px] font-bold text-white ${point.label === 0 ? "bg-mg-error" : "bg-mg-success"}`}
                 style={{
                   left: `${(point.x / mediaWidth) * 100}%`,
                   top: `${(point.y / mediaHeight) * 100}%`,

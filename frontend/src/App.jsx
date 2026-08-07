@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Search } from "./icons";
+import { resolveNodeIcon } from "./icons";
 import { api, connectEvents } from "./api/client";
 import {
   Button,
@@ -457,8 +457,11 @@ function EditorApp() {
               }}
               className="ui-row"
             >
-              <IconTile>
-                <Search className="ui-icon" />
+              <IconTile size="sm">
+                {(() => {
+                  const NodeIcon = resolveNodeIcon(node.icon);
+                  return <NodeIcon className="ui-icon" />;
+                })()}
               </IconTile>
               <span>
                 <strong className="ui-copy-title block text-[12px]">
@@ -490,8 +493,8 @@ function EditorApp() {
           setPendingRecovery(null);
           void window.llunaDesktop?.clearRecovery();
         }}
-        title="Recover autosaved workflow?"
-        description="Lluna found an autosave from the last session. Restore it, or discard and start fresh."
+        title="Restore previous session?"
+        description="A recent autosave is available. Recover it to continue where you left off, or start a new workflow."
         bodyClassName="!hidden"
         footer={
           <>
@@ -502,7 +505,7 @@ function EditorApp() {
                 void window.llunaDesktop?.clearRecovery();
               }}
             >
-              Discard
+              Start fresh
             </Button>
             <Button
               onClick={() => {
@@ -514,7 +517,7 @@ function EditorApp() {
                 setPendingRecovery(null);
               }}
             >
-              Recover
+              Recover workflow
             </Button>
           </>
         }
@@ -522,13 +525,13 @@ function EditorApp() {
       <Dialog
         open={discardOpen}
         onClose={() => setDiscardOpen(false)}
-        title="Discard unsaved changes?"
-        description="Your current workflow has unsaved edits. Starting a new workflow will discard them."
+        title="Start a new workflow?"
+        description="Your current workflow has unsaved changes. They will be lost if you continue."
         bodyClassName="!hidden"
         footer={
           <>
             <Button variant="secondary" onClick={() => setDiscardOpen(false)}>
-              Cancel
+              Keep editing
             </Button>
             <Button
               variant="danger"
@@ -537,7 +540,7 @@ function EditorApp() {
                 void resetWorkflow();
               }}
             >
-              Discard
+              Discard changes
             </Button>
           </>
         }

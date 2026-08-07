@@ -15,7 +15,7 @@ function IconButtonComponent(
       aria-label={label}
       title={label}
       className={cn(
-        "grid size-8 shrink-0 cursor-pointer place-items-center rounded-full border border-transparent text-mg-secondary transition hover:border-mg-border hover:bg-mg-elevated hover:text-mg-primary disabled:cursor-not-allowed disabled:opacity-40",
+        "grid size-8 shrink-0 cursor-pointer place-items-center rounded-mg border border-transparent text-mg-secondary transition hover:border-mg-border hover:bg-mg-elevated hover:text-mg-primary disabled:cursor-not-allowed disabled:opacity-40",
         focusRing,
         className,
       )}

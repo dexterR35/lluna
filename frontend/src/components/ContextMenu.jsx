@@ -16,7 +16,7 @@ export function ContextMenu({ open, x, y, items, onSelect, onClose }) {
   if (!open) return null;
   return (
     <div
-      className="fixed z-50 overflow-hidden rounded-2xl border border-mg-border bg-mg-panel "
+      className="fixed z-50 overflow-hidden rounded-mg-lg border border-mg-border bg-mg-panel "
       style={{ left: x, top: y }}
       onPointerDown={(event) => event.stopPropagation()}
     >

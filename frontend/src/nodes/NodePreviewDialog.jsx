@@ -138,7 +138,7 @@ export function NodePreviewDialog({ nodeId, onClose }) {
             <button
               type="button"
               key={id}
-              className={`w-24 shrink-0 overflow-hidden rounded-xl border ${selectedArtifactId === id ? "border-mg-accent" : "border-mg-border"}`}
+              className={`w-24 shrink-0 overflow-hidden rounded-mg border ${selectedArtifactId === id ? "border-mg-accent" : "border-mg-border"}`}
               onClick={() => setSelectedArtifactId(id)}
             >
               <span className="ui-copy-muted block bg-mg-elevated px-2 py-1">
@@ -155,7 +155,7 @@ export function NodePreviewDialog({ nodeId, onClose }) {
         </div>
       )}
       {isSelectObject && !artifactId ? (
-        <div className="ui-empty is-roomy rounded-xl border border-mg-border">
+        <div className="ui-empty is-roomy rounded-mg border border-mg-border">
           <MousePointer2 className="ui-icon-lg text-mg-muted" />
           <p className="ui-copy-body">Connect and run an Image node first.</p>
         </div>

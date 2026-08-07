@@ -420,7 +420,7 @@ function LlunaNodeComponent({ id, data, selected }) {
               className={status === "RUNNING" ? "animate-spin" : undefined}
             />
           ) : (
-            <Plus aria-hidden />
+            <Settings2 aria-hidden />
           )}
         </button>
         <strong className="lluna-node-title">{nodeLabel}</strong>

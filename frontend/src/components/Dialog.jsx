@@ -68,7 +68,7 @@ export function Dialog({
   if (!open) return null;
   return (
     <div
-      className="fixed inset-0 z-50 grid place-items-center bg-black/65 p-6 backdrop-blur-sm"
+      className="fixed inset-0 z-50 grid place-items-center bg-black/75 p-6"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}

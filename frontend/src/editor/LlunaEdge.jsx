@@ -30,7 +30,12 @@ export function LlunaEdge({
       id={id}
       path={path}
       markerEnd={markerEnd}
-      style={{ ...style, stroke: selected ? "var(--mg-accent)" : color }}
+      style={{
+        ...style,
+        stroke: selected ? "var(--mg-accent)" : color,
+        strokeLinecap: "round",
+        strokeWidth: selected ? 2.6 : 2,
+      }}
       interactionWidth={24}
     />
   );

@@ -96,7 +96,7 @@ function FlowBox({ group, nodes, selected, onSelect, onRun }) {
   return (
     <section
       aria-label={`${group.label} flow box`}
-      className={`pointer-events-none absolute rounded-2xl border transition ${selected ? "" : "border-dashed"}`}
+      className={`pointer-events-none absolute rounded-mg-lg border transition ${selected ? "" : "border-dashed"}`}
       style={{
         transform: `translate(${bounds.position.x}px,${bounds.position.y}px)`,
         width: bounds.width,
@@ -162,7 +162,7 @@ function FlowBox({ group, nodes, selected, onSelect, onRun }) {
         )}
         <button
           type="button"
-          className="nodrag grid size-7 place-items-center rounded-full text-white transition hover:brightness-110"
+          className="nodrag grid size-7 place-items-center rounded-mg text-white transition hover:brightness-110"
           style={{ background: color }}
           aria-label={`Run ${group.label} from start to end`}
           onClick={(event) => {
@@ -466,8 +466,8 @@ function CanvasBody({
             variant={BackgroundVariant.Dots}
             gap={24}
             size={1}
-            color="#2a2f3a"
-            bgColor="#0a0b0f"
+            color="#29323c"
+            bgColor="#0b0e12"
           />
           <Controls showInteractive={false} />
           {minimap && (

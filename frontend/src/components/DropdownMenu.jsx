@@ -16,7 +16,7 @@ export function DropdownMenu({ items, onSelect }) {
             disabled={entry.disabled}
             onClick={() => onSelect(entry.id)}
             className={cn(
-              "flex min-h-9 items-center justify-between rounded-xl px-3 text-left text-[12px] text-mg-primary hover:bg-mg-elevated disabled:opacity-40",
+              "flex min-h-9 items-center justify-between rounded-mg px-3 text-left text-[12px] text-mg-primary hover:bg-mg-elevated disabled:opacity-40",
               focusRing,
             )}
           >

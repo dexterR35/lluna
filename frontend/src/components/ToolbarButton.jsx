@@ -16,7 +16,7 @@ export function ToolbarButton({
       variant="ghost"
       aria-pressed={active || undefined}
       title={shortcut ? `${label} (${shortcut})` : label}
-      className={`min-w-8 rounded-full px-2 ${active ? "border-mg-border bg-mg-elevated text-mg-primary" : ""}`}
+      className={`min-w-8 rounded-mg px-2 ${active ? "border-mg-border bg-mg-elevated text-mg-primary" : ""}`}
       {...props}
     >
       {icon}

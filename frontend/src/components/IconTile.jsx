@@ -3,9 +3,9 @@ import { cn } from "./utils";
 /** @typedef {"sm"|"md"|"lg"} IconTileSize */
 
 const SIZES = {
-  sm: "size-6 rounded-lg",
-  md: "size-8 rounded-xl",
-  lg: "size-10 rounded-2xl",
+  sm: "size-6 rounded-mg-sm",
+  md: "size-8 rounded-mg",
+  lg: "size-10 rounded-mg-lg",
 };
 
 /**

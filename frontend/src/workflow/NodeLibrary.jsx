@@ -47,6 +47,8 @@ function LibraryNode({ node }) {
 
 /** @param {{category: string, nodes: import("../types").NodeDefinition[], closed: boolean, onToggle: () => void}} props */
 function LibraryGroup({ category, nodes, closed, onToggle }) {
+  const CategoryIcon = resolveCategoryIcon(category);
+  const color = resolveCategoryColor(category);
   return (
     <section className="mb-2">
       <button
@@ -55,6 +57,7 @@ function LibraryGroup({ category, nodes, closed, onToggle }) {
         onClick={onToggle}
         className="ui-nav-item"
       >
+        <CategoryIcon className="ui-icon-sm shrink-0" style={{ color }} />
         <span className="flex-1 truncate">{category}</span>
         <span className="tabular-nums text-mg-muted">{nodes.length}</span>
         <ChevronDown
