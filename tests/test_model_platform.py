@@ -182,6 +182,48 @@ def test_enabled_custom_diffusers_model_is_added_to_generate_node(tmp_path, monk
     assert any(option["value"] == "custom:custom-image" for option in model.options)
 
 
+def test_enabled_custom_vision_language_model_is_added_to_describe_image_node(tmp_path, monkeypatch) -> None:
+    registry = DynamicModelRegistry(paths(tmp_path))
+    monkeypatch.setattr(DynamicModelRegistry, "_instance", registry)
+    folder = registry.root / "custom-captioner"
+    folder.mkdir()
+    (folder / "config.json").write_text("{}", encoding="utf-8")
+    (folder / "model.safetensors").write_bytes(b"weights")
+    raw = {
+        "schema": 1,
+        "id": "custom-captioner",
+        "name": "Custom Captioner",
+        "task": "image-to-text",
+        "adapter": "transformers",
+        "source": {"type": "local", "localName": "custom-captioner"},
+        "runtime": {"profile": "transformers-torch"},
+        "hardware": {"backends": ["cpu", "cuda", "mps"]},
+        "security": {},
+        "variant": {"kind": "base"},
+        "capabilities": {
+            "provenance": "reviewed-manifest",
+            "tasks": ["image-to-text"],
+            "inputs": ["image"],
+            "outputs": ["text"],
+            "temperature": {"default": 0.2, "minimum": 0, "maximum": 1},
+            "topP": {"default": 0.7, "minimum": 0, "maximum": 1},
+            "maxNewTokens": {"default": 200, "minimum": 1, "maximum": 2000},
+            "defaultInstruction": "Describe this image in detail.",
+        },
+        "expectedFiles": ["config.json", "model.safetensors"],
+    }
+    (folder / MANIFEST_FILENAME).write_text(json.dumps(raw), encoding="utf-8")
+    registry.scan()
+    registry.set_enabled("custom-captioner", True)
+
+    describe = next(node for node in list_nodes() if node.schema_id == "lluna.input.describe_image")
+    model = next(parameter for parameter in describe.parameters if parameter.id == "model")
+    matched = next((option for option in model.options if option["value"] == "custom:custom-captioner"), None)
+    assert matched is not None
+    assert matched["capabilities"]["temperature"]["default"] == 0.2
+    assert matched["capabilities"]["maxNewTokens"]["maximum"] == 2000
+
+
 def test_reviewed_catalog_contract_precedes_metadata_and_is_complete() -> None:
     contract = reviewed_huggingface_contract("black-forest-labs/FLUX.2-klein-4B")
     assert contract is not None

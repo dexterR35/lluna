@@ -131,6 +131,8 @@ GENERATE_DTYPE_OPTIONS = [
     {"value": "bf16", "label": "BF16"},
     {"value": "fp16", "label": "FP16"},
     {"value": "fp32", "label": "FP32 · highest precision, more VRAM"},
+    {"value": "int8", "label": "INT8 · custom models only, needs bitsandbytes"},
+    {"value": "int4", "label": "INT4 · custom models only, needs bitsandbytes"},
 ]
 
 
@@ -247,6 +249,60 @@ _NODES = [
         required_models=["supir"],
         cache_policy="none",
         adapter="llava_config",
+    ),
+    node(
+        "lluna.input.describe_image",
+        "Describe Image",
+        "Image/Describe",
+        "Generates a text description of an image with a custom vision-language model, usable as a prompt elsewhere.",
+        icon="sparkles",
+        inputs=[port("image", "Image", PortType.IMAGE, required=True)],
+        outputs=[port("prompt", "Description", PortType.PROMPT)],
+        parameters=[
+            parameter("model", "Model", "model", "", options=[]),
+            parameter(
+                "instruction",
+                "Instruction",
+                "textarea",
+                "Describe this image in detail.",
+                description="Tells the model what visual details to describe.",
+            ),
+            parameter(
+                "temperature",
+                "Temperature",
+                "number",
+                0.2,
+                minimum=0,
+                maximum=1,
+                step=0.1,
+                capability="temperature",
+                description="Controls description creativity. Lower values are more literal and repeatable.",
+            ),
+            parameter(
+                "topP",
+                "Top-p",
+                "number",
+                0.7,
+                minimum=0,
+                maximum=1,
+                step=0.1,
+                capability="topP",
+                description="Limits token sampling to the most likely choices; lower values are more focused.",
+            ),
+            parameter(
+                "maxNewTokens",
+                "Max length",
+                "integer",
+                200,
+                minimum=1,
+                maximum=2000,
+                capability="maxNewTokens",
+                description="Upper bound on how many tokens the description can contain.",
+            ),
+        ],
+        required_models=[],
+        cache_policy="none",
+        adapter="describe_image",
     ),
     node(
         "lluna.input.number",
@@ -1131,6 +1187,25 @@ def _build_catalog() -> list[NodeDefinition]:
                 definition = next(item for item in values if item.schema_id == schema_id)
                 model_parameter = next(item for item in definition.parameters if item.id == "model")
                 model_parameter.options.extend(custom_options)
+        describe_records = [
+            record
+            for record in configured_records
+            if record.manifest.adapter == "transformers" and record.manifest.task == "image-to-text"
+        ]
+        if describe_records:
+            custom_options = []
+            for record in describe_records:
+                model_option = option(
+                    f"custom:{record.manifest.id}",
+                    record.manifest.name,
+                    record.manifest.id,
+                    record.manifest.description or "Custom image description model.",
+                )
+                model_option["capabilities"] = record.manifest.capabilities.to_dict(record.manifest.task)
+                custom_options.append(model_option)
+            definition = next(item for item in values if item.schema_id == "lluna.input.describe_image")
+            model_parameter = next(item for item in definition.parameters if item.id == "model")
+            model_parameter.options.extend(custom_options)
     except (ImportError, OSError, ValueError):
         pass
     return values

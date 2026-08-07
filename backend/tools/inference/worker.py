@@ -253,6 +253,15 @@ def infer_worker_main(cmd_queue, evt_queue, hardware_accel: bool = True) -> None
                     heartbeat_log,
                     job_evt_queue,
                 )
+            elif job_type == JobType.DESCRIBE_IMAGE.value:
+                _job_describe_image(
+                    run_id,
+                    payload,
+                    cancel_event,
+                    on_progress,
+                    heartbeat_log,
+                    job_evt_queue,
+                )
             else:
                 _emit(
                     job_evt_queue,
@@ -698,6 +707,71 @@ def _job_generate(run_id, payload, cancel_event, on_progress, heartbeat_log, evt
 
     os.makedirs(os.path.dirname(os.path.abspath(output_path)) or ".", exist_ok=True)
     out.save(output_path, format="PNG")
+    on_progress(run_id, 100)
+    _emit(evt_queue, result(run_id, output_path))
+
+
+def _job_describe_image(run_id, payload, cancel_event, on_progress, heartbeat_log, evt_queue) -> None:
+    """Custom vision-language models only; runs through the same isolated worker
+    as every other model so GPU memory stays managed by the existing release/
+    cache lifecycle. The result is text, so it's written to output_path as
+    UTF-8 instead of image bytes - the executor reads it back as a string."""
+    from backend.models.adapters import AdapterError, describe_image_with_custom_model
+    from backend.models.dynamic_registry import DynamicModelRegistry
+    from backend.tools.shared.memory import VramBudgetError, preflight_minimum
+
+    model_value = str(payload.get("model") or "")
+    if not model_value.startswith("custom:"):
+        _emit(evt_queue, error(run_id, "Describe Image requires a custom model."))
+        return
+    model_id = model_value.removeprefix("custom:")
+    input_path = str(payload.get("input_path") or "")
+    if not input_path:
+        _emit(evt_queue, error(run_id, "No image was provided."))
+        return
+    output_path = payload["output_path"]
+
+    try:
+        record = DynamicModelRegistry.instance().get(model_id)
+        preflight_minimum(
+            f"custom:{model_id}",
+            float(record.manifest.hardware.minimum_vram_mb or 0),
+            hint="Try a smaller custom model, or free up GPU memory.",
+        )
+    except (KeyError, VramBudgetError) as e:
+        _emit(evt_queue, error(run_id, str(e)))
+        return
+
+    heartbeat_log(run_id, f"Loading custom model: {model_id}")
+    on_progress(run_id, 5)
+    stop_hb = threading.Event()
+
+    def heartbeat():
+        while not stop_hb.wait(20.0):
+            heartbeat_log(run_id, "Custom model is still working…")
+
+    hb_thread = threading.Thread(target=heartbeat, daemon=True)
+    hb_thread.start()
+    try:
+        description = describe_image_with_custom_model(
+            model_id,
+            input_path,
+            instruction=str(payload.get("instruction") or ""),
+            temperature=(float(payload["temperature"]) if payload.get("temperature") is not None else None),
+            top_p=(float(payload["top_p"]) if payload.get("top_p") is not None else None),
+            max_new_tokens=(int(payload["max_new_tokens"]) if payload.get("max_new_tokens") is not None else None),
+            progress=lambda value: on_progress(run_id, max(10, min(99, int(value)))),
+            cancel_event=cancel_event,
+        )
+    except AdapterError as exc:
+        _emit(evt_queue, error(run_id, "__cancelled__" if str(exc) == "__cancelled__" else str(exc)))
+        return
+    finally:
+        stop_hb.set()
+
+    os.makedirs(os.path.dirname(os.path.abspath(output_path)) or ".", exist_ok=True)
+    with open(output_path, "w", encoding="utf-8") as handle:
+        handle.write(description)
     on_progress(run_id, 100)
     _emit(evt_queue, result(run_id, output_path))
 

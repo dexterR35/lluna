@@ -6,6 +6,20 @@ export function capabilityContract(option) {
   return value && typeof value === "object" ? value : null;
 }
 
+/** @param {import("../types").ParameterDefinition} parameter @param {Record<string, any>} numeric */
+function applyNumericCapability(parameter, numeric) {
+  const values = numeric.values || [];
+  return {
+    ...parameter,
+    default: numeric.default,
+    minimum: numeric.minimum,
+    maximum: numeric.maximum,
+    ...(values.length
+      ? { type: "select", options: values.map((/** @type {number} */ value) => ({ value, label: String(value) })) }
+      : {}),
+  };
+}
+
 /** @param {import("../types").ParameterDefinition} parameter @param {Record<string, any> | null} capabilities */
 export function parameterForCapabilities(parameter, capabilities, model = "") {
   if (
@@ -14,8 +28,13 @@ export function parameterForCapabilities(parameter, capabilities, model = "") {
   )
     return null;
   if (!parameter.capability) return parameter;
-  if (!capabilities?.complete) return null;
   const key = parameter.capability;
+  // Free-standing settings (not gated by the generation capability contract's
+  // `complete` flag) - a captioning model doesn't need width/steps/etc. to be
+  // usable, so hide/show these purely on whether the model itself declares them.
+  if (["temperature", "topP", "maxNewTokens"].includes(key))
+    return capabilities?.[key] ? applyNumericCapability(parameter, capabilities[key]) : null;
+  if (!capabilities?.complete) return null;
   if (["negativePrompt", "guidance", "seed"].includes(key) && capabilities[key] !== true)
     return null;
   if (key === "steps" && !capabilities.steps) return null;
@@ -37,18 +56,7 @@ export function parameterForCapabilities(parameter, capabilities, model = "") {
   }
 
   const numeric = key === "steps" ? capabilities.steps : key === "guidance" ? capabilities.guidanceScale : null;
-  if (numeric) {
-    const values = numeric.values || [];
-    return {
-      ...parameter,
-      default: numeric.default,
-      minimum: numeric.minimum,
-      maximum: numeric.maximum,
-      ...(values.length
-        ? { type: "select", options: values.map((/** @type {number} */ value) => ({ value, label: String(value) })) }
-        : {}),
-    };
-  }
+  if (numeric) return applyNumericCapability(parameter, numeric);
   return parameter;
 }
 
@@ -69,7 +77,17 @@ export function parametersForCapabilities(parameters, capabilities, model = "") 
 export function applyCapabilityDefaults(current, capabilities, model) {
   /** @type {Record<string, any>} */
   const next = { ...current, model };
-  for (const key of ["width", "height", "steps", "guidance", "negativePrompt", "seed"])
+  for (const key of [
+    "width",
+    "height",
+    "steps",
+    "guidance",
+    "negativePrompt",
+    "seed",
+    "temperature",
+    "topP",
+    "maxNewTokens",
+  ])
     delete next[key];
   const widths = capabilities.supportedWidths || [];
   const heights = capabilities.supportedHeights || [];
@@ -80,5 +98,9 @@ export function applyCapabilityDefaults(current, capabilities, model) {
     next.guidance = capabilities.guidanceScale.default;
   if (capabilities.negativePrompt === true) next.negativePrompt = "";
   if (capabilities.seed === true) next.seed = -1;
+  if (capabilities.temperature) next.temperature = capabilities.temperature.default;
+  if (capabilities.topP) next.topP = capabilities.topP.default;
+  if (capabilities.maxNewTokens) next.maxNewTokens = capabilities.maxNewTokens.default;
+  if (capabilities.defaultInstruction) next.instruction = capabilities.defaultInstruction;
   return next;
 }

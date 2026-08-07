@@ -94,4 +94,85 @@ describe("model capability projection", () => {
       ).map((item) => item.id),
     ).toEqual(["model", "denoise"]);
   });
+
+  it("shows temperature/top-p/max-tokens only when the model declares them", () => {
+    const describeParameters = [
+      { id: "model", label: "Model", type: "model" },
+      { id: "instruction", label: "Instruction", type: "textarea" },
+      {
+        id: "temperature",
+        label: "Temperature",
+        type: "number",
+        capability: "temperature",
+        default: 0.2,
+        minimum: 0,
+        maximum: 1,
+      },
+      {
+        id: "topP",
+        label: "Top-p",
+        type: "number",
+        capability: "topP",
+        default: 0.7,
+        minimum: 0,
+        maximum: 1,
+      },
+      {
+        id: "maxNewTokens",
+        label: "Max length",
+        type: "integer",
+        capability: "maxNewTokens",
+        default: 200,
+        minimum: 1,
+        maximum: 2000,
+      },
+    ];
+    const captioner = {
+      // Deliberately omit `complete` - these settings aren't gated by the
+      // generation-completeness contract the way width/steps/guidance are.
+      temperature: { default: 0.5, minimum: 0, maximum: 1 },
+      topP: { default: 0.9, minimum: 0, maximum: 1 },
+      maxNewTokens: { default: 300, minimum: 1, maximum: 4000 },
+    };
+    const projected = parametersForCapabilities(describeParameters, captioner);
+    expect(projected.map((item) => item.id)).toEqual([
+      "model",
+      "instruction",
+      "temperature",
+      "topP",
+      "maxNewTokens",
+    ]);
+    expect(projected.find((item) => item.id === "temperature")).toMatchObject({
+      default: 0.5,
+      minimum: 0,
+      maximum: 1,
+    });
+    expect(projected.find((item) => item.id === "maxNewTokens")).toMatchObject({
+      default: 300,
+      maximum: 4000,
+    });
+
+    const withoutSampling = parametersForCapabilities(describeParameters, {});
+    expect(withoutSampling.map((item) => item.id)).toEqual(["model", "instruction"]);
+  });
+
+  it("applies temperature/top-p/max-tokens/instruction defaults for the selected model", () => {
+    const values = applyCapabilityDefaults(
+      { temperature: 0.9 },
+      {
+        temperature: { default: 0.4, minimum: 0, maximum: 1 },
+        topP: { default: 0.6, minimum: 0, maximum: 1 },
+        maxNewTokens: { default: 150, minimum: 1, maximum: 1000 },
+        defaultInstruction: "Describe the scene.",
+      },
+      "custom:captioner",
+    );
+    expect(values).toEqual({
+      model: "custom:captioner",
+      temperature: 0.4,
+      topP: 0.6,
+      maxNewTokens: 150,
+      instruction: "Describe the scene.",
+    });
+  });
 });

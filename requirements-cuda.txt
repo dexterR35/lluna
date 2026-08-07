@@ -1,3 +1,6 @@
 # Install Torch/Torchvision from the CUDA index selected by install.py first.
 -r requirements.txt
 paddlepaddle==3.0.0
+# INT8/INT4 quantized loading for custom Diffusers models (backend/models/adapters.py).
+# CUDA-only; not installed for the DirectML/macOS/CPU backend groups.
+bitsandbytes>=0.43.0

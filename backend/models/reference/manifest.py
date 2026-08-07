@@ -38,6 +38,7 @@ SUPPORTED_TASKS = {
     "inpainting",
     "text-recognition",
     "text-generation",
+    "image-to-text",
     "automatic-speech-recognition",
     "custom",
 }
@@ -293,6 +294,10 @@ class ModelCapabilities:
     scales: tuple[int, ...] = ()
     tile_size: NumberCapability | None = None
     tile_overlap: NumberCapability | None = None
+    temperature: NumberCapability | None = None
+    top_p: NumberCapability | None = None
+    max_new_tokens: NumberCapability | None = None
+    default_instruction: str = ""
 
     def __post_init__(self) -> None:
         if self.provenance not in CAPABILITY_PROVENANCE:
@@ -364,6 +369,10 @@ class ModelCapabilities:
             scales=integers("scales"),
             tile_size=number("tileSize"),
             tile_overlap=number("tileOverlap"),
+            temperature=number("temperature"),
+            top_p=number("topP"),
+            max_new_tokens=number("maxNewTokens"),
+            default_instruction=str(raw.get("defaultInstruction", "")).strip(),
         )
 
     def unresolved(self, primary_task: str) -> tuple[str, ...]:
@@ -426,6 +435,10 @@ class ModelCapabilities:
             "scales": list(self.scales),
             "tileSize": self.tile_size.to_dict(integer=True) if self.tile_size else None,
             "tileOverlap": self.tile_overlap.to_dict(integer=True) if self.tile_overlap else None,
+            "temperature": self.temperature.to_dict() if self.temperature else None,
+            "topP": self.top_p.to_dict() if self.top_p else None,
+            "maxNewTokens": self.max_new_tokens.to_dict(integer=True) if self.max_new_tokens else None,
+            "defaultInstruction": self.default_instruction,
         }
 
 

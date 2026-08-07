@@ -462,6 +462,11 @@ def _resolve_dtype(dtype: Optional[str]) -> torch.dtype:
     guessing" rule used for the VRAM/disk preflights elsewhere in this app.
     """
     normalized = (dtype or "auto").strip().lower()
+    if normalized in {"int8", "int4"}:
+        raise ValueError(
+            f"{normalized.upper()} quantization is only available for custom models "
+            "(Add Model), not built-in FLUX/Qwen models."
+        )
     if normalized == "fp32":
         return torch.float32
     if normalized == "fp16":

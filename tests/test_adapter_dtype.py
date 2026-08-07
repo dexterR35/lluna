@@ -86,7 +86,7 @@ def test_unknown_dtype_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
     record = _record(_diffusers_manifest(dtypes=["fp32"]))
 
     with pytest.raises(AdapterError, match="Unknown precision"):
-        DiffusersAdapter().load(record, dtype="int4")
+        DiffusersAdapter().load(record, dtype="int2")
 
 
 def test_dtype_not_declared_by_manifest_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -123,6 +123,139 @@ def test_device_incompatible_with_manifest_backends_is_rejected(monkeypatch: pyt
 
     with pytest.raises(AdapterError, match="not cpu"):
         DiffusersAdapter().load(record, dtype="fp32")
+
+
+def _install_fake_diffusers_with_quant(monkeypatch: pytest.MonkeyPatch, calls: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    quant_configs: list[dict[str, Any]] = []
+    module = types.ModuleType("diffusers")
+
+    class _FakeDiffusionPipeline:
+        @staticmethod
+        def from_pretrained(path: str, **kwargs: Any) -> _FakePipeline:
+            calls.append({"path": path, **kwargs})
+            return _FakePipeline()
+
+    class _FakePipelineQuantizationConfig:
+        def __init__(self, *, quant_backend: str, quant_kwargs: dict, components_to_quantize: list[str]) -> None:
+            quant_configs.append(
+                {
+                    "quant_backend": quant_backend,
+                    "quant_kwargs": quant_kwargs,
+                    "components_to_quantize": components_to_quantize,
+                }
+            )
+
+    module.DiffusionPipeline = _FakeDiffusionPipeline
+    module.PipelineQuantizationConfig = _FakePipelineQuantizationConfig
+    monkeypatch.setitem(sys.modules, "diffusers", module)
+    return quant_configs
+
+
+def _force_cuda(monkeypatch: pytest.MonkeyPatch) -> None:
+    import torch
+
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(torch.cuda, "is_bf16_supported", lambda: True)
+
+
+def _write_model_index(path: Path, components: dict[str, Any]) -> None:
+    import json
+
+    path.mkdir(parents=True, exist_ok=True)
+    (path / "model_index.json").write_text(
+        json.dumps({"_class_name": "FakePipeline", **components}), encoding="utf-8"
+    )
+
+
+def test_int4_quantization_loads_when_declared_and_available(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import torch
+
+    import backend.models.adapters as adapters_module
+
+    _force_cuda(monkeypatch)
+    monkeypatch.setattr(adapters_module, "_bitsandbytes_available", lambda: True)
+    _write_model_index(tmp_path, {"transformer": ["pkg", "Cls"], "vae": ["pkg", "Cls"]})
+    calls: list[dict[str, Any]] = []
+    quant_configs = _install_fake_diffusers_with_quant(monkeypatch, calls)
+    manifest = _diffusers_manifest(dtypes=["int4"])
+    record = DynamicModelRecord(manifest=manifest, path=tmp_path, installed=True, enabled=True)
+
+    DiffusersAdapter().load(record, dtype="int4")
+
+    assert calls[0]["torch_dtype"] == torch.bfloat16
+    assert quant_configs == [
+        {
+            "quant_backend": "bitsandbytes_4bit",
+            "quant_kwargs": {
+                "load_in_4bit": True,
+                "bnb_4bit_quant_type": "nf4",
+                "bnb_4bit_compute_dtype": torch.bfloat16,
+            },
+            "components_to_quantize": ["transformer"],
+        }
+    ]
+
+
+def test_int8_quantization_requires_cuda(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _write_model_index(tmp_path, {"transformer": ["pkg", "Cls"]})
+    _install_fake_diffusers_with_quant(monkeypatch, [])
+    manifest = _diffusers_manifest(dtypes=["int8"])
+    record = DynamicModelRecord(manifest=manifest, path=tmp_path, installed=True, enabled=True)
+
+    with pytest.raises(AdapterError, match="requires CUDA"):
+        DiffusersAdapter().load(record, dtype="int8")
+
+
+def test_quantization_requires_bitsandbytes_installed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import backend.models.adapters as adapters_module
+
+    _force_cuda(monkeypatch)
+    monkeypatch.setattr(adapters_module, "_bitsandbytes_available", lambda: False)
+    _write_model_index(tmp_path, {"transformer": ["pkg", "Cls"]})
+    _install_fake_diffusers_with_quant(monkeypatch, [])
+    manifest = _diffusers_manifest(dtypes=["int8"])
+    record = DynamicModelRecord(manifest=manifest, path=tmp_path, installed=True, enabled=True)
+
+    with pytest.raises(AdapterError, match="bitsandbytes package"):
+        DiffusersAdapter().load(record, dtype="int8")
+
+
+def test_quantization_requires_declared_manifest_support(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import backend.models.adapters as adapters_module
+
+    _force_cuda(monkeypatch)
+    monkeypatch.setattr(adapters_module, "_bitsandbytes_available", lambda: True)
+    _write_model_index(tmp_path, {"transformer": ["pkg", "Cls"]})
+    _install_fake_diffusers_with_quant(monkeypatch, [])
+    manifest = _diffusers_manifest(dtypes=["fp32"])
+    record = DynamicModelRecord(manifest=manifest, path=tmp_path, installed=True, enabled=True)
+
+    with pytest.raises(AdapterError, match="only declares support for"):
+        DiffusersAdapter().load(record, dtype="int8")
+
+
+def test_quantization_requires_a_quantizable_component(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import backend.models.adapters as adapters_module
+
+    _force_cuda(monkeypatch)
+    monkeypatch.setattr(adapters_module, "_bitsandbytes_available", lambda: True)
+    _write_model_index(tmp_path, {"vae": ["pkg", "Cls"], "scheduler": ["pkg", "Cls"]})
+    _install_fake_diffusers_with_quant(monkeypatch, [])
+    manifest = _diffusers_manifest(dtypes=["int8"])
+    record = DynamicModelRecord(manifest=manifest, path=tmp_path, installed=True, enabled=True)
+
+    with pytest.raises(AdapterError, match="quantizable component"):
+        DiffusersAdapter().load(record, dtype="int8")
+
+
+def test_auto_never_selects_a_quantized_dtype(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _write_model_index(tmp_path, {"transformer": ["pkg", "Cls"]})
+    _install_fake_diffusers_with_quant(monkeypatch, [])
+    manifest = _diffusers_manifest(dtypes=["int4"])
+    record = DynamicModelRecord(manifest=manifest, path=tmp_path, installed=True, enabled=True)
+
+    with pytest.raises(AdapterError, match="No declared dtype"):
+        DiffusersAdapter().load(record, dtype=None)
 
 
 class _RecordingAdapter(RuntimeAdapter):

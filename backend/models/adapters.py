@@ -32,6 +32,29 @@ class RuntimeAdapter:
         del loaded
 
 
+QUANTIZED_DTYPES = {"int8", "int4"}
+_QUANTIZABLE_COMPONENT_NAMES = {"transformer", "unet", "text_encoder", "text_encoder_2", "text_encoder_3"}
+
+
+def _diffusers_quantizable_components(path) -> list[str]:
+    """Component keys in model_index.json worth quantizing (the large sub-models)."""
+    import json
+
+    try:
+        raw = json.loads((path / "model_index.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    if not isinstance(raw, dict):
+        return []
+    return sorted(key for key in raw if not key.startswith("_") and key in _QUANTIZABLE_COMPONENT_NAMES)
+
+
+def _bitsandbytes_available() -> bool:
+    import importlib.util
+
+    return importlib.util.find_spec("bitsandbytes") is not None
+
+
 class DiffusersAdapter(RuntimeAdapter):
     id = "diffusers"
 
@@ -53,6 +76,55 @@ class DiffusersAdapter(RuntimeAdapter):
             named["fp8"] = float8
 
         requested = (dtype or "auto").strip().lower()
+        if requested in QUANTIZED_DTYPES:
+            # Quantized precision is an explicit opt-in only: never picked by
+            # "auto", and only available for models that declare it and run
+            # on CUDA with bitsandbytes installed.
+            if requested not in allowed:
+                raise AdapterError(
+                    f"This model only declares support for: {', '.join(sorted(allowed)) or 'none'}."
+                )
+            if device != "cuda":
+                raise AdapterError(f"{requested.upper()} quantization requires CUDA; this model would run on {device}.")
+            if not _bitsandbytes_available():
+                raise AdapterError(
+                    f"{requested.upper()} quantization needs the bitsandbytes package, which isn't installed."
+                )
+            components = _diffusers_quantizable_components(record.path)
+            if not components:
+                raise AdapterError(
+                    "Could not find a quantizable component (transformer/unet/text_encoder) "
+                    "in this model's model_index.json."
+                )
+            compute_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+            try:
+                from diffusers import PipelineQuantizationConfig
+            except ImportError as exc:
+                raise AdapterError(
+                    "This diffusers version doesn't support pipeline-level quantization. Upgrade diffusers."
+                ) from exc
+            quant_kwargs = (
+                {"load_in_8bit": True}
+                if requested == "int8"
+                else {"load_in_4bit": True, "bnb_4bit_quant_type": "nf4", "bnb_4bit_compute_dtype": compute_dtype}
+            )
+            quantization_config = PipelineQuantizationConfig(
+                quant_backend=f"bitsandbytes_{requested.removeprefix('int')}bit",
+                quant_kwargs=quant_kwargs,
+                components_to_quantize=components,
+            )
+            try:
+                pipeline = DiffusionPipeline.from_pretrained(
+                    str(record.path),
+                    local_files_only=True,
+                    torch_dtype=compute_dtype,
+                    quantization_config=quantization_config,
+                )
+            except Exception as exc:
+                raise AdapterError(f"{requested.upper()} quantization failed to load: {exc}") from exc
+            pipeline.to(device)
+            return pipeline, device
+
         if requested != "auto":
             # An explicit choice is validated against what this model's
             # manifest actually declares support for, and fails clearly
@@ -165,7 +237,23 @@ class TransformersAdapter(RuntimeAdapter):
         if cancel_event is not None and cancel_event.is_set():
             raise AdapterError("__cancelled__")
         value = inputs.get("input", inputs.get("prompt", inputs.get("image")))
-        result = loaded(value)
+        call_kwargs = {
+            key: entry
+            for key, entry in {
+                "prompt": inputs.get("instruction") or None,
+                "max_new_tokens": inputs.get("max_new_tokens"),
+                "temperature": inputs.get("temperature"),
+                "top_p": inputs.get("top_p"),
+            }.items()
+            if entry is not None
+        }
+        try:
+            result = loaded(value, **call_kwargs)
+        except TypeError:
+            # Not every transformers pipeline accepts a conditional prompt or
+            # sampling kwargs (e.g. plain unconditional captioning) - fall
+            # back to the bare call rather than fail on an optional extra.
+            result = loaded(value)
         if progress:
             progress(100)
         return result
@@ -305,3 +393,58 @@ def generate_with_custom_model(
     if not isinstance(result, Image.Image):
         raise AdapterError("The selected custom model did not return an image.")
     return result
+
+
+def _extract_description_text(result: Any) -> str:
+    """Normalize the many shapes a transformers pipeline call can return
+    (a bare string, a list of dicts, a single dict) into plain text."""
+    if isinstance(result, str):
+        return result.strip()
+    if isinstance(result, list) and result:
+        first = result[0]
+        if isinstance(first, dict):
+            for key in ("generated_text", "text"):
+                value = first.get(key)
+                if isinstance(value, str):
+                    return value.strip()
+        if isinstance(first, str):
+            return first.strip()
+    if isinstance(result, dict):
+        for key in ("generated_text", "text"):
+            value = result.get(key)
+            if isinstance(value, str):
+                return value.strip()
+    return ""
+
+
+def describe_image_with_custom_model(
+    model_id: str,
+    image_path: str,
+    *,
+    instruction: str = "",
+    temperature: float | None = None,
+    top_p: float | None = None,
+    max_new_tokens: int | None = None,
+    progress: Progress = None,
+    cancel_event: CancelEvent = None,
+) -> str:
+    from PIL import Image as PILImage
+
+    with PILImage.open(image_path) as opened:
+        image = opened.convert("RGB")
+    result = DynamicRuntimeManager.instance().run(
+        model_id,
+        {
+            "image": image,
+            **({"instruction": instruction} if instruction else {}),
+            **({"temperature": temperature} if temperature is not None else {}),
+            **({"top_p": top_p} if top_p is not None else {}),
+            **({"max_new_tokens": max_new_tokens} if max_new_tokens is not None else {}),
+        },
+        progress=progress,
+        cancel_event=cancel_event,
+    )
+    text = _extract_description_text(result)
+    if not text:
+        raise AdapterError("The selected custom model did not return a text description.")
+    return text

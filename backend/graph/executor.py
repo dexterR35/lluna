@@ -1306,7 +1306,7 @@ class RunManager:
         progress_span: float = 100,
         item_index: int = 0,
         item_count: int = 1,
-    ) -> ArtifactRecord:
+    ) -> Any:
         # Keep direct payload-construction tests able to exercise this method
         # with a stubbed worker even when CI enables the fake worker globally.
         if os.environ.get("LLUNA_FAKE_WORKER") == "1" and control is not None:
@@ -1330,6 +1330,7 @@ class RunManager:
             "select_subject": JobType.SELECT_SUBJECT,
             "subtitle": JobType.SUBTITLE,
             "birefnet": JobType.BIREFNET,
+            "describe_image": JobType.DESCRIBE_IMAGE,
         }
         job_type = job_types.get(str(adapter))
         if job_type is None:
@@ -1571,6 +1572,15 @@ class RunManager:
                 output_mode=str(params.get("outputMode") or "transparent"),
                 background_color=str(params.get("backgroundColor") or "#ffffff"),
             )
+        elif adapter == "describe_image":
+            payload.update(
+                model=str(params.get("model") or ""),
+                input_path=artifact_path("image"),
+                instruction=str(params.get("instruction") or ""),
+                temperature=float(params["temperature"]) if params.get("temperature") is not None else None,
+                top_p=float(params["topP"]) if params.get("topP") is not None else None,
+                max_new_tokens=int(params["maxNewTokens"]) if params.get("maxNewTokens") is not None else None,
+            )
         return self._invoke_worker(
             control,
             node,
@@ -1599,7 +1609,7 @@ class RunManager:
         progress_span: float = 100,
         item_index: int = 0,
         item_count: int = 1,
-    ) -> ArtifactRecord:
+    ) -> Any:
         from backend.tools.inference.client import InferClient
 
         done = threading.Event()
@@ -1681,6 +1691,13 @@ class RunManager:
                 code, error[0], retryable=code in {"TIMEOUT", "WORKER_CRASH", "BUSY"}
             )
         final_path = result_path[-1] if result_path else output_path
+        if node.schema_id == "lluna.input.describe_image":
+            # Text result, not media: it's written to output_path as UTF-8
+            # by _job_describe_image, so it's read back and returned as a
+            # plain port value instead of being committed as an artifact.
+            text = Path(final_path).read_text(encoding="utf-8").strip()
+            Path(output_path).unlink(missing_ok=True)
+            return {NODE_REGISTRY[node.schema_id].outputs[0].id: text}
         artifact = self._artifacts.commit(
             final_path,
             run_id=run_id,

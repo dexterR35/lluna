@@ -20,6 +20,7 @@ class JobType(str, Enum):
     SUBTITLE = "subtitle"
     BIREFNET = "birefnet"
     SEEDVR = "seedvr"
+    DESCRIBE_IMAGE = "describe_image"
 
 
 @unique
