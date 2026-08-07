@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Callable
 
 from backend.core.atomic import atomic_write_json
-from backend.core.paths import PATHS, AppPaths
+from backend.core.paths import AppPaths
 from backend.models.reference.manifest import (
     MANIFEST_FILENAME,
     ManifestError,
@@ -87,7 +87,11 @@ class DynamicModelRegistry:
     _instance: "DynamicModelRegistry | None" = None
     _instance_lock = threading.Lock()
 
-    def __init__(self, paths: AppPaths = PATHS) -> None:
+    def __init__(self, paths: AppPaths | None = None) -> None:
+        # See ConfigurationLoader.__init__ for why this isn't `= PATHS`: a
+        # frozen default would ignore any LLUNA_MODELS_DIR/LLUNA_CONFIG_DIR
+        # override set after this class was first imported.
+        paths = paths if paths is not None else AppPaths.resolve()
         self.paths = paths
         self.root = paths.models_dir / "custom"
         self.staging_root = paths.models_dir / ".staging"

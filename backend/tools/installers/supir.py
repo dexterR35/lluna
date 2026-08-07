@@ -216,13 +216,17 @@ def _safe_extract(archive: Path, destination: Path) -> None:
 
 
 def _install_source() -> None:
+    from backend.tools.shared.download_registry import urllib_cancel_reporthook
+
     if readiness()["source"]:
         return
     supir_root().mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="lluna-supir-") as raw:
         staging = Path(raw)
         archive = staging / "source.zip"
-        urllib.request.urlretrieve(SUPIR_SOURCE_URL, archive)  # noqa: S310 - pinned HTTPS URL
+        urllib.request.urlretrieve(  # noqa: S310 - pinned HTTPS URL
+            SUPIR_SOURCE_URL, archive, reporthook=urllib_cancel_reporthook
+        )
         extracted = staging / "extracted"
         extracted.mkdir()
         _safe_extract(archive, extracted)
@@ -394,14 +398,61 @@ def import_checkpoint(source: Path, kind: str) -> Path:
     return destination
 
 
-def install_model() -> None:
-    if not readiness()["runtime"]:
-        _bootstrap_python()
+KIND_SUPIR = "supir"
+
+
+def discard_partial(key: str = "supir") -> None:
+    """Remove partial SUPIR artifacts, keeping any step that already verified
+    complete so a retried install can resume instead of starting over."""
+    status = readiness()
+    if not status["source"]:
+        shutil.rmtree(source_dir(), ignore_errors=True)
+    runtime_staging = runtime_dir().with_name(".supir-python.staging")
+    shutil.rmtree(runtime_staging, ignore_errors=True)
+    if not status["runtime"]:
+        shutil.rmtree(runtime_dir(), ignore_errors=True)
     for kind in ("Q", "F", "sdxl"):
-        download_checkpoint(kind)
-    _install_source()
-    _install_runtime()
-    _install_huggingface_dependencies()
+        shutil.rmtree(supir_root() / ".downloads" / kind, ignore_errors=True)
+        destination = checkpoint_path(kind)
+        partial = destination.with_suffix(destination.suffix + ".part")
+        try:
+            if partial.is_file():
+                partial.unlink()
+        except OSError:
+            pass
+
+
+def install_model() -> None:
+    from backend.tools.shared.download_registry import (
+        DownloadCancelled,
+        ModelDownloadRegistry,
+    )
+
+    reg = ModelDownloadRegistry.instance()
+    reg.begin(KIND_SUPIR, "supir")
+    try:
+        reg.check_cancelled()
+        if not readiness()["runtime"]:
+            _bootstrap_python()
+        for kind in ("Q", "F", "sdxl"):
+            reg.check_cancelled()
+            download_checkpoint(kind)
+        reg.check_cancelled()
+        _install_source()
+        reg.check_cancelled()
+        _install_runtime()
+        reg.check_cancelled()
+        _install_huggingface_dependencies()
+        reg.check_cancelled()
+    except DownloadCancelled:
+        discard_partial()
+        reg.fail(KIND_SUPIR, "supir", keep_pending=True)
+        raise
+    except Exception:
+        discard_partial()
+        reg.fail(KIND_SUPIR, "supir", keep_pending=False)
+        raise
+    reg.complete(KIND_SUPIR, "supir")
 
 
 def uninstall_model() -> None:

@@ -1464,9 +1464,12 @@ class RunManager:
             )
             capabilities = selected_option.get("capabilities", {}) if selected_option else {}
             step_contract = capabilities.get("steps") or {}
+            from backend.models.service import generation_minimum_vram_mb
+
             payload.update(
                 prompt=inputs.get("prompt") or params.get("prompt") or "",
                 mode=model_value,
+                minimum_vram_mb=generation_minimum_vram_mb(str(model_value)),
                 width=int(
                     params.get("width")
                     or (capabilities.get("supportedWidths") or [settings.generation.width])[0]

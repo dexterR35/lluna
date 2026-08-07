@@ -370,6 +370,43 @@ def _builtin_platform_fields(model_id: str, item: dict) -> dict:
     }
 
 
+def _generate_catalog_parent_id(mode) -> str:
+    """Which MODEL_REGISTRY entry a GenerateMode's specs (license, VRAM/RAM,
+    disk size) come from. Falls back to the generic "flux" entry for any
+    klein/base variant not explicitly listed, so a new GenerateMode added to
+    generate.py's catalog is covered here without touching this function."""
+    from backend.tools.shared.constants import GenerateMode
+
+    if mode == GenerateMode.QWEN_IMAGE:
+        return "qwen-image"
+    if mode == GenerateMode.FLUX2_DEV:
+        return "flux2-dev"
+    if mode == GenerateMode.FLUX2_KLEIN_9B_FP8:
+        return "flux2-klein-9b-fp8"
+    return "flux"
+
+
+def generation_minimum_vram_mb(model_value: str) -> int:
+    """Declared VRAM floor for a Generate node's selected model value - a
+    built-in GenerateMode value or a `custom:<id>` dynamic model id - used
+    for the pre-run VRAM preflight (see `backend.tools.shared.memory
+    .preflight_minimum`). Returns 0 ("unknown/undeclared") rather than
+    raising when a value can't be resolved, since an undeclared minimum
+    should never block a run by itself.
+    """
+    if model_value.startswith("custom:"):
+        record = _dynamic_record(model_value.removeprefix("custom:"))
+        return int(record.manifest.hardware.minimum_vram_mb or 0) if record else 0
+    from backend.tools.shared.constants import GenerateMode
+
+    try:
+        mode = GenerateMode(model_value)
+    except ValueError:
+        return 0
+    parent_id = _generate_catalog_parent_id(mode)
+    return int(MODEL_REGISTRY[parent_id].minimum_vram_mb or 0)
+
+
 def _model_description(model_id: str) -> dict:
     if model_id == "supir":
         from backend.tools.installers.supir import readiness, supir_root
@@ -383,15 +420,7 @@ def _model_description(model_id: str) -> dict:
 
         mode = GenerateMode(model_id.removeprefix("generate:"))
         info = catalog_info(mode)
-        parent_id = (
-            "qwen-image"
-            if mode == GenerateMode.QWEN_IMAGE
-            else "flux2-dev"
-            if mode == GenerateMode.FLUX2_DEV
-            else "flux2-klein-9b-fp8"
-            if mode == GenerateMode.FLUX2_KLEIN_9B_FP8
-            else "flux"
-        )
+        parent_id = _generate_catalog_parent_id(mode)
         item = asdict(MODEL_REGISTRY[parent_id])
         item.update(
             id=model_id,
@@ -646,3 +675,62 @@ def start_model_action(model_id: str, operation: str) -> dict:
 
     threading.Thread(target=run, name=f"model-{action_id}", daemon=True).start()
     return {"actionId": action_id, "jobId": None, "position": -1}
+
+
+def start_local_import(source: Path, raw: dict) -> dict:
+    """Queue a local model import through ModelDownloadQueue instead of
+    copying it on the request thread - large local checkpoints get the same
+    progress/cancel support as a remote install."""
+    from backend.models.importer import configure_manifest, import_local
+
+    # Cheap, synchronous: surfaces a bad manifest immediately instead of only
+    # after the job reaches the front of the queue.
+    model_id = configure_manifest(raw).id
+    action_id = f"import:{model_id}"
+    events = EventBroker.instance()
+    queue = ModelDownloadQueue.instance()
+    _ensure_queue_events(queue)
+
+    def work() -> None:
+        queue.report_current_progress(0, detail="Preparing import")
+        import_local(source, raw)
+
+    def done(error: BaseException | None) -> None:
+        if error is None:
+            event_type = "download.completed"
+            payload = {"downloadId": action_id, "modelId": model_id, "operation": "import"}
+        else:
+            cancelled = type(error).__name__ == "DownloadCancelled"
+            event_type = "download.cancelled" if cancelled else "download.failed"
+            payload = {
+                "downloadId": action_id,
+                "modelId": model_id,
+                "operation": "import",
+                "message": str(error),
+            }
+        events.publish(event_type, payload=payload)
+        events.publish("model.changed", payload={"modelId": model_id})
+
+    position = queue.enqueue("model", model_id, work, done, operation="import")
+    job = next(
+        (
+            item
+            for item in queue.jobs()
+            if item.kind == "model" and item.key == model_id and item.operation == "import"
+        ),
+        None,
+    )
+    payload = {
+        "downloadId": action_id,
+        "modelId": model_id,
+        "operation": "import",
+        "jobId": job.job_id if job else None,
+        "position": position,
+    }
+    events.publish("download.queued", payload=payload)
+    return {
+        "modelId": model_id,
+        "operation": "import",
+        "jobId": job.job_id if job else None,
+        "position": position,
+    }

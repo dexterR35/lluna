@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Set
 
 from backend.tools.shared.constants import GenerateMode
+from backend.tools.shared.enabled_modes import EnabledModesCatalog
+from backend.tools.shared import enabled_modes as _enabled_modes
 
 _MARKER = ".lluna_installed"
 
@@ -127,7 +129,6 @@ _CATALOG_BY_MODE: Dict[GenerateMode, GenerateModelInfo] = {m.mode: m for m in MO
 
 # Nothing On until the user installs (weights are large; Settings-only).
 DEFAULT_ENABLED_VALUES: tuple[str, ...] = ()
-_NONE_ENABLED = "__none__"
 
 
 def models_dir() -> Path:
@@ -224,93 +225,60 @@ def model_downloads(info: GenerateModelInfo) -> tuple[GenerateDownload, ...]:
 
 
 def _validate_download_snapshot(info: GenerateModelInfo, dest: Path) -> None:
+    from backend.tools.shared.huggingface import require_snapshot_files
+
     required_files = [
         "model_index.json",
         "scheduler/scheduler_config.json",
         "text_encoder/config.json",
         "tokenizer/tokenizer_config.json",
         "vae/config.json",
+        "transformer/config.json",
     ]
-    required_weight_dirs = ["text_encoder", "vae"]
-    required_files.append("transformer/config.json")
+    required_glob_dirs = {"text_encoder": "*.safetensors", "vae": "*.safetensors"}
     if info.single_file_name:
         required_files.append(info.single_file_name)
     else:
-        required_weight_dirs.append("transformer")
+        required_glob_dirs["transformer"] = "*.safetensors"
 
-    missing = [rel for rel in required_files if not (dest / rel).is_file()]
-    for rel in required_weight_dirs:
-        if not any((dest / rel).glob("*.safetensors")):
-            missing.append(f"{rel}/*.safetensors")
-    if missing:
-        raise RuntimeError(
-            f"Downloaded {info.mode.value} snapshot is incomplete; missing: " + ", ".join(missing)
-        )
+    require_snapshot_files(
+        dest, required_files, name=info.mode.value, required_glob_dirs=required_glob_dirs
+    )
+
+
+_CATALOG = EnabledModesCatalog(
+    mode_cls=GenerateMode,
+    catalog_modes=lambda: [info.mode for info in MODEL_CATALOG],
+    default_enabled=DEFAULT_ENABLED_VALUES,
+    is_installed=lambda mode: is_model_installed(mode),
+    settings_section="generation",
+    preferred_modes=(GenerateMode.FLUX2_KLEIN_BASE_4B,),
+)
 
 
 def parse_enabled_values(raw: str) -> Set[str]:
-    s = "" if raw is None else str(raw).strip()
-    if not s:
-        return set(DEFAULT_ENABLED_VALUES)
-    if s == _NONE_ENABLED:
-        return set()
-    values = {part.strip() for part in s.split(",") if part.strip()}
-    valid = {m.value for m in GenerateMode}
-    return {v for v in values if v in valid}
+    return _enabled_modes.parse_enabled_values(_CATALOG, raw)
 
 
 def serialize_enabled_values(values: Iterable[str]) -> str:
-    ordered = []
-    seen = set()
-    for info in MODEL_CATALOG:
-        v = info.mode.value
-        if v in values and v not in seen:
-            ordered.append(v)
-            seen.add(v)
-    return ",".join(ordered) if ordered else _NONE_ENABLED
+    return _enabled_modes.serialize_enabled_values(_CATALOG, values)
 
 
 def get_enabled_values() -> Set[str]:
-    from backend.configuration.service import get_settings
-
-    return parse_enabled_values(get_settings().generation.enabled_models)
+    return _enabled_modes.get_enabled_values(_CATALOG)
 
 
 def set_model_enabled(mode: GenerateMode, enabled: bool) -> None:
-    from backend.configuration.service import update_settings
-
-    values = get_enabled_values()
-    if enabled:
-        values.add(mode.value)
-    else:
-        values.discard(mode.value)
-    update_settings({"generation": {"enabled_models": serialize_enabled_values(values)}})
+    _enabled_modes.set_model_enabled(_CATALOG, mode, enabled)
 
 
 def selectable_modes() -> List[GenerateMode]:
     """On + installed only (no phantom defaults — weights must be on disk)."""
-    enabled = get_enabled_values()
-    return [
-        info.mode
-        for info in MODEL_CATALOG
-        if info.mode.value in enabled and is_model_installed(info.mode)
-    ]
+    return _enabled_modes.selectable_modes(_CATALOG)
 
 
 def ensure_selected_mode_valid() -> GenerateMode:
-    from backend.configuration.service import get_settings, update_settings
-
-    current = GenerateMode(get_settings().generation.mode)
-    available = selectable_modes()
-    if current in available:
-        return current
-    if GenerateMode.FLUX2_KLEIN_BASE_4B in available:
-        update_settings({"generation": {"mode": GenerateMode.FLUX2_KLEIN_BASE_4B.value}})
-        return GenerateMode.FLUX2_KLEIN_BASE_4B
-    if available:
-        update_settings({"generation": {"mode": available[0].value}})
-        return available[0]
-    return current
+    return _enabled_modes.ensure_selected_mode_valid(_CATALOG)
 
 
 def apply_default_generate_model() -> GenerateMode:

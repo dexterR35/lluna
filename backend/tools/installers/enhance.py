@@ -13,6 +13,8 @@ from backend.models.reference.catalog import (
     REALESRGAN_X4_ARTIFACT,
 )
 from backend.tools.shared.constants import EnhanceMode
+from backend.tools.shared.enabled_modes import EnabledModesCatalog
+from backend.tools.shared import enabled_modes as _enabled_modes
 
 
 @dataclass(frozen=True)
@@ -54,9 +56,6 @@ MODEL_CATALOG: List[EnhanceModelInfo] = [
 _CATALOG_BY_MODE: Dict[EnhanceMode, EnhanceModelInfo] = {m.mode: m for m in MODEL_CATALOG}
 
 DEFAULT_ENABLED_VALUES = tuple(m.mode.value for m in MODEL_CATALOG if m.is_default)
-
-# Saved when every model is Off (empty string would be read as “use factory defaults”)
-_NONE_ENABLED = "__none__"
 
 
 def models_dir() -> Path:
@@ -109,72 +108,41 @@ def native_scale(mode: EnhanceMode) -> int:
     return info.scale if info else 2
 
 
+_CATALOG = EnabledModesCatalog(
+    mode_cls=EnhanceMode,
+    catalog_modes=lambda: [info.mode for info in MODEL_CATALOG],
+    default_enabled=DEFAULT_ENABLED_VALUES,
+    is_installed=lambda mode: is_model_installed(mode),
+    settings_section="enhancement",
+    preferred_modes=(EnhanceMode.X2PLUS,),
+)
+
+
 def parse_enabled_values(raw: str) -> Set[str]:
     """Parse EnabledModels. Missing/blank → factory defaults; ``__none__`` → all Off."""
-    s = "" if raw is None else str(raw).strip()
-    if not s:
-        return set(DEFAULT_ENABLED_VALUES)
-    if s == _NONE_ENABLED:
-        return set()
-    values = {part.strip() for part in s.split(",") if part.strip()}
-    valid = {m.value for m in EnhanceMode}
-    return {v for v in values if v in valid}
+    return _enabled_modes.parse_enabled_values(_CATALOG, raw)
 
 
 def serialize_enabled_values(values: Iterable[str]) -> str:
-    ordered = []
-    seen = set()
-    for info in MODEL_CATALOG:
-        v = info.mode.value
-        if v in values and v not in seen:
-            ordered.append(v)
-            seen.add(v)
-    return ",".join(ordered) if ordered else _NONE_ENABLED
+    return _enabled_modes.serialize_enabled_values(_CATALOG, values)
 
 
 def get_enabled_values() -> Set[str]:
-    from backend.configuration.service import get_settings
-
-    return parse_enabled_values(get_settings().enhancement.enabled_models)
+    return _enabled_modes.get_enabled_values(_CATALOG)
 
 
 def set_model_enabled(mode: EnhanceMode, enabled: bool) -> None:
     """Turn a model On/Off for the Enhance dropdown (including the default)."""
-    from backend.configuration.service import update_settings
-
-    values = get_enabled_values()
-    if enabled:
-        values.add(mode.value)
-    else:
-        values.discard(mode.value)
-    update_settings({"enhancement": {"enabled_models": serialize_enabled_values(values)}})
+    _enabled_modes.set_model_enabled(_CATALOG, mode, enabled)
 
 
 def selectable_modes() -> List[EnhanceMode]:
     """Installed + On modes for the Enhance dropdown."""
-    enabled = get_enabled_values()
-    return [
-        info.mode
-        for info in MODEL_CATALOG
-        if info.mode.value in enabled
-        and is_model_installed(info.mode)
-    ]
+    return _enabled_modes.selectable_modes(_CATALOG)
 
 
 def ensure_selected_mode_valid() -> EnhanceMode:
-    from backend.configuration.service import get_settings, update_settings
-
-    current = EnhanceMode(get_settings().enhancement.mode)
-    available = selectable_modes()
-    if current in available:
-        return current
-    if EnhanceMode.X2PLUS in available:
-        update_settings({"enhancement": {"mode": EnhanceMode.X2PLUS.value}})
-        return EnhanceMode.X2PLUS
-    if available:
-        update_settings({"enhancement": {"mode": available[0].value}})
-        return available[0]
-    return current
+    return _enabled_modes.ensure_selected_mode_valid(_CATALOG)
 
 
 def apply_default_enhance_model() -> EnhanceMode:
@@ -219,6 +187,10 @@ def install_model(mode: EnhanceMode) -> None:
     info = catalog_info(mode)
     if info is None:
         raise ValueError(f"Unknown enhance model: {mode}")
+
+    from backend.tools.shared.disk_preflight import ensure_disk_space
+
+    ensure_disk_space(info.artifact.size_bytes or 0, context=mode.value)
 
     reg = ModelDownloadRegistry.instance()
     reg.begin(KIND_ENHANCE, mode.value)

@@ -22,6 +22,7 @@ KIND_GENERATE = "generate"
 KIND_SELECT_OBJECT = "select_object"
 KIND_BIREFNET = "birefnet"
 KIND_SEEDVR = "seedvr2"
+KIND_SUPIR = "supir"
 _progress_context = threading.local()
 
 
@@ -259,6 +260,10 @@ def discard_partial(kind: str, key: str) -> None:
         m.discard_partial(key)
     elif kind == KIND_SEEDVR:
         from backend.tools.installers import seedvr2 as m
+
+        m.discard_partial(key)
+    elif kind == KIND_SUPIR:
+        from backend.tools.installers import supir as m
 
         m.discard_partial(key)
     else:

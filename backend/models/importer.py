@@ -274,6 +274,15 @@ def register_huggingface(raw: Mapping[str, Any]) -> ModelManifest:
 
 
 def import_local(source: Path, raw: Mapping[str, Any]) -> ModelManifest:
+    """Copy a local model into the registry (blocking; call from a worker
+    thread - see `backend.models.service.start_local_import`, which queues
+    this through `ModelDownloadQueue` instead of blocking the request)."""
+    from backend.tools.shared.disk_preflight import ensure_disk_space
+    from backend.tools.shared.download_registry import (
+        ModelDownloadRegistry,
+        report_install_progress,
+    )
+
     source = source.expanduser().resolve()
     manifest = configure_manifest(raw)
     registry = DynamicModelRegistry.instance()
@@ -281,12 +290,44 @@ def import_local(source: Path, raw: Mapping[str, Any]) -> ModelManifest:
     staging = registry.staging_root / f"{manifest.id}-{os.getpid()}"
     if staging.exists():
         shutil.rmtree(staging)
+
+    total_bytes = (
+        sum(item.stat().st_size for item in model_files(source))
+        if source.is_dir()
+        else source.stat().st_size
+    )
+    ensure_disk_space(total_bytes, context=manifest.id)
+
+    reg = ModelDownloadRegistry.instance()
+    copied_bytes = 0
+
+    def _tracked_copy(src: str, dst: str, *, follow_symlinks: bool = True) -> None:
+        nonlocal copied_bytes
+        reg.check_cancelled()
+        shutil.copy2(src, dst, follow_symlinks=follow_symlinks)
+        try:
+            copied_bytes += Path(dst).stat().st_size
+        except OSError:
+            pass
+        if total_bytes > 0:
+            report_install_progress(
+                int(min(copied_bytes, total_bytes) * 100 / total_bytes),
+                f"{copied_bytes} / {total_bytes} bytes",
+                downloaded_bytes=copied_bytes,
+                total_bytes=total_bytes,
+            )
+
     try:
         if source.is_dir():
-            shutil.copytree(source, staging, ignore=shutil.ignore_patterns(".git", "__pycache__", ".cache"))
+            shutil.copytree(
+                source,
+                staging,
+                ignore=shutil.ignore_patterns(".git", "__pycache__", ".cache"),
+                copy_function=_tracked_copy,
+            )
         elif source.is_file():
             staging.mkdir(parents=True)
-            shutil.copy2(source, staging / source.name)
+            _tracked_copy(str(source), str(staging / source.name))
         else:
             raise FileNotFoundError(source)
         local_manifest = replace(
@@ -315,6 +356,12 @@ def install_huggingface(manifest: ModelManifest) -> Path:
         raise ValueError("Configure this model before installation.")
     if manifest.security.trust_remote_code:
         raise PermissionError("Remote repository code is disabled by Lluna policy.")
+    status = runtime_status(manifest)
+    if not status["compatible"]:
+        raise RuntimeError(
+            "This model is not compatible with this machine: "
+            + "; ".join(status["reasons"])
+        )
     from backend.tools.shared.huggingface import snapshot_download_with_progress
 
     registry = DynamicModelRegistry.instance()

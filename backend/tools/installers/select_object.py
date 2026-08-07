@@ -117,6 +117,8 @@ def catalog_info(model_id: SelectObjectModelId) -> Optional[SelectObjectModelInf
 
 
 def _validate_download_snapshot(info: SelectObjectModelInfo, dest: Path) -> None:
+    from backend.tools.shared.huggingface import require_snapshot_files
+
     required = ["config.json", "model.safetensors", "preprocessor_config.json"]
     if info.model_id in {
         SelectObjectModelId.SAM2_TINY,
@@ -125,12 +127,7 @@ def _validate_download_snapshot(info: SelectObjectModelInfo, dest: Path) -> None
         required.append("processor_config.json")
     else:
         required.extend(["tokenizer_config.json", "vocab.txt"])
-    missing = [relative for relative in required if not (dest / relative).is_file()]
-    if missing:
-        raise RuntimeError(
-            f"Downloaded {info.model_id.value} snapshot is incomplete; missing: "
-            + ", ".join(missing)
-        )
+    require_snapshot_files(dest, required, name=info.model_id.value)
 
 
 def is_model_installed(model_id: SelectObjectModelId) -> bool:

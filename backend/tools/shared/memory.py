@@ -20,6 +20,16 @@ _STTN_PER_FRAME_MPX = 90.0
 _PROPAINTER_BASE_MB = 800.0
 _PROPAINTER_PER_FRAME_MPX = 140.0
 
+# SUPIR and SeedVR2 run in an isolated CUDA subprocess and their VRAM use is
+# dominated by fixed model weights, not input resolution - so unlike the
+# functions above, these are flat "you need at least this much free" floors
+# already inclusive of margin (matching each model's own stated requirement),
+# not raw measurements that HEADROOM should be layered on top of.
+_SUPIR_MINIMUM_VRAM_MB = 12000.0  # SDXL backbone + VAE + dual CLIP + SUPIR weights
+_SUPIR_LLAVA_FP16_EXTRA_MB = 8000.0  # automatic captioning at fp16 (~20GB total)
+_SUPIR_LLAVA_8BIT_EXTRA_MB = 4000.0  # automatic captioning, 8-bit quantized
+_SEEDVR_MINIMUM_VRAM_MB = {"seedvr2-3b": 24576.0, "seedvr2-7b": 49152.0}
+
 
 class VramBudgetError(RuntimeError):
     """Job cannot fit in available VRAM (or size caps)."""
@@ -142,6 +152,51 @@ def preflight_select_subject(h: int, w: int, *, complex_pair: bool = False) -> G
             f"Turn off More complex in Settings or use a smaller image."
         )
     return GenericBudget(estimated_mb=est, free_mb=free)
+
+
+def preflight_minimum(tag: str, minimum_mb: float, *, hint: str = "") -> GenericBudget:
+    """Flat "is there at least this much VRAM free" check, for jobs whose
+    memory use is dominated by fixed model weights rather than input size -
+    and for any model (built-in or custom) that only declares a single
+    `minimum_vram_mb` figure rather than a calibrated per-input formula.
+    A `minimum_mb <= 0` means "unknown/undeclared" and is treated as a no-op
+    rather than a hard block, so an undeclared requirement never blocks a run.
+    """
+    if minimum_mb <= 0 or not _has_cuda_budget():
+        return GenericBudget(estimated_mb=0.0, free_mb=0.0)
+    free, _ = _free_total_mb()
+    if minimum_mb > free:
+        raise VramBudgetError(
+            f"Not enough GPU memory for {tag} "
+            f"(need ~{minimum_mb:.0f} MB free, have {free:.0f} MB)."
+            + (f" {hint}" if hint else "")
+        )
+    return GenericBudget(estimated_mb=minimum_mb, free_mb=free)
+
+
+def preflight_supir(*, use_llava: bool = False, load_8bit_llava: bool = False) -> GenericBudget:
+    est = _SUPIR_MINIMUM_VRAM_MB
+    if use_llava:
+        est += _SUPIR_LLAVA_8BIT_EXTRA_MB if load_8bit_llava else _SUPIR_LLAVA_FP16_EXTRA_MB
+    if use_llava and not load_8bit_llava:
+        hint = "Turn on 8-bit LLaVA, turn off automatic captioning, or free up GPU memory."
+    elif use_llava:
+        hint = "Turn off automatic LLaVA captioning or free up GPU memory."
+    else:
+        hint = "Free up GPU memory."
+    return preflight_minimum("SUPIR", est, hint=hint)
+
+
+def preflight_seedvr(model_id: str) -> GenericBudget:
+    minimum = _SEEDVR_MINIMUM_VRAM_MB.get(model_id)
+    if minimum is None:
+        return GenericBudget(estimated_mb=0.0, free_mb=0.0)
+    hint = (
+        "Free up GPU memory."
+        if model_id == "seedvr2-3b"
+        else "Try the 3B model instead, or free up GPU memory."
+    )
+    return preflight_minimum("SeedVR2", minimum, hint=hint)
 
 
 def pick_video_load_num(

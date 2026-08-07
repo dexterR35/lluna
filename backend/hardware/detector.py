@@ -8,7 +8,7 @@ import struct
 import threading
 from pathlib import Path
 
-from backend.core.paths import PATHS, AppPaths
+from backend.core.paths import AppPaths
 from backend.hardware.cpu import detect_cpu
 from backend.hardware.gpu import detect_gpus
 from backend.hardware.memory import detect_memory
@@ -17,8 +17,9 @@ from backend.hardware.providers import detect_framework_capabilities
 
 
 class HardwareDetector:
-    def __init__(self, paths: AppPaths = PATHS) -> None:
-        self._paths = paths
+    def __init__(self, paths: AppPaths | None = None) -> None:
+        # See ConfigurationLoader.__init__ for why this isn't `= PATHS`.
+        self._paths = paths if paths is not None else AppPaths.resolve()
         self._lock = threading.Lock()
         self._cached: HardwareProfile | None = None
 

@@ -9,6 +9,7 @@ from backend.api.auth import require_token
 from backend.models.service import (
     download_queue_snapshot,
     list_models,
+    start_local_import,
     start_model_action,
 )
 from backend.tools.shared.download_queue import ModelDownloadQueue
@@ -80,18 +81,14 @@ def analyze_model(request: ModelAnalyzeRequest) -> dict:
 
 @router.post("/models/import", status_code=202)
 def import_model(request: ModelImportRequest) -> dict:
-    from backend.models.importer import import_local, register_huggingface
+    from backend.models.importer import register_huggingface
 
     try:
         if request.sourceType == "huggingface":
             manifest = register_huggingface(request.manifest)
             queued = start_model_action(manifest.id, "install")
             return {**queued, "modelId": manifest.id, "operation": "install"}
-        manifest = import_local(_granted_path(request), request.manifest)
-        from backend.api.events import EventBroker
-
-        EventBroker.instance().publish("model.changed", payload={"modelId": manifest.id})
-        return {"modelId": manifest.id, "operation": "import", "jobId": None, "position": -1}
+        return start_local_import(_granted_path(request), request.manifest)
     except (OSError, TypeError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 

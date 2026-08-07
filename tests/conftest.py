@@ -21,12 +21,31 @@ def isolated_runtime(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, request):
     config_dir = tmp_path / "config"
     config_dir.mkdir()
     monkeypatch.setenv("LLUNA_CONFIG_DIR", str(config_dir))
+    # LLUNA_DATA_DIR/LLUNA_MODELS_DIR were previously unset here, so any
+    # singleton whose *default* path fell back to `root / "backend" /
+    # "models"` (DynamicModelRegistry, HardwareDetector's disk probe) wrote
+    # into the real project directory instead of this test's tmp_path.
+    monkeypatch.setenv("LLUNA_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("LLUNA_MODELS_DIR", str(tmp_path / "models"))
     monkeypatch.setenv("LLUNA_TESTING", "1")
     monkeypatch.setenv("HF_HOME", str(tmp_path / "hf"))
     monkeypatch.setenv("U2NET_HOME", str(tmp_path / "u2net"))
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
     monkeypatch.setenv("LLUNA_DISABLE_UPDATE_CHECK", "1")
     monkeypatch.setenv("LLUNA_DISABLE_MODEL_DOWNLOADS", "1")
+
+    # `backend.core.paths.PATHS` and the process-wide singletons whose
+    # default paths are bound at construction time are reset *after* the env
+    # vars above are set, so a fresh `.instance()` call resolves against this
+    # test's isolated tmp_path instead of a stale (or real) location. Without
+    # this, tests that call `get_settings()`/`update_settings()` or touch the
+    # dynamic model registry without manually constructing an isolated
+    # instance silently read/write the real project's `config/` directory.
+    from backend.configuration.service import ConfigurationService
+    from backend.models.dynamic_registry import DynamicModelRegistry
+
+    ConfigurationService.reset_for_tests()
+    DynamicModelRegistry.reset_for_tests()
 
     marked = {marker.name for marker in request.node.iter_markers()}
     if marked & _NETWORK_MARKERS:

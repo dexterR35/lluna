@@ -434,6 +434,22 @@ def test_local_model_analyze_and_import_api(tmp_path, monkeypatch) -> None:
                     },
                 )
                 assert imported.status_code == 202, imported.text
+                # Local imports are queued through ModelDownloadQueue (same as
+                # a remote install) instead of copying on the request thread,
+                # so the job may still be running when the response returns.
+                from backend.tools.shared.download_queue import ModelDownloadQueue
+
+                job_id = imported.json()["jobId"]
+                deadline = asyncio.get_event_loop().time() + 5.0
+                while asyncio.get_event_loop().time() < deadline:
+                    jobs = ModelDownloadQueue.instance().jobs()
+                    job = next((item for item in jobs if item.job_id == job_id), None)
+                    if job is not None and job.state in {"completed", "failed", "cancelled"}:
+                        assert job.state == "completed", job.error
+                        break
+                    await asyncio.sleep(0.01)
+                else:
+                    raise AssertionError("Timed out waiting for local import to finish")
                 inventory = (await client.get("/api/models", headers=headers)).json()
                 custom = next(item for item in inventory if item["id"] == manifest["id"])
                 assert custom["installed"] is True

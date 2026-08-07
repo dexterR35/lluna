@@ -406,6 +406,16 @@ def _job_enhance(run_id, payload, cancel_event, on_progress, heartbeat_log, evt_
 
 def _job_supir(run_id, payload, cancel_event, on_progress, heartbeat_log, evt_queue) -> None:
     from backend.ai.runtimes.supir import SupirCancelled, run_supir
+    from backend.tools.shared.memory import VramBudgetError, preflight_supir
+
+    try:
+        preflight_supir(
+            use_llava=bool(payload.get("use_llava")),
+            load_8bit_llava=bool(payload.get("load_8bit_llava")),
+        )
+    except VramBudgetError as e:
+        _emit(evt_queue, error(run_id, str(e)))
+        return
 
     try:
         output_path = run_supir(
@@ -519,6 +529,19 @@ def _job_generate(run_id, payload, cancel_event, on_progress, heartbeat_log, evt
     if not mode_value:
         _emit(evt_queue, error(run_id, "Generate model was not selected."))
         return
+
+    from backend.tools.shared.memory import VramBudgetError, preflight_minimum
+
+    try:
+        preflight_minimum(
+            str(mode_value),
+            float(payload.get("minimum_vram_mb") or 0),
+            hint="Try a smaller or quantized model, or free up GPU memory.",
+        )
+    except VramBudgetError as e:
+        _emit(evt_queue, error(run_id, str(e)))
+        return
+
     if str(mode_value).startswith("custom:"):
         from backend.models.adapters import AdapterError, generate_with_custom_model
 
@@ -877,9 +900,15 @@ def _job_birefnet(run_id, payload, cancel_event, on_progress, heartbeat_log, evt
 
 def _job_seedvr(run_id, payload, cancel_event, on_progress, heartbeat_log, evt_queue) -> None:
     from backend.ai.runtimes.seedvr2 import SeedVRCancelled, run_seedvr
+    from backend.tools.shared.memory import VramBudgetError, preflight_seedvr
 
     model_id = str(payload.get("model_id") or "seedvr2-3b")
     heartbeat_log(run_id, f"SeedVR2 model: {model_id}")
+    try:
+        preflight_seedvr(model_id)
+    except VramBudgetError as e:
+        _emit(evt_queue, error(run_id, str(e)))
+        return
     try:
         run_seedvr(
             payload,

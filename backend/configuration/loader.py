@@ -14,7 +14,7 @@ from backend.configuration.migrations import migrate_mapping
 from backend.configuration.models import ApplicationConfiguration
 from backend.configuration.recovery import backup_if_corrupt_json
 from backend.core.atomic import atomic_write_json
-from backend.core.paths import PATHS, AppPaths
+from backend.core.paths import AppPaths
 from backend.diagnostics.errors import ConfigurationError
 
 _ENVIRONMENT_KEYS: dict[str, tuple[str, str, type]] = {
@@ -72,8 +72,14 @@ def _parse_bool(raw: str) -> bool:
 
 
 class ConfigurationLoader:
-    def __init__(self, paths: AppPaths = PATHS) -> None:
-        self._paths = paths
+    def __init__(self, paths: AppPaths | None = None) -> None:
+        # `paths` defaults to a *fresh* `AppPaths.resolve()` rather than the
+        # module-level `PATHS` constant: default argument values are bound
+        # once when this class is defined (at first import), so capturing
+        # `PATHS` directly would freeze whatever LLUNA_CONFIG_DIR/etc were
+        # set at import time - env var overrides set afterward (e.g. by a
+        # test) would silently have no effect.
+        self._paths = paths if paths is not None else AppPaths.resolve()
 
     def load(
         self,

@@ -226,7 +226,11 @@ def snapshot_download_with_progress(
     revision: str | None = None,
     ignore_patterns: list[str] | None = None,
 ) -> str:
-    """Download an HF snapshot and report aggregate byte progress to the queue."""
+    """Download an HF snapshot, report aggregate byte progress, and verify
+    every downloaded file's size against what the Hub reported before the
+    transfer started (catches truncated/corrupted transfers - installers
+    previously only checked that expected *filenames* were present, not
+    that their bytes actually arrived intact)."""
     from huggingface_hub import snapshot_download
 
     from backend.tools.shared.download_registry import (
@@ -248,9 +252,50 @@ def snapshot_download_with_progress(
         **kwargs,
     )
     total_bytes = sum(int(item.file_size) for item in files)
+    expected_sizes = {item.filename: int(item.file_size) for item in files}
+    from backend.tools.shared.disk_preflight import ensure_disk_space
+
+    ensure_disk_space(total_bytes, context=repo_id)
     with huggingface_download_total(total_bytes):
-        return snapshot_download(
+        result = snapshot_download(
             **download_args,
             tqdm_class=huggingface_progress_tqdm(),
             **kwargs,
+        )
+    _verify_snapshot_sizes(Path(local_dir), expected_sizes)
+    return result
+
+
+def _verify_snapshot_sizes(local_dir: Path, expected_sizes: dict[str, int]) -> None:
+    problems: list[str] = []
+    for filename, expected_size in expected_sizes.items():
+        path = local_dir / filename
+        actual_size = path.stat().st_size if path.is_file() else None
+        if actual_size != expected_size:
+            state = "missing" if actual_size is None else f"{actual_size} of {expected_size} bytes"
+            problems.append(f"{filename} ({state})")
+    if problems:
+        raise RuntimeError(
+            "Downloaded snapshot has missing or truncated files: " + ", ".join(problems[:12])
+        )
+
+
+def require_snapshot_files(
+    dest: Path,
+    required_files: list[str],
+    *,
+    name: str,
+    required_glob_dirs: dict[str, str] | None = None,
+) -> None:
+    """Raise if a curated list of required files/globs isn't present after a
+    snapshot download - distinct from `_verify_snapshot_sizes`'s "everything
+    the Hub said it sent arrived intact" check: this asserts the specific
+    files *this adapter* actually needs to load are among them."""
+    missing = [rel for rel in required_files if not (dest / rel).is_file()]
+    for rel, pattern in (required_glob_dirs or {}).items():
+        if not any((dest / rel).glob(pattern)):
+            missing.append(f"{rel}/{pattern}")
+    if missing:
+        raise RuntimeError(
+            f"Downloaded {name} snapshot is incomplete; missing: " + ", ".join(missing[:12])
         )
