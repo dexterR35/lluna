@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import os
 import sys
 import threading
@@ -264,6 +265,86 @@ def test_supir_checkpoint_download_is_revision_and_hash_pinned(tmp_path, monkeyp
         }
     ]
     assert not (tmp_path / "supir" / ".downloads" / "Q").exists()
+
+
+def test_supir_checkpoint_source_env_override_replaces_mirror(tmp_path, monkeypatch) -> None:
+    from backend.tools.installers import supir as supir_models
+
+    checkpoint = b"official checkpoint bytes"
+    monkeypatch.setattr(supir_models, "supir_root", lambda: tmp_path / "supir")
+    monkeypatch.setenv(
+        supir_models.CHECKPOINT_SOURCE_ENV,
+        json.dumps(
+            {
+                "repo": "official-org/SUPIR",
+                "revision": "official-commit",
+                "checkpoints": {
+                    "Q": {
+                        "filename": "official-v0Q.ckpt",
+                        "size": len(checkpoint),
+                        "sha256": hashlib.sha256(checkpoint).hexdigest(),
+                    }
+                },
+            }
+        ),
+    )
+
+    resolved_q = supir_models._resolve_checkpoint_download("Q")
+    assert resolved_q == {
+        "repo": "official-org/SUPIR",
+        "revision": "official-commit",
+        "filename": "official-v0Q.ckpt",
+        "size": len(checkpoint),
+        "sha256": hashlib.sha256(checkpoint).hexdigest(),
+    }
+    # F was not included in the override, so it still falls back to the default mirror.
+    assert supir_models._resolve_checkpoint_download("F") == supir_models.CHECKPOINT_DOWNLOADS["F"]
+    # SDXL always comes from the official stabilityai repo and is never overridden.
+    assert supir_models._resolve_checkpoint_download("sdxl") == supir_models.CHECKPOINT_DOWNLOADS["sdxl"]
+
+
+def test_supir_checkpoint_source_env_invalid_json_fails_clearly(monkeypatch) -> None:
+    from backend.tools.installers import supir as supir_models
+
+    monkeypatch.setenv(supir_models.CHECKPOINT_SOURCE_ENV, "{not valid json")
+
+    with pytest.raises(RuntimeError, match="must be valid JSON"):
+        supir_models._resolve_checkpoint_download("Q")
+
+
+def test_supir_checkpoint_source_env_missing_fields_fails_clearly(monkeypatch) -> None:
+    from backend.tools.installers import supir as supir_models
+
+    monkeypatch.setenv(supir_models.CHECKPOINT_SOURCE_ENV, json.dumps({"repo": "only-repo"}))
+
+    with pytest.raises(RuntimeError, match="needs 'repo', 'revision'"):
+        supir_models._resolve_checkpoint_download("Q")
+
+
+def test_supir_checkpoint_source_env_incomplete_entry_fails_clearly(monkeypatch) -> None:
+    from backend.tools.installers import supir as supir_models
+
+    monkeypatch.setenv(
+        supir_models.CHECKPOINT_SOURCE_ENV,
+        json.dumps(
+            {
+                "repo": "official-org/SUPIR",
+                "revision": "official-commit",
+                "checkpoints": {"Q": {"filename": "official-v0Q.ckpt"}},
+            }
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="needs a filename"):
+        supir_models._resolve_checkpoint_download("Q")
+
+
+def test_supir_checkpoint_source_env_unset_keeps_default_mirror(monkeypatch) -> None:
+    from backend.tools.installers import supir as supir_models
+
+    monkeypatch.delenv(supir_models.CHECKPOINT_SOURCE_ENV, raising=False)
+
+    assert supir_models._resolve_checkpoint_download("Q") == supir_models.CHECKPOINT_DOWNLOADS["Q"]
 
 
 @pytest.mark.skipif(os.name == "nt", reason="Uses a POSIX shell fixture")

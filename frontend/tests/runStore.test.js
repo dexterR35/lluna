@@ -68,3 +68,49 @@ test("save progress events retain one row for every image", () => {
     },
   ]);
 });
+
+test("node.preview stores the frame without touching node status", () => {
+  const handleEvent = useRunStore.getState().handleEvent;
+  handleEvent({ type: "node.started", nodeId: "gen", payload: {} });
+  handleEvent({
+    type: "node.preview",
+    nodeId: "gen",
+    payload: { image: "data:image/jpeg;base64,AAAA" },
+  });
+
+  const state = useRunStore.getState().nodeStates.gen;
+  expect(state.previewImage).toBe("data:image/jpeg;base64,AAAA");
+  expect(state.status).toBe("RUNNING");
+});
+
+test("node.progress does not clear a preview frame just delivered", () => {
+  const handleEvent = useRunStore.getState().handleEvent;
+  handleEvent({ type: "node.started", nodeId: "gen", payload: {} });
+  handleEvent({
+    type: "node.preview",
+    nodeId: "gen",
+    payload: { image: "data:image/jpeg;base64,AAAA" },
+  });
+  handleEvent({
+    type: "node.progress",
+    nodeId: "gen",
+    payload: { progress: 40 },
+  });
+
+  expect(useRunStore.getState().nodeStates.gen.previewImage).toBe(
+    "data:image/jpeg;base64,AAAA",
+  );
+});
+
+test("a fresh node.started clears a stale preview from a previous run", () => {
+  const handleEvent = useRunStore.getState().handleEvent;
+  handleEvent({ type: "node.started", nodeId: "gen", payload: {} });
+  handleEvent({
+    type: "node.preview",
+    nodeId: "gen",
+    payload: { image: "data:image/jpeg;base64,STALE" },
+  });
+  handleEvent({ type: "node.started", nodeId: "gen", payload: {} });
+
+  expect(useRunStore.getState().nodeStates.gen.previewImage).toBeNull();
+});

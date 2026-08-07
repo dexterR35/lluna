@@ -25,7 +25,12 @@ from backend.tools.options.generate import (
 )
 
 ProgressCb = Optional[Callable[[int], None]]
+PreviewCb = Optional[Callable[[Image.Image], None]]
 CancelEvent = Optional[threading.Event]
+# Roughly this many preview frames per generation, regardless of step count -
+# a 4-step distilled model previews nearly every step; a 100-step run previews
+# every ~12th step. Decoding costs real time, so this is deliberately sparse.
+PREVIEW_FRAME_BUDGET = 8
 
 
 class GenerateCancelled(Exception):
@@ -125,6 +130,7 @@ class _BaseRunner(Protocol):
         progress: ProgressCb,
         cancel_event: CancelEvent,
         generation: int,
+        preview: PreviewCb = None,
     ) -> Image.Image: ...
 
 
@@ -175,11 +181,35 @@ class _DiffusersRunner:
         progress: ProgressCb,
         cancel_event: CancelEvent,
         generation: int,
+        *,
+        latents=None,
+        preview: PreviewCb = None,
+        preview_interval: int = 0,
+        width: int = 0,
+        height: int = 0,
     ):
         _check_cancel(cancel_event, generation)
         if progress is not None and steps > 0:
             pct = int(max(0, min(100, round((step + 1) / steps * 100))))
             progress(pct)
+        if (
+            preview is not None
+            and latents is not None
+            and preview_interval > 0
+            and (step % preview_interval == 0 or step == steps - 1)
+        ):
+            try:
+                frame = self._decode_latents_preview(latents, width, height)
+            except Exception:
+                # Best-effort only: preview decoding is speculative (it
+                # depends on internals a given pipeline may not expose the
+                # same way) and must never take down the actual generation.
+                frame = None
+            if frame is not None:
+                try:
+                    preview(frame)
+                except Exception:
+                    pass
 
     def generate(
         self,
@@ -196,11 +226,25 @@ class _DiffusersRunner:
         progress: ProgressCb,
         cancel_event: CancelEvent,
         generation: int,
+        preview: PreviewCb = None,
     ) -> Image.Image:
         assert self.pipe is not None
 
+        preview_interval = max(1, steps // PREVIEW_FRAME_BUDGET) if preview else 0
+
         def _cb(step: int, timestep, callback_kwargs):
-            self._callback(step, steps, progress, cancel_event, generation)
+            self._callback(
+                step,
+                steps,
+                progress,
+                cancel_event,
+                generation,
+                latents=callback_kwargs.get("latents"),
+                preview=preview,
+                preview_interval=preview_interval,
+                width=width,
+                height=height,
+            )
             return callback_kwargs
 
         gen = None
@@ -229,6 +273,46 @@ class _DiffusersRunner:
         if not isinstance(img, Image.Image):
             raise RuntimeError("Generate pipeline did not return a PIL image.")
         return img.convert("RGB")
+
+    def _decode_latents_preview(
+        self, latents: torch.Tensor, width: int, height: int
+    ) -> Optional[Image.Image]:
+        """Best-effort mid-generation preview frame from a partially-denoised
+        latent. This is speculative: flow-matching transformer pipelines
+        (the FLUX family) keep latents "packed" into a patch sequence during
+        sampling and only unpack to a spatial tensor right before the final
+        VAE decode, via a `_unpack_latents(latents, height, width,
+        vae_scale_factor)` helper that's consistent across the diffusers
+        FLUX pipeline family. If a given pipeline doesn't expose that same
+        shape, this raises and the caller (`_callback`) swallows it - a
+        missed preview frame, never a broken generation.
+        """
+        vae = getattr(self.pipe, "vae", None)
+        if vae is None:
+            return None
+        sample = latents
+        if sample.dim() == 3:
+            unpack = getattr(self.pipe, "_unpack_latents", None)
+            scale_factor = getattr(self.pipe, "vae_scale_factor", 8)
+            if not callable(unpack):
+                return None
+            sample = unpack(sample, height, width, scale_factor)
+        scaling = getattr(vae.config, "scaling_factor", None) or 1.0
+        shifting = getattr(vae.config, "shift_factor", None) or 0.0
+        with torch.no_grad():
+            decoded = vae.decode((sample / scaling) + shifting, return_dict=False)[0]
+        processor = getattr(self.pipe, "image_processor", None)
+        if processor is not None:
+            frame = processor.postprocess(decoded, output_type="pil")[0]
+        else:
+            frame = Image.fromarray(
+                (decoded[0].float().clamp(-1, 1).add(1).mul(127.5))
+                .permute(1, 2, 0)
+                .byte()
+                .cpu()
+                .numpy()
+            )
+        return frame.convert("RGB")
 
     def _build_call_kwargs(
         self,
@@ -367,8 +451,34 @@ def _make_runner(mode: GenerateMode, dtype: torch.dtype) -> _BaseRunner:
     raise RuntimeError(f"Unknown Diffusers pipeline '{info.pipeline}'")
 
 
-def _get_runner(mode: GenerateMode) -> _BaseRunner:
-    key = mode.value
+def _resolve_dtype(dtype: Optional[str]) -> torch.dtype:
+    """Map a user-facing precision choice to a torch dtype.
+
+    "auto" (and any unset/unrecognized value) keeps the existing behavior:
+    prefer BF16 where the GPU supports it, else FP16. An explicit choice
+    that the hardware can't actually run (BF16 on a card without native
+    support) raises rather than silently substituting a different
+    precision than what was selected - the same "fail clearly instead of
+    guessing" rule used for the VRAM/disk preflights elsewhere in this app.
+    """
+    normalized = (dtype or "auto").strip().lower()
+    if normalized == "fp32":
+        return torch.float32
+    if normalized == "fp16":
+        return torch.float16
+    if normalized == "bf16":
+        if not torch.cuda.is_bf16_supported():
+            raise ValueError("This GPU does not support BF16. Choose FP16 or FP32 instead.")
+        return torch.bfloat16
+    return torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+
+
+def _get_runner(mode: GenerateMode, dtype: Optional[str] = None) -> _BaseRunner:
+    resolved = _resolve_dtype(dtype)
+    # Keyed by (mode, dtype): switching precision for the same model must
+    # load a fresh pipeline, not silently keep serving whatever precision
+    # happened to be cached from an earlier run.
+    key = f"{mode.value}:{resolved}"
     runner = _session_cache.get(key)
     if runner is not None:
         return runner
@@ -379,8 +489,7 @@ def _get_runner(mode: GenerateMode) -> _BaseRunner:
         if old is not None:
             old.dispose()
 
-    dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
-    runner = _make_runner(mode, dtype)
+    runner = _make_runner(mode, resolved)
     _session_cache[key] = runner
     return runner
 
@@ -399,6 +508,8 @@ def generate_image(
     strength: Optional[float] = None,
     progress: ProgressCb = None,
     cancel_event: CancelEvent = None,
+    preview: PreviewCb = None,
+    dtype: Optional[str] = None,
 ) -> Image.Image:
     """Text-to-image. Hard-requires working CUDA. Releases other caches via worker."""
     global _busy, _last_start_monotonic
@@ -410,6 +521,10 @@ def generate_image(
         raise ValueError("Image-to-image input must be a PIL image.")
     if image is not None and strength is not None and not 0.0 < float(strength) <= 1.0:
         raise ValueError("Image-to-image strength must be between 0 and 1.")
+    # Validate before acquiring the inference lock so an unsupported choice
+    # (e.g. BF16 requested on hardware without native support) fails fast
+    # instead of blocking behind whatever job is currently running.
+    _resolve_dtype(dtype)
 
     ok, reason = cuda_ready_for_generate()
     if not ok:
@@ -442,7 +557,7 @@ def generate_image(
             _check_cancel(cancel_event, generation)
             if progress:
                 progress(8)
-            runner = _get_runner(mode)
+            runner = _get_runner(mode, dtype)
             _check_cancel(cancel_event, generation)
             if progress:
                 progress(12)
@@ -464,6 +579,7 @@ def generate_image(
                 progress=prog,
                 cancel_event=cancel_event,
                 generation=generation,
+                preview=preview,
             )
         finally:
             _busy = False

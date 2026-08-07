@@ -22,7 +22,7 @@ class AdapterError(RuntimeError):
 class RuntimeAdapter:
     id = "base"
 
-    def load(self, record: DynamicModelRecord) -> Any:
+    def load(self, record: DynamicModelRecord, *, dtype: str | None = None) -> Any:
         raise NotImplementedError
 
     def run(self, loaded: Any, inputs: dict[str, Any], *, progress: Progress = None, cancel_event: CancelEvent = None) -> Any:
@@ -35,7 +35,7 @@ class RuntimeAdapter:
 class DiffusersAdapter(RuntimeAdapter):
     id = "diffusers"
 
-    def load(self, record: DynamicModelRecord) -> Any:
+    def load(self, record: DynamicModelRecord, *, dtype: str | None = None) -> Any:
         if record.manifest.security.trust_remote_code:
             raise AdapterError("Remote model code is disabled.")
         import torch
@@ -47,27 +47,49 @@ class DiffusersAdapter(RuntimeAdapter):
                 f"This model supports {', '.join(record.manifest.hardware.backends)}, not {device}."
             )
         allowed = set(record.manifest.capabilities.dtypes)
-        candidates = []
-        if device == "cuda":
-            if torch.cuda.is_bf16_supported():
-                candidates.append(("bf16", torch.bfloat16))
-            candidates.append(("fp16", torch.float16))
-            float8 = getattr(torch, "float8_e4m3fn", None)
-            if float8 is not None:
-                candidates.append(("fp8", float8))
-        elif device == "mps":
-            candidates.append(("fp16", torch.float16))
-        candidates.append(("fp32", torch.float32))
-        dtype_entry = next((item for item in candidates if item[0] in allowed), None)
-        if dtype_entry is None:
-            raise AdapterError(
-                f"No declared dtype ({', '.join(record.manifest.capabilities.dtypes)}) is supported on {device}."
-            )
-        _dtype_name, dtype = dtype_entry
+        float8 = getattr(torch, "float8_e4m3fn", None)
+        named = {"bf16": torch.bfloat16, "fp16": torch.float16, "fp32": torch.float32}
+        if float8 is not None:
+            named["fp8"] = float8
+
+        requested = (dtype or "auto").strip().lower()
+        if requested != "auto":
+            # An explicit choice is validated against what this model's
+            # manifest actually declares support for, and fails clearly
+            # rather than silently falling back to a different precision.
+            if requested not in named:
+                raise AdapterError(f"Unknown precision '{requested}'.")
+            if requested not in allowed:
+                raise AdapterError(
+                    f"This model only declares support for: {', '.join(sorted(allowed)) or 'none'}."
+                )
+            if requested == "bf16" and device == "cuda" and not torch.cuda.is_bf16_supported():
+                raise AdapterError("This GPU does not support BF16. Choose FP16 or FP32 instead.")
+            if requested in {"bf16", "fp8"} and device != "cuda":
+                raise AdapterError(f"{requested.upper()} requires CUDA; this model would run on {device}.")
+            resolved_dtype = named[requested]
+        else:
+            candidates = []
+            if device == "cuda":
+                if torch.cuda.is_bf16_supported():
+                    candidates.append(("bf16", torch.bfloat16))
+                candidates.append(("fp16", torch.float16))
+                if float8 is not None:
+                    candidates.append(("fp8", float8))
+            elif device == "mps":
+                candidates.append(("fp16", torch.float16))
+            candidates.append(("fp32", torch.float32))
+            dtype_entry = next((item for item in candidates if item[0] in allowed), None)
+            if dtype_entry is None:
+                raise AdapterError(
+                    f"No declared dtype ({', '.join(record.manifest.capabilities.dtypes)}) is supported on {device}."
+                )
+            _dtype_name, resolved_dtype = dtype_entry
+
         pipeline = DiffusionPipeline.from_pretrained(
             str(record.path),
             local_files_only=True,
-            torch_dtype=dtype,
+            torch_dtype=resolved_dtype,
         )
         pipeline.to(device)
         return pipeline, device
@@ -128,7 +150,7 @@ class DiffusersAdapter(RuntimeAdapter):
 class TransformersAdapter(RuntimeAdapter):
     id = "transformers"
 
-    def load(self, record: DynamicModelRecord) -> Any:
+    def load(self, record: DynamicModelRecord, *, dtype: str | None = None) -> Any:
         from transformers import pipeline
 
         task = None if record.manifest.task == "custom" else record.manifest.task
@@ -154,7 +176,7 @@ class BiRefNetAdapter(RuntimeAdapter):
 
     id = "birefnet"
 
-    def load(self, record: DynamicModelRecord) -> Any:
+    def load(self, record: DynamicModelRecord, *, dtype: str | None = None) -> Any:
         # Native workflow execution owns the shared worker and loads by path.
         # Keep this adapter as a capability marker for the model platform.
         if not (record.path / "config.json").is_file():
@@ -170,7 +192,7 @@ class SeedVRAdapter(RuntimeAdapter):
 
     id = "seedvr"
 
-    def load(self, record: DynamicModelRecord) -> Any:
+    def load(self, record: DynamicModelRecord, *, dtype: str | None = None) -> Any:
         raise AdapterError("SeedVR2 models run through the Upscale Image workflow node.")
 
     def run(self, loaded: Any, inputs: dict[str, Any], *, progress: Progress = None, cancel_event: CancelEvent = None) -> Any:
@@ -199,7 +221,15 @@ class DynamicRuntimeManager:
                 cls._instance = cls()
             return cls._instance
 
-    def run(self, model_id: str, inputs: dict[str, Any], *, progress: Progress = None, cancel_event: CancelEvent = None) -> Any:
+    def run(
+        self,
+        model_id: str,
+        inputs: dict[str, Any],
+        *,
+        dtype: str | None = None,
+        progress: Progress = None,
+        cancel_event: CancelEvent = None,
+    ) -> Any:
         record = DynamicModelRegistry.instance().get(model_id)
         if not record.installed or not record.enabled:
             raise AdapterError("The custom model is not installed and enabled.")
@@ -222,15 +252,16 @@ class DynamicRuntimeManager:
             adapter = ADAPTERS[record.manifest.adapter]
         except KeyError as exc:
             raise AdapterError(f"No in-process adapter is available for {record.manifest.adapter}.") from exc
+        cache_key = f"{model_id}:{(dtype or 'auto').strip().lower()}"
         with self._cache_lock:
-            cached = self._cache.pop(model_id, None)
+            cached = self._cache.pop(cache_key, None)
             if cached is None:
-                loaded = adapter.load(record)
+                loaded = adapter.load(record, dtype=dtype)
             else:
                 _cached_adapter, loaded = cached
-            self._cache[model_id] = (adapter, loaded)
+            self._cache[cache_key] = (adapter, loaded)
             while len(self._cache) > self.cache_size:
-                _old_id, (old_adapter, old_loaded) = self._cache.popitem(last=False)
+                _old_key, (old_adapter, old_loaded) = self._cache.popitem(last=False)
                 old_adapter.unload(old_loaded)
         return adapter.run(loaded, inputs, progress=progress, cancel_event=cancel_event)
 
@@ -252,6 +283,7 @@ def generate_with_custom_model(
     seed: int | None,
     guidance: float | None = None,
     negative_prompt: str = "",
+    dtype: str | None = None,
     progress: Progress = None,
     cancel_event: CancelEvent = None,
 ) -> Image.Image:
@@ -266,6 +298,7 @@ def generate_with_custom_model(
             **({"guidance": guidance} if guidance is not None else {}),
             **({"negative_prompt": negative_prompt} if negative_prompt else {}),
         },
+        dtype=dtype,
         progress=progress,
         cancel_event=cancel_event,
     )

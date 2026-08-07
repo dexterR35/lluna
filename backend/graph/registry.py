@@ -126,6 +126,12 @@ GENERATE_MODELS = [
     option("Qwen-Image", "Qwen-Image", "generate:Qwen-Image", "Apache-licensed image generation."),
 ]
 IMAGE_EDIT_MODELS = [item for item in GENERATE_MODELS if item["value"] != "Qwen-Image"]
+GENERATE_DTYPE_OPTIONS = [
+    {"value": "auto", "label": "Auto (recommended)"},
+    {"value": "bf16", "label": "BF16"},
+    {"value": "fp16", "label": "FP16"},
+    {"value": "fp32", "label": "FP32 · highest precision, more VRAM"},
+]
 
 
 def node(schema_id: str, name: str, category: str, description: str, **kwargs) -> NodeDefinition:
@@ -310,6 +316,14 @@ _NODES = [
                 description="Use -1 for a random seed.",
                 capability="seed",
             ),
+            parameter(
+                "dtype",
+                "Precision",
+                "select",
+                "auto",
+                options=GENERATE_DTYPE_OPTIONS,
+                description="Lower precision uses less VRAM; FP32 is slower but most exact.",
+            ),
         ],
         capabilities=["diffusers"],
         required_models=["flux"],
@@ -336,6 +350,14 @@ _NODES = [
             parameter("denoiseStrength", "Denoise strength", "number", 0.65, minimum=0.01, maximum=1, step=0.01, description="Lower values preserve more of the reference image."),
             parameter("negativePrompt", "Negative prompt", "textarea", "", capability="negativePrompt"),
             parameter("seed", "Seed", "integer", -1, description="Use -1 for a random seed.", capability="seed"),
+            parameter(
+                "dtype",
+                "Precision",
+                "select",
+                "auto",
+                options=GENERATE_DTYPE_OPTIONS,
+                description="Lower precision uses less VRAM; FP32 is slower but most exact.",
+            ),
         ],
         capabilities=["diffusers", "image-to-image"],
         required_models=["flux"],

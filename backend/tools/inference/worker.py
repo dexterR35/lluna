@@ -30,6 +30,22 @@ def _emit(evt_queue, msg) -> None:
         pass
 
 
+def _encode_preview_frame(image, *, max_edge: int = 384, quality: int = 70) -> str:
+    """Downscale + JPEG-encode a live preview frame as a data: URL, small
+    enough to stream over the event pipeline on every preview tick."""
+    import base64
+    import io
+
+    w, h = image.size
+    scale = min(1.0, max_edge / max(w, h)) if max(w, h) > 0 else 1.0
+    if scale < 1.0:
+        image = image.resize((max(1, round(w * scale)), max(1, round(h * scale))))
+    buffer = io.BytesIO()
+    image.convert("RGB").save(buffer, format="JPEG", quality=quality)
+    encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
+    return f"data:image/jpeg;base64,{encoded}"
+
+
 class _DeferredTerminalQueue:
     """Forward live events, but hold RESULT/ERROR until worker cleanup finishes."""
 
@@ -571,6 +587,7 @@ def _job_generate(run_id, payload, cancel_event, on_progress, heartbeat_log, evt
                 seed=seed_i,
                 guidance=(float(payload["guidance"]) if payload.get("guidance") is not None else None),
                 negative_prompt=str(payload.get("negative_prompt") or ""),
+                dtype=str(payload.get("dtype") or "auto"),
                 progress=lambda value: on_progress(run_id, max(5, min(99, int(value)))),
                 cancel_event=cancel_event,
             )
@@ -644,6 +661,12 @@ def _job_generate(run_id, payload, cancel_event, on_progress, heartbeat_log, evt
         def prog(v: int):
             on_progress(run_id, max(10, min(99, int(v))))
 
+        def on_preview(image) -> None:
+            try:
+                _emit(evt_queue, preview(run_id, image=_encode_preview_frame(image)))
+            except Exception:
+                pass
+
         try:
             out = generate_image(
                 prompt,
@@ -658,6 +681,8 @@ def _job_generate(run_id, payload, cancel_event, on_progress, heartbeat_log, evt
                 strength=(float(payload["strength"]) if payload.get("strength") is not None else None),
                 progress=prog,
                 cancel_event=cancel_event,
+                preview=on_preview,
+                dtype=str(payload.get("dtype") or "auto"),
             )
         except GenerateCancelled:
             _emit(evt_queue, error(run_id, "__cancelled__"))

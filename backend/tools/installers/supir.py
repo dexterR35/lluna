@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import shutil
 import subprocess
@@ -17,11 +18,17 @@ from backend.core.paths import PATHS
 SUPIR_COMMIT = "bda91af2000042f8bedfec8897d92917e67c1d88"
 SUPIR_SOURCE_URL = f"https://github.com/Fanghua-Yu/SUPIR/archive/{SUPIR_COMMIT}.zip"
 SUPIR_DOWNLOADS_URL = "https://drive.google.com/drive/folders/1yELzm5SvAi9e7kPcO_jPp2XkTs4vK6aR"
+# The SUPIR authors only ever published the v0Q/v0F checkpoints on Google Drive
+# (SUPIR_DOWNLOADS_URL above), which isn't scriptable for a resumable, hash-verified
+# install. This third-party mirror is the fallback used until an official HF repo
+# exists; LLUNA_SUPIR_CHECKPOINT_SOURCE (see _resolve_checkpoint_download) lets it
+# be swapped out without editing source.
 SUPIR_MIRROR_URL = "https://huggingface.co/XCogni/Supir"
 SUPIR_MIRROR_REPO = "XCogni/Supir"
 SUPIR_MIRROR_REVISION = "b13056f97b1f6e78cb76273330f5262d08455a6b"
 SDXL_REPO = "stabilityai/stable-diffusion-xl-base-1.0"
 SDXL_REVISION = "462165984030d82259a11f4367a4eed129e94a7b"
+CHECKPOINT_SOURCE_ENV = "LLUNA_SUPIR_CHECKPOINT_SOURCE"
 CHECKPOINT_DOWNLOADS = {
     "Q": {
         "repo": SUPIR_MIRROR_REPO,
@@ -329,6 +336,63 @@ def _install_huggingface_dependencies() -> None:
         )
 
 
+def _resolve_checkpoint_download(kind: str) -> dict:
+    """Return the repo/revision/filename/hash to fetch ``kind`` from.
+
+    Defaults to CHECKPOINT_DOWNLOADS. If LLUNA_SUPIR_CHECKPOINT_SOURCE is set to a
+    JSON object of the form
+    ``{"repo": "...", "revision": "...", "checkpoints": {"Q": {"filename": "...",
+    "size": 123, "sha256": "..."}, "F": {...}}}``, that source overrides the Q
+    and/or F entries (whichever keys are present) so an official mirror can be
+    swapped in without editing source. SDXL always comes from the official
+    stabilityai repo and is never overridden.
+    """
+    try:
+        base = CHECKPOINT_DOWNLOADS[kind]
+    except KeyError as exc:
+        raise ValueError("SUPIR checkpoint kind must be Q, F, or sdxl") from exc
+    if kind not in ("Q", "F"):
+        return base
+
+    raw = os.environ.get(CHECKPOINT_SOURCE_ENV, "").strip()
+    if not raw:
+        return base
+
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(
+            f"{CHECKPOINT_SOURCE_ENV} must be valid JSON: "
+            '{"repo": "...", "revision": "...", "checkpoints": {"Q": {"filename": '
+            '"...", "size": 123, "sha256": "..."}, "F": {...}}}'
+        ) from exc
+    if not isinstance(parsed, dict):
+        raise RuntimeError(f"{CHECKPOINT_SOURCE_ENV} must be a JSON object.")
+
+    repo = str(parsed.get("repo") or "").strip()
+    revision = str(parsed.get("revision") or "").strip()
+    checkpoints = parsed.get("checkpoints")
+    if not repo or not revision or not isinstance(checkpoints, dict):
+        raise RuntimeError(
+            f"{CHECKPOINT_SOURCE_ENV} needs 'repo', 'revision', and a 'checkpoints' "
+            "object with Q and/or F entries."
+        )
+
+    entry = checkpoints.get(kind)
+    if not isinstance(entry, dict):
+        return base
+
+    filename = str(entry.get("filename") or "").strip()
+    size = entry.get("size")
+    sha256 = str(entry.get("sha256") or "").strip().lower()
+    if not filename or not isinstance(size, int) or isinstance(size, bool) or size <= 0 or len(sha256) != 64:
+        raise RuntimeError(
+            f"{CHECKPOINT_SOURCE_ENV}'s '{kind}' entry needs a filename, a positive "
+            "integer size, and a 64-character sha256."
+        )
+    return {"repo": repo, "revision": revision, "filename": filename, "size": size, "sha256": sha256}
+
+
 def _checkpoint_digest(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -338,10 +402,7 @@ def _checkpoint_digest(path: Path) -> str:
 
 
 def _verify_checkpoint(path: Path, kind: str) -> None:
-    try:
-        expected = CHECKPOINT_DOWNLOADS[kind]
-    except KeyError as exc:
-        raise ValueError("SUPIR checkpoint kind must be Q, F, or sdxl") from exc
+    expected = _resolve_checkpoint_download(kind)
     actual_size = path.stat().st_size
     if actual_size != expected["size"]:
         raise ValueError(
@@ -355,10 +416,7 @@ def _verify_checkpoint(path: Path, kind: str) -> None:
 def download_checkpoint(kind: str) -> Path:
     from backend.tools.shared.huggingface import snapshot_download_with_progress
 
-    try:
-        download = CHECKPOINT_DOWNLOADS[kind]
-    except KeyError as exc:
-        raise ValueError("SUPIR checkpoint kind must be Q, F, or sdxl") from exc
+    download = _resolve_checkpoint_download(kind)
     destination = checkpoint_path(kind)
     if destination.is_file():
         _verify_checkpoint(destination, kind)

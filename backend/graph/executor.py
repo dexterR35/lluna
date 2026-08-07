@@ -1470,6 +1470,7 @@ class RunManager:
                 prompt=inputs.get("prompt") or params.get("prompt") or "",
                 mode=model_value,
                 minimum_vram_mb=generation_minimum_vram_mb(str(model_value)),
+                dtype=str(params.get("dtype") or "auto"),
                 width=int(
                     params.get("width")
                     or (capabilities.get("supportedWidths") or [settings.generation.width])[0]
@@ -1644,6 +1645,11 @@ class RunManager:
             error.append(str(message))
             done.set()
 
+        def preview(image: str) -> None:
+            self._events.publish(
+                "node.preview", run_id=run_id, node_id=node.id, payload={"image": image}
+            )
+
         worker_id = InferClient.instance().start_job(
             job_type,
             payload,
@@ -1652,6 +1658,7 @@ class RunManager:
             on_result=result,
             on_error=failed,
             on_done=done.set,
+            on_preview=preview,
             coalesce=False,
         )
         if worker_id < 0:
