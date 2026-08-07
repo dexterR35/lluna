@@ -576,6 +576,12 @@ def _job_generate(run_id, payload, cancel_event, on_progress, heartbeat_log, evt
         steps = int(payload.get("steps") or 20)
         seed = payload.get("seed")
         seed_i = int(seed) if seed is not None and str(seed).strip() != "" else None
+        edit_image = None
+        input_path = payload.get("input_path")
+        if input_path:
+            from PIL import Image as PILImage
+
+            edit_image = PILImage.open(input_path).convert("RGB")
         heartbeat_log(run_id, f"Loading custom model: {model_id}")
         on_progress(run_id, 2)
         stop_custom_hb = threading.Event()
@@ -597,6 +603,8 @@ def _job_generate(run_id, payload, cancel_event, on_progress, heartbeat_log, evt
                 guidance=(float(payload["guidance"]) if payload.get("guidance") is not None else None),
                 negative_prompt=str(payload.get("negative_prompt") or ""),
                 dtype=str(payload.get("dtype") or "auto"),
+                image=edit_image,
+                strength=(float(payload["strength"]) if payload.get("strength") is not None else None),
                 progress=lambda value: on_progress(run_id, max(5, min(99, int(value)))),
                 cancel_event=cancel_event,
             )

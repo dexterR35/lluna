@@ -710,11 +710,15 @@ def install_packages(py: Path, mode: str, torch_tag: str) -> None:
             ],
         )
 
+    # requirements-cuda.txt pulls in requirements.txt plus bitsandbytes, which
+    # 4/8-bit quantized custom Diffusers models need (backend/models/adapters.py)
+    # and which is otherwise never installed by any install.py path.
+    common_requirements = "requirements-cuda.txt" if mode == "cuda" else "requirements.txt"
     pip_install(
         py,
         [
             "-r",
-            str(ROOT / "requirements.txt"),
+            str(ROOT / common_requirements),
             "-c",
             str(ROOT / "constraints.txt"),
         ],

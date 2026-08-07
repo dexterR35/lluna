@@ -51,6 +51,42 @@ def test_seedvr_readiness_requires_source_runtime_and_assets(tmp_path, monkeypat
     assert seedvr_models.is_model_installed("seedvr2-3b")
 
 
+def test_seedvr_uninstall_clears_its_own_marker_and_only_shared_dirs_when_unused(
+    tmp_path, monkeypatch
+) -> None:
+    root = tmp_path / "seedvr2"
+    checkpoints = root / "ckpts"
+    runtime = tmp_path / "runtime"
+    monkeypatch.setattr(seedvr_models, "models_root", lambda: root)
+    monkeypatch.setattr(seedvr_models, "checkpoints_dir", lambda: checkpoints)
+    monkeypatch.setattr(seedvr_models, "runtime_dir", lambda: runtime)
+
+    def _install_marker(model_id: str) -> None:
+        checkpoints.mkdir(parents=True, exist_ok=True)
+        checkpoint_name = seedvr_models.MODEL_CONFIG[model_id]["checkpoint"]
+        (checkpoints / checkpoint_name).write_bytes(b"weights")
+        marker = seedvr_models.model_dir(model_id) / ".lluna-installed"
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text("{}", encoding="utf-8")
+
+    _install_marker("seedvr2-3b")
+    _install_marker("seedvr2-7b")
+    runtime.mkdir(parents=True, exist_ok=True)
+
+    # Uninstalling one model must remove its own marker (readiness must stop
+    # reporting it installed) but must not tear down the shared checkpoints/
+    # runtime dirs while the other model is still installed.
+    seedvr_models.uninstall_model("seedvr2-3b")
+    assert not (seedvr_models.model_dir("seedvr2-3b") / ".lluna-installed").is_file()
+    assert checkpoints.is_dir()
+    assert runtime.is_dir()
+
+    # Once the last model is gone, the shared dirs are reclaimed.
+    seedvr_models.uninstall_model("seedvr2-7b")
+    assert not checkpoints.is_dir()
+    assert not runtime.is_dir()
+
+
 def test_seedvr_is_available_in_image_and_video_upscale_nodes() -> None:
     catalog = {item.schema_id: item for item in list_nodes()}
     image_model = next(

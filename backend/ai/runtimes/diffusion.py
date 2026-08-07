@@ -451,35 +451,62 @@ def _make_runner(mode: GenerateMode, dtype: torch.dtype) -> _BaseRunner:
     raise RuntimeError(f"Unknown Diffusers pipeline '{info.pipeline}'")
 
 
-def _resolve_dtype(dtype: Optional[str]) -> torch.dtype:
+def _resolve_dtype(mode: GenerateMode, dtype: Optional[str]) -> torch.dtype:
     """Map a user-facing precision choice to a torch dtype.
 
-    "auto" (and any unset/unrecognized value) keeps the existing behavior:
-    prefer BF16 where the GPU supports it, else FP16. An explicit choice
-    that the hardware can't actually run (BF16 on a card without native
-    support) raises rather than silently substituting a different
-    precision than what was selected - the same "fail clearly instead of
-    guessing" rule used for the VRAM/disk preflights elsewhere in this app.
+    "auto" (and any unset value) picks the best dtype this specific model
+    declares support for (backend/models/reference/capabilities.py) given
+    the hardware. An explicit choice is validated against that same declared
+    set and against hardware support, and fails clearly rather than silently
+    substituting a different precision than what was selected - the same
+    "fail clearly instead of guessing" rule used for the VRAM/disk
+    preflights elsewhere in this app.
     """
+    from backend.models.reference.capabilities import builtin_contract
+
+    _variant, capabilities = builtin_contract(f"generate:{mode.value}")
+    allowed = set(capabilities.dtypes)
+    named: dict[str, torch.dtype] = {"fp32": torch.float32, "fp16": torch.float16, "bf16": torch.bfloat16}
+    float8 = getattr(torch, "float8_e4m3fn", None)
+    if float8 is not None:
+        named["fp8"] = float8
+
     normalized = (dtype or "auto").strip().lower()
     if normalized in {"int8", "int4"}:
         raise ValueError(
             f"{normalized.upper()} quantization is only available for custom models "
             "(Add Model), not built-in FLUX/Qwen models."
         )
-    if normalized == "fp32":
-        return torch.float32
-    if normalized == "fp16":
-        return torch.float16
-    if normalized == "bf16":
-        if not torch.cuda.is_bf16_supported():
+    if normalized != "auto":
+        if normalized not in named:
+            raise ValueError(f"Unknown precision '{normalized}'.")
+        if normalized not in allowed:
+            raise ValueError(
+                f"{mode.value} only declares support for: {', '.join(sorted(allowed)) or 'none'}."
+            )
+        if normalized == "bf16" and not torch.cuda.is_bf16_supported():
             raise ValueError("This GPU does not support BF16. Choose FP16 or FP32 instead.")
-        return torch.bfloat16
-    return torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+        if normalized == "fp8" and float8 is None:
+            raise ValueError("This version of PyTorch does not support FP8.")
+        return named[normalized]
+
+    candidates = []
+    if torch.cuda.is_bf16_supported():
+        candidates.append("bf16")
+    candidates.append("fp16")
+    if float8 is not None:
+        candidates.append("fp8")
+    candidates.append("fp32")
+    chosen = next((value for value in candidates if value in allowed), None)
+    if chosen is None:
+        raise ValueError(
+            f"No declared dtype ({', '.join(capabilities.dtypes)}) is supported on this device."
+        )
+    return named[chosen]
 
 
 def _get_runner(mode: GenerateMode, dtype: Optional[str] = None) -> _BaseRunner:
-    resolved = _resolve_dtype(dtype)
+    resolved = _resolve_dtype(mode, dtype)
     # Keyed by (mode, dtype): switching precision for the same model must
     # load a fresh pipeline, not silently keep serving whatever precision
     # happened to be cached from an earlier run.
@@ -529,7 +556,7 @@ def generate_image(
     # Validate before acquiring the inference lock so an unsupported choice
     # (e.g. BF16 requested on hardware without native support) fails fast
     # instead of blocking behind whatever job is currently running.
-    _resolve_dtype(dtype)
+    _resolve_dtype(mode, dtype)
 
     ok, reason = cuda_ready_for_generate()
     if not ok:

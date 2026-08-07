@@ -13,32 +13,41 @@ from backend.tools.options.generate import (
     default_step_preset_for_mode,
     resolve_guidance,
     size_presets_for_mode,
-    step_presets_for_mode,
     validate_steps_for_mode,
 )
 from backend.tools.shared.constants import GenerateMode
 
 
 @pytest.mark.parametrize(
-    ("mode", "steps", "default_steps", "guidance"),
+    ("mode", "distilled", "default_steps", "guidance"),
     [
-        (GenerateMode.FLUX2_KLEIN_4B, [4], 4, 1.0),
-        (GenerateMode.FLUX2_KLEIN_9B, [4], 4, 1.0),
-        (GenerateMode.FLUX2_KLEIN_BASE_4B, [50], 50, 4.0),
-        (GenerateMode.FLUX2_KLEIN_BASE_9B, [50], 50, 4.0),
-        (GenerateMode.FLUX2_DEV, [50], 50, 4.0),
-        (GenerateMode.FLUX2_KLEIN_9B_FP8, [4], 4, 1.0),
-        (GenerateMode.QWEN_IMAGE, [50], 50, 4.0),
+        (GenerateMode.FLUX2_KLEIN_4B, True, 4, 1.0),
+        (GenerateMode.FLUX2_KLEIN_9B, True, 4, 1.0),
+        (GenerateMode.FLUX2_KLEIN_BASE_4B, False, 50, 4.0),
+        (GenerateMode.FLUX2_KLEIN_BASE_9B, False, 50, 4.0),
+        (GenerateMode.FLUX2_DEV, False, 50, 4.0),
+        (GenerateMode.FLUX2_KLEIN_9B_FP8, True, 4, 1.0),
+        (GenerateMode.QWEN_IMAGE, False, 50, 4.0),
     ],
 )
 def test_each_generate_model_has_its_own_step_profile(
     mode: GenerateMode,
-    steps: list[int],
+    distilled: bool,
     default_steps: int,
     guidance: float,
 ) -> None:
-    assert [preset.steps for preset in step_presets_for_mode(mode)] == steps
+    # Distilled/turbo checkpoints are trained for one exact step count and
+    # stay pinned to it; "base" checkpoints tolerate a real 20-step range
+    # instead of one arbitrary blessed value.
     assert default_step_preset_for_mode(mode).steps == default_steps
+    if distilled:
+        with pytest.raises(ValueError):
+            validate_steps_for_mode(mode, default_steps - 1)
+    else:
+        assert validate_steps_for_mode(mode, 20) == 20
+        assert validate_steps_for_mode(mode, default_steps) == default_steps
+        with pytest.raises(ValueError):
+            validate_steps_for_mode(mode, 19)
     assert resolve_guidance(mode) == guidance
 
 
@@ -50,12 +59,13 @@ def test_every_generate_mode_is_in_the_install_catalog() -> None:
 
 
 def test_incompatible_step_count_is_rejected() -> None:
-    with pytest.raises(ValueError, match="configured step preset"):
+    with pytest.raises(ValueError, match=r"supports 4 steps"):
         validate_steps_for_mode(GenerateMode.FLUX2_KLEIN_4B, 50)
     assert validate_steps_for_mode(GenerateMode.FLUX2_KLEIN_4B, 4) == 4
-    with pytest.raises(ValueError, match="configured step preset"):
+    with pytest.raises(ValueError, match=r"supports 20-50 steps"):
         validate_steps_for_mode(GenerateMode.FLUX2_KLEIN_BASE_4B, 100)
     assert validate_steps_for_mode(GenerateMode.FLUX2_KLEIN_BASE_4B, 50) == 50
+    assert validate_steps_for_mode(GenerateMode.FLUX2_KLEIN_BASE_4B, 35) == 35
 
 
 def test_model_specific_size_defaults() -> None:

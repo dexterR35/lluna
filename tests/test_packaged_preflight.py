@@ -21,7 +21,18 @@ def _packaged_paths(tmp_path):
         root / "backend/models/sttn-auto/infer_model.pth",
         root / "backend/models/sttn-det/sttn.pth",
         root / "backend/models/big-lama/fs_manifest.csv",
+        root / "backend/models/big-lama/big-lama_1.pt",
+        root / "backend/models/big-lama/big-lama_2.pt",
+        root / "backend/models/big-lama/big-lama_3.pt",
+        root / "backend/models/big-lama/big-lama_4.pt",
+        root / "backend/models/big-lama/big-lama_5.pt",
         root / "backend/models/propainter/fs_manifest.csv",
+        root / "backend/models/propainter/ProPainter_1.pth",
+        root / "backend/models/propainter/ProPainter_2.pth",
+        root / "backend/models/propainter/ProPainter_3.pth",
+        root / "backend/models/propainter/ProPainter_4.pth",
+        root / "backend/models/propainter/raft-things.pth",
+        root / "backend/models/propainter/recurrent_flow_completion.pth",
     )
     for path in required:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -54,6 +65,21 @@ def test_packaged_preflight_fails_when_release_resource_is_missing(monkeypatch, 
     monkeypatch.setattr("sys.frozen", True, raising=False)
     paths = _packaged_paths(tmp_path)
     (paths.project_root / "backend/ffmpeg/linux_x64/ffmpeg").unlink()
+    with pytest.raises(DependencyError, match="missing packaged resources"):
+        validate_packaged_runtime(
+            paths,
+            target=ReleaseTarget("linux", "x64", "cpu"),
+        )
+
+
+def test_packaged_preflight_fails_when_a_split_weight_part_is_missing(monkeypatch, tmp_path) -> None:
+    # fs_manifest.csv alone isn't enough - big-lama.pt/ProPainter.pth are
+    # reconstructed at runtime from these split parts, so a packaging bug
+    # that ships the manifest without them must fail preflight, not just
+    # surface later when the model is actually used.
+    monkeypatch.setattr("sys.frozen", True, raising=False)
+    paths = _packaged_paths(tmp_path)
+    (paths.project_root / "backend/models/big-lama/big-lama_3.pt").unlink()
     with pytest.raises(DependencyError, match="missing packaged resources"):
         validate_packaged_runtime(
             paths,

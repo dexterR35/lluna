@@ -516,6 +516,78 @@ test("changing a node model preserves history and marks its output stale", () =>
   expect(changed.data.result?.status).toBe("STALE");
   expect(changed.data.result?.artifactIds).toEqual(["artifact-1"]);
 });
+test("switching a node's model resets capability-gated parameters to the new model's defaults", () => {
+  const generate = /** @type {import("../src/types").NodeDefinition} */ ({
+    ...definition,
+    schemaId: "lluna.generate.image",
+    name: "Generate Image",
+    parameters: [
+      {
+        id: "model",
+        label: "Model",
+        type: "model",
+        default: "distilled",
+        options: [
+          {
+            value: "distilled",
+            label: "Distilled",
+            capabilities: {
+              complete: true,
+              steps: { default: 4, minimum: 4, maximum: 4, values: [4] },
+              guidance: false,
+              negativePrompt: false,
+              seed: true,
+            },
+          },
+          {
+            value: "base",
+            label: "Base",
+            capabilities: {
+              complete: true,
+              steps: { default: 50, minimum: 20, maximum: 50 },
+              guidance: true,
+              guidanceScale: { default: 4, minimum: 0, maximum: 20 },
+              negativePrompt: true,
+              seed: true,
+            },
+          },
+        ],
+      },
+      { id: "steps", label: "Steps", type: "integer", capability: "steps" },
+      { id: "guidance", label: "Guidance", type: "number", capability: "guidance" },
+    ],
+  });
+  useEditorStore.getState().setDefinitions([generate]);
+  const id = addNode(generate.schemaId, { x: 0, y: 0 });
+  useEditorStore.getState().updateNode(id, {
+    parameters: { model: "distilled", steps: 4, guidance: 7 },
+  });
+
+  useEditorStore.getState().setNodeModel(id, "base");
+  const params = required(useEditorStore.getState().nodes[0]).data.parameters;
+  expect(params.model).toBe("base");
+  expect(params.steps).toBe(50);
+  expect(params.guidance).toBe(4);
+});
+test("refreshing definitions updates already-placed nodes instead of leaving them stale", () => {
+  addNode();
+  const before = required(useEditorStore.getState().nodes[0]);
+  expect(before.data.definition.parameters).toHaveLength(1);
+
+  const refreshed = {
+    ...definition,
+    parameters: [
+      ...definition.parameters,
+      { id: "extra", label: "Extra", type: "number", default: 0 },
+    ],
+  };
+  useEditorStore.getState().setDefinitions([refreshed]);
+
+  const after = required(useEditorStore.getState().nodes[0]);
+  expect(after.id).toBe(before.id);
+  expect(after.data.parameters).toBe(before.data.parameters);
+  expect(after.data.definition.parameters).toHaveLength(2);
+});
 test("primitive value nodes stay out of the creation catalog", () => {
   expect(isVisibleCatalogNode({ schemaId: "lluna.input.boolean" })).toBe(
     false,

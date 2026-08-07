@@ -58,7 +58,12 @@ class DynamicModelRecord:
             "enabled": self.enabled and self.installed and not needs_configuration and status["compatible"],
             "state": state,
             "disk_usage_bytes": _disk_usage(self.path),
-            "can_install": self.manifest.source.type in {"huggingface", "url"} and not self.installed,
+            # Only "huggingface" has a working installer (importer.py's
+            # install_huggingface). "url" is a valid ModelSource.type but no
+            # registration path ever produces a dynamic record with it, and
+            # install_huggingface rejects one outright - advertising it as
+            # installable here would promise something that always fails.
+            "can_install": self.manifest.source.type == "huggingface" and not self.installed,
             "can_uninstall": True,
             "can_toggle": not needs_configuration and status["compatible"],
             "dynamic": True,

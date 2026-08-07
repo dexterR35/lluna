@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import threading
 import time
 from typing import Callable, Optional
@@ -103,9 +104,23 @@ def _check_cancel(cancel_event: CancelEvent, generation: int) -> None:
 
 def _load_state_dict(model: MIRNet, path) -> None:
     try:
+        ckpt = torch.load(str(path), map_location="cpu", weights_only=True)
+    except Exception:
+        # weights_only=True uses torch's restricted unpickler and rejects
+        # legitimate checkpoints that wrap the state_dict in non-tensor
+        # containers; only fall back to full pickle deserialization when that
+        # happens. low_light.py pins this file's SHA-256 on first install and
+        # re-verifies it on every load (trust-on-first-use, since the
+        # upstream source is an unofficial mirror with no reviewed-in-advance
+        # hash), so this fallback is defense-in-depth against post-install
+        # tampering/corruption, not protection against a compromised first
+        # download.
+        logging.getLogger(__name__).warning(
+            "MIRNet checkpoint %s failed to load with weights_only=True; "
+            "retrying with full pickle deserialization.",
+            path,
+        )
         ckpt = torch.load(str(path), map_location="cpu", weights_only=False)
-    except TypeError:
-        ckpt = torch.load(str(path), map_location="cpu")
 
     if isinstance(ckpt, dict):
         if "state_dict" in ckpt:

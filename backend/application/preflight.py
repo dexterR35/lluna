@@ -79,8 +79,25 @@ def validate_packaged_runtime(
         paths.project_root / "backend/models/V5/ch_det_fast/inference.pdiparams",
         paths.project_root / "backend/models/sttn-auto/infer_model.pth",
         paths.project_root / "backend/models/sttn-det/sttn.pth",
+        # The manifest alone isn't enough: big-lama.pt/ProPainter.pth are
+        # reconstructed at runtime from these split parts
+        # (backend/tools/media/common.py::merge_big_file_if_not_exists), so a
+        # packaging bug that ships the manifest without its parts (as
+        # happened before) would otherwise only surface when the
+        # inpainting/video-completion model is actually used, not at launch.
         paths.project_root / "backend/models/big-lama/fs_manifest.csv",
+        paths.project_root / "backend/models/big-lama/big-lama_1.pt",
+        paths.project_root / "backend/models/big-lama/big-lama_2.pt",
+        paths.project_root / "backend/models/big-lama/big-lama_3.pt",
+        paths.project_root / "backend/models/big-lama/big-lama_4.pt",
+        paths.project_root / "backend/models/big-lama/big-lama_5.pt",
         paths.project_root / "backend/models/propainter/fs_manifest.csv",
+        paths.project_root / "backend/models/propainter/ProPainter_1.pth",
+        paths.project_root / "backend/models/propainter/ProPainter_2.pth",
+        paths.project_root / "backend/models/propainter/ProPainter_3.pth",
+        paths.project_root / "backend/models/propainter/ProPainter_4.pth",
+        paths.project_root / "backend/models/propainter/raft-things.pth",
+        paths.project_root / "backend/models/propainter/recurrent_flow_completion.pth",
     )
     missing = [path for path in required if not path.is_file()]
     if missing:

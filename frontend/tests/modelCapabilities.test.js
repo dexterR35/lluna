@@ -31,6 +31,56 @@ describe("model capability projection", () => {
     ]);
   });
 
+  it("filters dtype options to what the model declares, always keeping auto", () => {
+    const dtypeParameters = [
+      {
+        id: "dtype",
+        label: "Precision",
+        type: "select",
+        capability: "dtype",
+        default: "auto",
+        options: [
+          { value: "auto", label: "Auto" },
+          { value: "bf16", label: "BF16" },
+          { value: "fp16", label: "FP16" },
+          { value: "fp32", label: "FP32" },
+          { value: "fp8", label: "FP8" },
+        ],
+      },
+    ];
+    const projected = parametersForCapabilities(dtypeParameters, {
+      complete: true,
+      dtypes: ["bf16", "fp16"],
+    });
+    expect(projected[0].options.map((opt) => opt.value)).toEqual(["auto", "bf16", "fp16"]);
+
+    const fp8Only = parametersForCapabilities(dtypeParameters, {
+      complete: true,
+      dtypes: ["fp8"],
+    });
+    expect(fp8Only[0].options.map((opt) => opt.value)).toEqual(["auto", "fp8"]);
+  });
+
+  it("hides denoise strength unless the model declares it", () => {
+    const editParameters = [
+      {
+        id: "denoiseStrength",
+        label: "Denoise strength",
+        type: "number",
+        capability: "denoiseStrength",
+        default: 0.65,
+      },
+    ];
+    expect(
+      parametersForCapabilities(editParameters, { complete: true }),
+    ).toEqual([]);
+    const projected = parametersForCapabilities(editParameters, {
+      complete: true,
+      denoiseStrength: { default: 0.5, minimum: 0.1, maximum: 1 },
+    });
+    expect(projected[0]).toMatchObject({ default: 0.5, minimum: 0.1, maximum: 1 });
+  });
+
   it("clears stale base-model values when switching to distilled", () => {
     const values = applyCapabilityDefaults(
       { guidance: 7, negativePrompt: "noise", steps: 50 },

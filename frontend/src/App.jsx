@@ -39,6 +39,7 @@ function EditorApp() {
   const [issues, setIssues] = useState(
     /** @type {import("./types").ValidationIssue[]} */ ([]),
   );
+  const issuesRef = useRef(/** @type {import("./types").ValidationIssue[]} */ ([]));
   const [search, setSearch] = useState(
     /** @type {{open: boolean, query: string, position: {x: number, y: number} | null}} */ ({
       open: false,
@@ -143,7 +144,8 @@ function EditorApp() {
           method: "POST",
           body: JSON.stringify(useEditorStore.getState().serialize()),
         });
-        setIssues(result.issues || []);
+        issuesRef.current = result.issues || [];
+        setIssues(issuesRef.current);
         const desktop = useDesktopStore.getState();
         if (!silent) desktop.setValue("drawerTab", "problems");
         if (result.valid) {
@@ -172,7 +174,17 @@ function EditorApp() {
       /** @type {{queueFront?: boolean, force?: boolean}} */ options = {},
     ) => {
       const workflow = useEditorStore.getState().serialize();
-      void validate({ silent: true });
+      const valid = await validate({ silent: true });
+      if (!valid && !options.force) {
+        const desktop = useDesktopStore.getState();
+        desktop.setValue("drawerVisible", true);
+        desktop.setValue("drawerTab", "problems");
+        toast.push(
+          `${issuesRef.current.length} workflow problem(s) - fix them or run anyway`,
+          "error",
+        );
+        return;
+      }
       try {
         const run = await runStore.start(
           workflow,

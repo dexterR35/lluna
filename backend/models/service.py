@@ -510,13 +510,13 @@ def _action(model_id: str, operation: str) -> None:
         )(mode)
         return
     if model_id in _BIREFNET_IDS:
-        from backend.tools.installers.birefnet import discard_partial, install_model
+        from backend.tools.installers.birefnet import install_model, uninstall_model
 
         if operation == "install":
             install_model(model_id)
             _set_enabled_override(model_id, True)
         elif operation == "remove":
-            discard_partial(model_id)
+            uninstall_model(model_id)
             _set_enabled_override(model_id, False)
         elif operation == "enable":
             if not _installed(model_id):

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import urllib.request
 from dataclasses import dataclass
@@ -108,6 +110,58 @@ def apply_default_low_light_model() -> LowLightMode:
     return ensure_selected_mode_valid()
 
 
+def _integrity_sidecar_path(mode: LowLightMode) -> Path:
+    return model_file_path(mode).with_suffix(".pth.integrity.json")
+
+
+def _record_integrity(mode: LowLightMode, path: Path) -> None:
+    """Pin the downloaded weight's SHA-256 on first successful install.
+
+    The upstream source is a third-party Google Drive mirror, not an
+    official pinned release with a reviewed-in-advance hash (unlike
+    Real-ESRGAN's GitHub releases), so there is nothing to check the very
+    first download against. This is trust-on-first-use: the pin only
+    protects against corruption or on-disk tampering *after* install, not a
+    compromised first download.
+    """
+    from backend.core.atomic import atomic_write_json
+
+    hasher = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            hasher.update(chunk)
+    atomic_write_json(
+        _integrity_sidecar_path(mode),
+        {"size_bytes": path.stat().st_size, "sha256": hasher.hexdigest()},
+    )
+
+
+def verify_installed_model(mode: LowLightMode) -> Path:
+    """Return the weight path only when it matches the pinned SHA-256, if any."""
+    from backend.models.artifacts import ArtifactVerificationError
+    from backend.models.reference.metadata import ExpectedFile
+    from backend.models.verifier import verify_file
+
+    path = model_file_path(mode)
+    sidecar = _integrity_sidecar_path(mode)
+    if not sidecar.is_file():
+        # Pre-existing install from before integrity pinning was added;
+        # nothing pinned yet to check against.
+        return path
+    pinned = json.loads(sidecar.read_text(encoding="utf-8"))
+    expected = ExpectedFile(
+        relative_path=path.name,
+        size_bytes=pinned.get("size_bytes"),
+        sha256=pinned.get("sha256"),
+    )
+    result = verify_file(models_dir(), expected)
+    if not result.valid:
+        raise ArtifactVerificationError(
+            f"{mode.value} failed integrity verification: {result.reason}"
+        )
+    return path
+
+
 def discard_partial(mode: LowLightMode) -> None:
     """Delete incomplete .pth.part so the next install starts over."""
     tmp = model_file_path(mode).with_suffix(".pth.part")
@@ -127,6 +181,7 @@ def uninstall_model(mode: LowLightMode) -> None:
     try:
         if dest.is_file():
             dest.unlink()
+        _integrity_sidecar_path(mode).unlink(missing_ok=True)
     except OSError as e:
         raise RuntimeError(f"Could not delete {dest}: {e}") from e
     set_model_enabled(mode, False)
@@ -191,15 +246,15 @@ def install_model(mode: LowLightMode) -> None:
         discard_partial(mode)
         reg.fail(KIND_LOW_LIGHT, mode.value, keep_pending=False)
         raise RuntimeError(f"Download finished but model file missing: {dest}")
+    _record_integrity(mode, dest)
     set_model_enabled(mode, True)
     reg.complete(KIND_LOW_LIGHT, mode.value)
 
 
 def ensure_model_installed(mode: LowLightMode) -> Path:
     """Install if missing (blocking). Always leaves the model On (Settings default)."""
-    path = model_file_path(mode)
     if not is_model_installed(mode):
         install_model(mode)
     else:
         set_model_enabled(mode, True)
-    return path
+    return verify_installed_model(mode)

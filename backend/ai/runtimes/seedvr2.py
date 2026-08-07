@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import random
 import shutil
 import subprocess
 import tempfile
@@ -10,7 +11,9 @@ import threading
 from pathlib import Path
 from typing import Callable
 
+from backend.hardware.gpu import detect_torch_cuda_gpus
 from backend.tools.installers import seedvr2 as seedvr_models
+from backend.tools.shared.process import ProcessManager
 
 
 class SeedVRCancelled(RuntimeError):
@@ -71,6 +74,13 @@ def run_seedvr(
     sp_size = max(1, int(payload.get("sp_size") or 1))
     if input_path.suffix.lower() not in {".mp4", ".mov", ".mkv", ".avi", ".webm"}:
         sp_size = 1
+    else:
+        gpu_count = len(detect_torch_cuda_gpus())
+        if gpu_count:
+            sp_size = min(sp_size, gpu_count)
+    seed_value = int(payload.get("seed", 666))
+    if seed_value < 0:
+        seed_value = random.randint(0, 2_147_483_647)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="lluna-seedvr-job-") as raw:
         workspace = Path(raw)
@@ -93,7 +103,7 @@ def run_seedvr(
             "--output_dir",
             str(output_dir),
             "--seed",
-            str(int(payload.get("seed", 666))),
+            str(seed_value),
             "--res_h",
             str(res_h),
             "--res_w",
@@ -119,16 +129,20 @@ def run_seedvr(
                 stdout=output_log,
                 stderr=subprocess.STDOUT,
                 text=True,
+                start_new_session=os.name != "nt",
             )
-            while process.poll() is None:
-                if cancel_event.wait(0.5):
-                    process.terminate()
-                    try:
-                        process.wait(timeout=5)
-                    except subprocess.TimeoutExpired:
-                        process.kill()
-                    raise SeedVRCancelled("__cancelled__")
-                progress(50)
+            # torchrun spawns --nproc-per-node worker children; terminating only
+            # the torchrun PID can orphan them, so cancellation goes through
+            # ProcessManager, which also reaps the process's descendants.
+            ProcessManager.instance().add_process(process, name="seedvr2-worker")
+            try:
+                while process.poll() is None:
+                    if cancel_event.wait(0.5):
+                        ProcessManager.instance().terminate_by_process(process, quiet=True)
+                        raise SeedVRCancelled("__cancelled__")
+                    progress(50)
+            finally:
+                ProcessManager.instance().remove_process("seedvr2-worker")
             output_log.seek(0)
             output = output_log.read()
             if process.returncode:

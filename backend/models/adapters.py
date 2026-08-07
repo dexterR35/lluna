@@ -200,6 +200,22 @@ class DiffusersAdapter(RuntimeAdapter):
         for key, value in candidates.items():
             if key in parameters and value is not None:
                 kwargs[key] = value
+        # Only pass image-to-image/inpainting inputs the loaded pipeline
+        # actually declares - not every custom Diffusers pipeline accepts
+        # them, the same "inspect the real signature" rule diffusion.py's
+        # built-in runner already applies (backend/ai/runtimes/diffusion.py).
+        image = inputs.get("image")
+        if image is not None:
+            if "image" not in parameters:
+                raise AdapterError(f"{type(pipeline).__name__} does not support image-to-image editing.")
+            kwargs["image"] = image
+            if "strength" in parameters and inputs.get("strength") is not None:
+                kwargs["strength"] = float(inputs["strength"])
+        mask_image = inputs.get("mask_image")
+        if mask_image is not None:
+            if "mask_image" not in parameters:
+                raise AdapterError(f"{type(pipeline).__name__} does not support inpainting.")
+            kwargs["mask_image"] = mask_image
         result = pipeline(**kwargs)
         images = getattr(result, "images", None)
         if not images:
@@ -372,6 +388,8 @@ def generate_with_custom_model(
     guidance: float | None = None,
     negative_prompt: str = "",
     dtype: str | None = None,
+    image: Image.Image | None = None,
+    strength: float | None = None,
     progress: Progress = None,
     cancel_event: CancelEvent = None,
 ) -> Image.Image:
@@ -385,6 +403,7 @@ def generate_with_custom_model(
             "seed": seed,
             **({"guidance": guidance} if guidance is not None else {}),
             **({"negative_prompt": negative_prompt} if negative_prompt else {}),
+            **({"image": image, "strength": strength} if image is not None else {}),
         },
         dtype=dtype,
         progress=progress,

@@ -2,18 +2,21 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import shutil
-import subprocess
 import tempfile
 import urllib.request
-import zipfile
 from pathlib import Path
 
-from backend.core.atomic import atomic_write_json
 from backend.core.paths import PATHS
+from backend.tools.installers._shared import (
+    bootstrap_reviewed_python,
+    create_isolated_venv,
+    safe_extract_zip,
+    sha256_of_file,
+    verify_pinned_artifact,
+)
 
 SUPIR_COMMIT = "bda91af2000042f8bedfec8897d92917e67c1d88"
 SUPIR_SOURCE_URL = f"https://github.com/Fanghua-Yu/SUPIR/archive/{SUPIR_COMMIT}.zip"
@@ -156,70 +159,15 @@ def cuda_compatible() -> bool:
 
 
 def _bootstrap_python() -> str:
-    configured = os.environ.get("LLUNA_SUPIR_PYTHON", "").strip()
-    candidates: list[str | Path] = [configured] if configured else []
-    versions = ("3.10", "3.9", "3.8")
-    candidates.extend(f"python{version}" for version in versions)
-    home = Path.home()
-    if os.name == "nt":
-        local = Path(os.environ.get("LOCALAPPDATA", home / "AppData" / "Local"))
-        for version in versions:
-            candidates.extend(
-                sorted(
-                    (local / "uv" / "python").glob(f"cpython-{version}*-*/python.exe"), reverse=True
-                )
-            )
-    else:
-        local_bin = home / ".local" / "bin"
-        uv_python = (
-            Path(os.environ.get("XDG_DATA_HOME", home / ".local" / "share")) / "uv" / "python"
-        )
-        for version in versions:
-            candidates.append(local_bin / f"python{version}")
-            candidates.extend(
-                sorted(
-                    uv_python.glob(f"cpython-{version}*-*/bin/python{version}"),
-                    reverse=True,
-                )
-            )
-    checked: set[str] = set()
-    for candidate in candidates:
-        candidate_path = Path(candidate).expanduser()
-        executable = (
-            str(candidate_path) if candidate_path.is_file() else shutil.which(str(candidate))
-        )
-        if not executable:
-            continue
-        executable = str(Path(executable).resolve())
-        if executable in checked:
-            continue
-        checked.add(executable)
-        result = subprocess.run(  # noqa: S603 - configured/detected Python executable
-            [
-                executable,
-                "-c",
-                "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=15,
-            check=False,
-        )
-        if result.returncode == 0 and result.stdout.strip() in versions:
-            return executable
-    raise RuntimeError(
-        "SUPIR requires Python 3.8–3.10. Install Python 3.10 or set LLUNA_SUPIR_PYTHON."
+    return bootstrap_reviewed_python(
+        env_var="LLUNA_SUPIR_PYTHON",
+        versions=("3.10", "3.9", "3.8"),
+        error_message="SUPIR requires Python 3.8–3.10. Install Python 3.10 or set LLUNA_SUPIR_PYTHON.",
     )
 
 
 def _safe_extract(archive: Path, destination: Path) -> None:
-    with zipfile.ZipFile(archive) as opened:
-        root = destination.resolve()
-        for item in opened.infolist():
-            target = (destination / item.filename).resolve()
-            if root != target and root not in target.parents:
-                raise RuntimeError("The SUPIR source archive contains an unsafe path.")
-        opened.extractall(destination)
+    safe_extract_zip(archive, destination)
 
 
 def _install_source() -> None:
@@ -250,32 +198,18 @@ def _install_runtime() -> None:
     if readiness()["runtime"]:
         return
     python = _bootstrap_python()
-    target = runtime_dir()
-    staging = target.with_name(".supir-python.staging")
-    if staging.exists():
-        shutil.rmtree(staging)
-    staging.parent.mkdir(parents=True, exist_ok=True)
-    subprocess.run(  # noqa: S603 - reviewed Python executable and fixed arguments
-        [python, "-m", "venv", str(staging)], check=True, timeout=300
-    )
-    runtime = staging / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
-    subprocess.run(  # noqa: S603 - managed venv and policy-controlled package pins
-        [str(runtime), "-m", "pip", "install", "--disable-pip-version-check", *SUPIR_PACKAGES],
-        check=True,
-        timeout=3600,
-    )
-    atomic_write_json(
-        staging / "runtime.json",
-        {
+    create_isolated_venv(
+        python_executable=python,
+        target_dir=runtime_dir(),
+        staging_name=".supir-python.staging",
+        pip_install_steps=[list(SUPIR_PACKAGES)],
+        runtime_metadata={
             "profile": "supir-python",
             "sourceCommit": SUPIR_COMMIT,
             "packages": list(SUPIR_PACKAGES),
             "managedBy": "lluna",
         },
     )
-    if target.exists():
-        shutil.rmtree(target)
-    staging.replace(target)
 
 
 def _install_huggingface_dependencies() -> None:
@@ -394,23 +328,14 @@ def _resolve_checkpoint_download(kind: str) -> dict:
 
 
 def _checkpoint_digest(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(8 * 1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+    return sha256_of_file(path)
 
 
 def _verify_checkpoint(path: Path, kind: str) -> None:
     expected = _resolve_checkpoint_download(kind)
-    actual_size = path.stat().st_size
-    if actual_size != expected["size"]:
-        raise ValueError(
-            f"{path.name} has an unexpected size ({actual_size} bytes); expected {expected['size']}."
-        )
-    actual_digest = _checkpoint_digest(path)
-    if actual_digest != expected["sha256"]:
-        raise ValueError(f"{path.name} failed SHA-256 verification and was not installed.")
+    verify_pinned_artifact(
+        path, expected_size=expected["size"], expected_sha256=expected["sha256"]
+    )
 
 
 def download_checkpoint(kind: str) -> Path:

@@ -131,6 +131,7 @@ GENERATE_DTYPE_OPTIONS = [
     {"value": "bf16", "label": "BF16"},
     {"value": "fp16", "label": "FP16"},
     {"value": "fp32", "label": "FP32 · highest precision, more VRAM"},
+    {"value": "fp8", "label": "FP8 · CUDA only"},
     {"value": "int8", "label": "INT8 · custom models only, needs bitsandbytes"},
     {"value": "int4", "label": "INT4 · custom models only, needs bitsandbytes"},
 ]
@@ -379,6 +380,7 @@ _NODES = [
                 "auto",
                 options=GENERATE_DTYPE_OPTIONS,
                 description="Lower precision uses less VRAM; FP32 is slower but most exact.",
+                capability="dtype",
             ),
         ],
         capabilities=["diffusers"],
@@ -403,7 +405,7 @@ _NODES = [
             parameter("height", "Height", "integer", 768, minimum=64, maximum=8192, capability="height"),
             parameter("steps", "Steps", "integer", 4, minimum=1, maximum=250, capability="steps"),
             parameter("guidance", "Guidance", "number", 4.0, minimum=0, maximum=20, step=0.1, capability="guidance"),
-            parameter("denoiseStrength", "Denoise strength", "number", 0.65, minimum=0.01, maximum=1, step=0.01, description="Lower values preserve more of the reference image."),
+            parameter("denoiseStrength", "Denoise strength", "number", 0.65, minimum=0.01, maximum=1, step=0.01, description="Lower values preserve more of the reference image.", capability="denoiseStrength"),
             parameter("negativePrompt", "Negative prompt", "textarea", "", capability="negativePrompt"),
             parameter("seed", "Seed", "integer", -1, description="Use -1 for a random seed.", capability="seed"),
             parameter(
@@ -413,6 +415,7 @@ _NODES = [
                 "auto",
                 options=GENERATE_DTYPE_OPTIONS,
                 description="Lower precision uses less VRAM; FP32 is slower but most exact.",
+                capability="dtype",
             ),
         ],
         capabilities=["diffusers", "image-to-image"],
@@ -1146,28 +1149,41 @@ def _build_catalog() -> list[NodeDefinition]:
             and record.manifest.is_configured()
             and runtime_status(record.manifest)["compatible"]
         ]
-        diffusers_records = [
+        def _diffusers_option(record) -> dict:
+            model_option = option(
+                f"custom:{record.manifest.id}",
+                record.manifest.name,
+                record.manifest.id,
+                record.manifest.description or "Custom Diffusers model.",
+            )
+            model_option["variant"] = record.manifest.variant.to_dict()
+            model_option["capabilities"] = record.manifest.capabilities.to_dict(record.manifest.task)
+            return model_option
+
+        text_to_image_records = [
             record
             for record in configured_records
             if record.manifest.adapter == "diffusers" and record.manifest.task == "text-to-image"
         ]
-        if diffusers_records:
-            custom = []
-            for record in diffusers_records:
-                model_option = option(
-                    f"custom:{record.manifest.id}",
-                    record.manifest.name,
-                    record.manifest.id,
-                    record.manifest.description or "Custom Diffusers model.",
-                )
-                model_option["variant"] = record.manifest.variant.to_dict()
-                model_option["capabilities"] = record.manifest.capabilities.to_dict(
-                    record.manifest.task
-                )
-                custom.append(model_option)
+        if text_to_image_records:
             generate = next(item for item in values if item.schema_id == "lluna.generate.image")
             model_parameter = next(item for item in generate.parameters if item.id == "model")
-            model_parameter.options.extend(custom)
+            model_parameter.options.extend(_diffusers_option(record) for record in text_to_image_records)
+
+        # Image-to-image models are wired all the way through execution
+        # (image + strength, see DiffusersAdapter.run/generate_with_custom_model
+        # in backend/models/adapters.py), so they belong on the Edit node.
+        # True mask-based inpainting isn't attached anywhere yet: no node in
+        # this graph has a mask input port for a custom model to receive one.
+        image_to_image_records = [
+            record
+            for record in configured_records
+            if record.manifest.adapter == "diffusers" and record.manifest.task == "image-to-image"
+        ]
+        if image_to_image_records:
+            edit = next(item for item in values if item.schema_id == "lluna.generate.image.edit")
+            model_parameter = next(item for item in edit.parameters if item.id == "model")
+            model_parameter.options.extend(_diffusers_option(record) for record in image_to_image_records)
         birefnet_records = [
             record
             for record in configured_records

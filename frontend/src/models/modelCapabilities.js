@@ -38,6 +38,26 @@ export function parameterForCapabilities(parameter, capabilities, model = "") {
   if (["negativePrompt", "guidance", "seed"].includes(key) && capabilities[key] !== true)
     return null;
   if (key === "steps" && !capabilities.steps) return null;
+  if (key === "denoiseStrength" && !capabilities.denoiseStrength) return null;
+
+  if (key === "dtype") {
+    const allowed = capabilities.dtypes || [];
+    if (!allowed.length) return null;
+    // "auto" isn't a concrete dtype - it tells the backend to pick the best
+    // one from the model's declared set for the detected device - so it's
+    // always offered alongside whatever the model actually declares.
+    const options = (parameter.options || []).filter(
+      (opt) => opt.value === "auto" || allowed.includes(opt.value),
+    );
+    if (!options.length) return null;
+    return {
+      ...parameter,
+      options,
+      default: options.some((opt) => opt.value === parameter.default)
+        ? parameter.default
+        : options[0].value,
+    };
+  }
 
   if (key === "width" || key === "height") {
     const values = capabilities[key === "width" ? "supportedWidths" : "supportedHeights"] || [];
@@ -55,7 +75,14 @@ export function parameterForCapabilities(parameter, capabilities, model = "") {
       : null;
   }
 
-  const numeric = key === "steps" ? capabilities.steps : key === "guidance" ? capabilities.guidanceScale : null;
+  const numeric =
+    key === "steps"
+      ? capabilities.steps
+      : key === "guidance"
+        ? capabilities.guidanceScale
+        : key === "denoiseStrength"
+          ? capabilities.denoiseStrength
+          : null;
   if (numeric) return applyNumericCapability(parameter, numeric);
   return parameter;
 }
@@ -87,6 +114,8 @@ export function applyCapabilityDefaults(current, capabilities, model) {
     "temperature",
     "topP",
     "maxNewTokens",
+    "dtype",
+    "denoiseStrength",
   ])
     delete next[key];
   const widths = capabilities.supportedWidths || [];
@@ -101,6 +130,8 @@ export function applyCapabilityDefaults(current, capabilities, model) {
   if (capabilities.temperature) next.temperature = capabilities.temperature.default;
   if (capabilities.topP) next.topP = capabilities.topP.default;
   if (capabilities.maxNewTokens) next.maxNewTokens = capabilities.maxNewTokens.default;
+  if (capabilities.dtypes?.length) next.dtype = capabilities.dtypes[0];
+  if (capabilities.denoiseStrength) next.denoiseStrength = capabilities.denoiseStrength.default;
   if (capabilities.defaultInstruction) next.instruction = capabilities.defaultInstruction;
   return next;
 }

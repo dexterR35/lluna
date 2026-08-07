@@ -1,141 +1,81 @@
-"""Official BiRefNet inference for image cut-outs and video foregrounds."""
+"""Subprocess bridge from Lluna's inference worker to isolated BiRefNet.
+
+BiRefNet's official HF snapshots ship custom modeling code that is loaded
+with ``trust_remote_code=True`` (see birefnet_process.py). That code now runs
+inside its own pinned, isolated venv (backend/tools/installers/birefnet.py),
+the same pattern already used for SUPIR and SeedVR2, instead of importing
+directly into the main app's process and dependency environment.
+"""
 
 from __future__ import annotations
 
-import contextlib
-import os
+import json
 import subprocess
 import tempfile
 from pathlib import Path
 from typing import Callable
 
-from PIL import Image, ImageColor, ImageFilter
-
-from backend.tools.installers.birefnet import is_model_installed, model_dir
-
-_MODELS: dict[str, tuple[object, str, object]] = {}
+from backend.tools.installers import birefnet as birefnet_models
+from backend.tools.shared.process import ProcessManager
 
 
-def _device(torch):
-    if torch.cuda.is_available():
-        return torch.device("cuda")
-    mps = getattr(torch.backends, "mps", None)
-    if mps is not None and mps.is_available():
-        return torch.device("mps")
-    return torch.device("cpu")
+class BiRefNetCancelled(RuntimeError):
+    pass
 
 
-def _load(model_id: str, model_path: str | None = None, precision: str = "auto"):
-    cache_key = f"{model_id}:{model_path or ''}:{precision}"
-    cached = _MODELS.get(cache_key)
-    if cached is not None:
-        return cached
-    root = Path(model_path) if model_path else model_dir(model_id)
-    installed = (
-        (root / "config.json").is_file()
-        and bool(tuple(root.glob("*.safetensors")) + tuple(root.glob("*.bin")))
-        if model_path
-        else is_model_installed(model_id)
-    )
-    if not installed:
+def _resolve_model_root(model_id: str, model_path: str | None) -> Path:
+    if model_path:
+        root = Path(model_path)
+        if not birefnet_models.is_model_installed_at(root):
+            raise RuntimeError(f"BiRefNet model at '{model_path}' is missing config.json or weights.")
+        return root
+    if not birefnet_models.is_model_installed(model_id):
         raise RuntimeError(f"BiRefNet model '{model_id}' is not installed. Install it in Settings → Models.")
-    try:
-        import torch
-        from transformers import AutoModelForImageSegmentation
-    except ImportError as exc:
-        raise RuntimeError(
-            "BiRefNet needs PyTorch, Transformers, timm, kornia, and torchvision. "
-            "Install the BiRefNet runtime from the Lluna installer."
-        ) from exc
-    device = _device(torch)
-    requested = str(precision or "auto").lower()
-    use_fp16 = device.type == "cuda" and requested in {"auto", "fp16"}
-    dtype = torch.float16 if use_fp16 else torch.float32
-    model = AutoModelForImageSegmentation.from_pretrained(
-        str(root),
-        trust_remote_code=True,
-        local_files_only=True,
-    )
-    model = model.to(device)
-    # Some official checkpoints advertise fp16 in their config. CPU kernels do
-    # not consistently support half-precision convolutions, so keep CPU/MPS
-    # inference in fp32 and reserve autocast fp16 for CUDA.
-    if dtype == torch.float16:
-        model = model.half()
-    else:
-        model = model.float()
-    model = model.eval()
-    value = (model, device, dtype)
-    _MODELS[cache_key] = value
-    return value
+    return birefnet_models.model_dir(model_id)
+
+
+def _run(request: dict, *, cancel_event=None, progress: Callable[[int], None] | None = None) -> None:
+    if not birefnet_models.runtime_python().is_file():
+        raise RuntimeError("The isolated BiRefNet runtime is not installed. Install it in Settings → Models.")
+    runner = Path(__file__).with_name("birefnet_process.py")
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".json", encoding="utf-8", delete=False
+    ) as handle:
+        json.dump(request, handle)
+        request_path = Path(handle.name)
+    if progress:
+        progress(5)
+    with tempfile.NamedTemporaryFile(mode="w+", encoding="utf-8") as output_log:
+        process = subprocess.Popen(  # noqa: S603 - executable and runner are managed paths
+            [str(birefnet_models.runtime_python()), str(runner), "--request", str(request_path)],
+            stdout=output_log,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        ProcessManager.instance().add_process(process, name="birefnet-worker")
+        try:
+            while process.poll() is None:
+                if cancel_event is not None and cancel_event.wait(0.2):
+                    ProcessManager.instance().terminate_by_process(process, quiet=True)
+                    raise BiRefNetCancelled("__cancelled__")
+                if progress:
+                    progress(50)
+            output_log.seek(0)
+            output = output_log.read()
+            if process.returncode:
+                raise RuntimeError(output.strip()[-4000:] or "BiRefNet inference failed.")
+        finally:
+            ProcessManager.instance().remove_process("birefnet-worker")
+            request_path.unlink(missing_ok=True)
+    if progress:
+        progress(100)
 
 
 def release_models() -> None:
-    values = tuple(_MODELS.values())
-    _MODELS.clear()
-    for model, _device_value, _dtype in values:
-        del model
-    try:
-        import torch
-
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-    except ImportError:
-        pass
-
-
-def _predict_mask(model_id: str, image: Image.Image, resolution: int, model_path: str | None = None, precision: str = "auto") -> Image.Image:
-    import torch
-    from torchvision import transforms
-
-    model, device, dtype = _load(model_id, model_path, precision)
-    source = image.convert("RGB")
-    width, height = source.size
-    side = max(256, min(2304, int(resolution)))
-    tensor = transforms.Compose(
-        [
-            transforms.Resize((side, side), interpolation=transforms.InterpolationMode.BILINEAR),
-            transforms.ToTensor(),
-            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-        ]
-    )(source).unsqueeze(0).to(device)
-    autocast = torch.autocast(device_type="cuda", dtype=dtype) if device.type == "cuda" and dtype != torch.float32 else contextlib.nullcontext()
-    with torch.no_grad(), autocast:
-        output = model(tensor)
-        if isinstance(output, (tuple, list)):
-            output = output[-1]
-        elif hasattr(output, "logits"):
-            output = output.logits
-        if output.ndim == 3:
-            output = output.unsqueeze(1)
-        mask = torch.sigmoid(output.float())
-        mask = torch.nn.functional.interpolate(
-            mask[:, :1], size=(height, width), mode="bilinear", align_corners=True
-        )[0, 0]
-    values = (mask.clamp(0, 1).cpu().numpy() * 255).astype("uint8")
-    return Image.fromarray(values, mode="L")
-
-
-def _alpha_mask(mask: Image.Image, threshold: float, feather: int) -> Image.Image:
-    value = max(0.0, min(1.0, float(threshold)))
-    if value > 0:
-        # Keep a soft ramp so matting models retain hair and fur detail.
-        mask = mask.point(lambda pixel: max(0, min(255, int((pixel / 255 - value) / max(1e-6, 1 - value) * 255))))
-    if feather > 0:
-        mask = mask.filter(ImageFilter.GaussianBlur(radius=min(32, int(feather))))
-    return mask
-
-
-def _background(params: dict) -> tuple[int, int, int]:
-    mode = str(params.get("output_mode") or params.get("outputMode") or "transparent")
-    if mode == "white":
-        return (255, 255, 255)
-    if mode == "black":
-        return (0, 0, 0)
-    try:
-        return ImageColor.getrgb(str(params.get("background_color") or params.get("backgroundColor") or "#ffffff"))
-    except ValueError:
-        return (255, 255, 255)
+    # Each job now runs in its own subprocess (isolated venv), which exits
+    # and releases all VRAM/RAM on completion - there is no persistent
+    # in-process cache left to release here.
+    pass
 
 
 def process_image(
@@ -153,36 +93,22 @@ def process_image(
     mask_output_path: str | None = None,
     alpha_output_path: str | None = None,
 ) -> None:
-    source = Image.open(input_path).convert("RGB")
-    raw_mask = _predict_mask(model_id, source, resolution, model_path, precision)
-    mask = _alpha_mask(raw_mask, threshold, feather)
-    if mask_output_path:
-        Path(mask_output_path).parent.mkdir(parents=True, exist_ok=True)
-        raw_mask.save(mask_output_path, format="PNG")
-    if alpha_output_path:
-        Path(alpha_output_path).parent.mkdir(parents=True, exist_ok=True)
-        mask.save(alpha_output_path, format="PNG")
-    if output_mode == "transparent":
-        result = source.convert("RGBA")
-        result.putalpha(mask)
-    else:
-        result = Image.new("RGB", source.size, _background({"output_mode": output_mode, "background_color": background_color}))
-        result.paste(source, mask=mask)
-    result.save(output_path, format="PNG")
-
-
-def _run_ffmpeg(args: list[str]) -> None:
-    from backend.tools.media.ffmpeg import FFmpegCLI
-
-    completed = subprocess.run(
-        [FFmpegCLI.instance().ffmpeg_path, "-y", *args],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE,
-        check=False,
-    )
-    if completed.returncode:
-        detail = completed.stderr.decode("utf-8", errors="replace")[-800:]
-        raise RuntimeError(f"FFmpeg video encoding failed: {detail}")
+    root = _resolve_model_root(model_id, model_path)
+    request = {
+        "job": "image",
+        "model_root": str(root),
+        "input_path": input_path,
+        "output_path": output_path,
+        "resolution": int(resolution),
+        "threshold": float(threshold),
+        "feather": int(feather),
+        "output_mode": output_mode,
+        "background_color": background_color,
+        "precision": precision,
+        "mask_output_path": mask_output_path,
+        "alpha_output_path": alpha_output_path,
+    }
+    _run(request)
 
 
 def process_video(
@@ -200,69 +126,20 @@ def process_video(
     progress: Callable[[int], None] | None = None,
     cancel_event=None,
 ) -> None:
-    import cv2
-    import numpy as np
+    from backend.tools.media.ffmpeg import FFmpegCLI
 
-    capture = cv2.VideoCapture(input_path)
-    if not capture.isOpened():
-        raise RuntimeError(f"Could not open video: {input_path}")
-    fps = float(capture.get(cv2.CAP_PROP_FPS) or 30.0)
-    width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    total = max(0, int(capture.get(cv2.CAP_PROP_FRAME_COUNT)))
-    if width <= 0 or height <= 0:
-        capture.release()
-        raise RuntimeError("Video has invalid dimensions.")
-    transparent = output_mode == "transparent"
-    raw_suffix = ".mov" if transparent else ".mp4"
-    with tempfile.TemporaryDirectory(prefix="lluna-birefnet-video-") as temp_dir:
-        raw_path = str(Path(temp_dir) / f"foreground{raw_suffix}")
-        pixel_format = "rgba" if transparent else "bgr24"
-        codec_args = ["-c:v", "qtrle", "-pix_fmt", "argb"] if transparent else ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18", "-preset", "fast"]
-        from backend.tools.media.ffmpeg import FFmpegCLI
-
-        encoder = subprocess.Popen(
-            [FFmpegCLI.instance().ffmpeg_path, "-y", "-f", "rawvideo", "-pix_fmt", pixel_format, "-s", f"{width}x{height}", "-r", str(fps), "-i", "-", *codec_args, "-an", raw_path],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-        )
-        index = 0
-        try:
-            while True:
-                if cancel_event is not None and cancel_event.is_set():
-                    raise RuntimeError("__cancelled__")
-                ok, frame = capture.read()
-                if not ok:
-                    break
-                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                image = Image.fromarray(rgb, mode="RGB")
-                mask = _alpha_mask(_predict_mask(model_id, image, resolution, model_path, precision), threshold, feather)
-                if transparent:
-                    rgba = np.asarray(image.convert("RGBA"))
-                    rgba[:, :, 3] = np.asarray(mask)
-                    encoder.stdin.write(rgba.tobytes())
-                else:
-                    background = Image.new("RGB", image.size, _background({"output_mode": output_mode, "background_color": background_color}))
-                    background.paste(image, mask=mask)
-                    bgr = cv2.cvtColor(np.asarray(background), cv2.COLOR_RGB2BGR)
-                    encoder.stdin.write(bgr.tobytes())
-                index += 1
-                if progress and total:
-                    progress(min(98, int(index * 98 / total)))
-        finally:
-            capture.release()
-            if encoder.stdin:
-                encoder.stdin.close()
-            encoder.wait(timeout=600)
-        if encoder.returncode:
-            detail = (encoder.stderr.read() if encoder.stderr else b"").decode("utf-8", errors="replace")[-800:]
-            raise RuntimeError(f"BiRefNet video encoding failed: {detail}")
-        # Keep source audio for ordinary video output and for players that support
-        # audio alongside transparent MOV. A silent output remains valid if muxing fails.
-        try:
-            _run_ffmpeg(["-i", raw_path, "-i", input_path, "-map", "0:v:0", "-map", "1:a?", "-c:v", "copy", "-c:a", "aac", "-shortest", output_path])
-        except RuntimeError:
-            os.replace(raw_path, output_path)
-    if progress:
-        progress(100)
+    root = _resolve_model_root(model_id, model_path)
+    request = {
+        "job": "video",
+        "model_root": str(root),
+        "input_path": input_path,
+        "output_path": output_path,
+        "resolution": int(resolution),
+        "threshold": float(threshold),
+        "feather": int(feather),
+        "output_mode": output_mode,
+        "background_color": background_color,
+        "precision": precision,
+        "ffmpeg_path": FFmpegCLI.instance().ffmpeg_path,
+    }
+    _run(request, cancel_event=cancel_event, progress=progress)

@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { addEdge, applyEdgeChanges, applyNodeChanges } from "@xyflow/react";
 import { compatibleTypes } from "../icons";
+import { applyCapabilityDefaults, capabilityContract } from "../models/modelCapabilities";
 /** @typedef {import("../types").EditorState} EditorState */
 /** @typedef {import("../types").EditorNode} EditorNode */
 /** @typedef {import("../types").EditorEdge} EditorEdge */
@@ -507,7 +508,19 @@ const createEditorState = (set, get) => ({
   dirty: false,
   project: projectTemplate(),
   definitions: [],
-  setDefinitions: (definitions) => set({ definitions }),
+  setDefinitions: (definitions) =>
+    set((state) => {
+      const map = definitionsById(definitions);
+      const nodes = state.nodes.map((node) => {
+        const next = map[node.data.schemaId];
+        // A node placed before a model install/config change keeps whatever
+        // NodeDefinition it was created with (LlunaNode.jsx reads
+        // `data.definition`, not a live lookup) unless refreshed here.
+        if (!next || next === node.data.definition) return node;
+        return { ...node, data: { ...node.data, definition: next } };
+      });
+      return { definitions, nodes };
+    }),
   addNode: (schemaId, position = { x: 120, y: 120 }, options = {}) => {
     const definition = get().definitions.find(
       (value) => value.schemaId === schemaId,
@@ -582,6 +595,8 @@ const createEditorState = (set, get) => ({
   onEdgesChange: (changes) =>
     set((state) => {
       const edges = applyEdgeChanges(changes, state.edges);
+      const permanent = changes.some((change) => change.type === "remove");
+      if (!permanent) return { edges };
       return history(state, {
         edges,
         groups: refreshFlowGroups(state.groups, state.nodes, edges),
@@ -751,13 +766,28 @@ const createEditorState = (set, get) => ({
           (nodeId) => nodeId !== id,
         ),
       );
+      const target = state.nodes.find((node) => node.id === id);
+      const modelParameter = target?.data.definition?.parameters?.find(
+        (parameter) => parameter.id === "model" || parameter.type === "model",
+      );
+      const selectedOption = modelParameter?.options?.find(
+        (candidate) => String(candidate.value) === String(value),
+      );
+      const capabilities = capabilityContract(selectedOption);
       const nodes = state.nodes.map((node) => {
         if (node.id === id)
           return {
             ...node,
             data: {
               ...node.data,
-              parameters: { ...node.data.parameters, model: value },
+              // Reset model-specific fields (steps/guidance/dtype/etc.) to
+              // the newly selected model's defaults, same as the full node
+              // editor dialog's model switcher (NodeEditorDialog.jsx) - this
+              // compact footer selector used to only overwrite `model`,
+              // leaving every other parameter tuned for the previous model.
+              parameters: capabilities?.complete
+                ? applyCapabilityDefaults(node.data.parameters || {}, capabilities, value)
+                : { ...node.data.parameters, model: value },
               result: node.data.result
                 ? { ...node.data.result, status: "STALE" }
                 : node.data.result,

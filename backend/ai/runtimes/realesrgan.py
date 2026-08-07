@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import threading
 import time
 from typing import Callable, Optional
@@ -138,9 +139,18 @@ class _RealESRGANer:
         )
         path = ensure_model_installed(mode)
         try:
+            loadnet = torch.load(str(path), map_location="cpu", weights_only=True)
+        except Exception:
+            # ensure_model_installed() already sha256-verified this file
+            # against the reviewed manifest (backend/tools/installers/
+            # enhance.py), so this fallback is purely for checkpoints that
+            # legitimately need full pickle deserialization, not a trust gap.
+            logging.getLogger(__name__).warning(
+                "Real-ESRGAN checkpoint %s failed to load with weights_only=True; "
+                "retrying with full pickle deserialization.",
+                path,
+            )
             loadnet = torch.load(str(path), map_location="cpu", weights_only=False)
-        except TypeError:
-            loadnet = torch.load(str(path), map_location="cpu")
         if "params_ema" in loadnet:
             keyname = "params_ema"
         elif "params" in loadnet:

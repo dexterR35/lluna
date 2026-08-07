@@ -14,6 +14,11 @@ from pathlib import Path
 
 from backend.core.atomic import atomic_write_json
 from backend.core.paths import PATHS
+from backend.tools.installers._shared import (
+    bootstrap_reviewed_python,
+    create_isolated_venv,
+    verify_pinned_artifact,
+)
 
 KIND_SEEDVR = "seedvr2"
 SEEDVR_COMMIT = "e4de8c24441a67e1b7df56abea10645059bb1185"
@@ -23,13 +28,44 @@ SEEDVR_RUNTIME_PROFILE = "seedvr-python"
 MODEL_CONFIG = {
     "seedvr2-3b": {
         "repo": "ByteDance-Seed/SeedVR2-3B",
+        "revision": "37255ff8cccfb01071b87f635a5948ca8d53117c",
         "checkpoint": "seedvr2_ema_3b.pth",
+        "checkpoint_size": 13566090228,
+        "checkpoint_sha256": "6bcc5ac59447e97b100477480aebb01be2ec724c8340bb83faae21f64848604b",
         "minimum_vram_mb": 24576,
     },
     "seedvr2-7b": {
         "repo": "ByteDance-Seed/SeedVR2-7B",
+        "revision": "eb0c4281d41ba3767d4f14370f0e37e9e9180c16",
         "checkpoint": "seedvr2_ema_7b.pth",
+        "checkpoint_size": 32958774606,
+        "checkpoint_sha256": "e1b2ae25505607e61f2a7dc7967ba778aaf3e3626d9969ce6e24c52d9ddebfcd",
         "minimum_vram_mb": 49152,
+    },
+}
+
+# The VAE is byte-identical across both repos (same lfs oid on both), so any
+# installed model's download can supply it.
+VAE_ARTIFACT = {
+    "filename": "ema_vae.pth",
+    "size": 1002691902,
+    "sha256": "c7df8a67e68b7f9aca3d5d2153d2ce8ab4373687741a0f9ce87cb356ace51cac",
+}
+
+# Apex is only published (as a prebuilt wheel) in the 3B repo, pinned to
+# MODEL_CONFIG["seedvr2-3b"]["revision"] above; both wheels are downloaded
+# from there regardless of which SeedVR2 model was installed.
+APEX_WHEEL_REPO = "ByteDance-Seed/SeedVR2-3B"
+APEX_WHEELS = {
+    "cp310": {
+        "filename": "apex-0.1-cp310-cp310-linux_x86_64.whl",
+        "size": 4857175,
+        "sha256": "9f4b44a79c37203140c26a2a8c566179ced06685786bc2a0c3cb16e06f0c3522",
+    },
+    "cp39": {
+        "filename": "apex-0.1-cp39-cp39-linux_x86_64.whl",
+        "size": 4839299,
+        "sha256": "a960427deced65f2d68908a80b671ff9fa0c2c3e7f02693b690b6126c178667f",
     },
 }
 
@@ -103,7 +139,7 @@ def readiness(model_id: str) -> dict[str, bool]:
         "source": _source_ready(),
         "runtime": runtime_python().is_file() and (runtime_dir() / "runtime.json").is_file(),
         "checkpoint": (checkpoints_dir() / config["checkpoint"]).is_file(),
-        "vae": (checkpoints_dir() / "ema_vae.pth").is_file(),
+        "vae": (checkpoints_dir() / VAE_ARTIFACT["filename"]).is_file(),
         "model": (model_dir(model_id) / ".lluna-installed").is_file(),
     }
 
@@ -121,30 +157,53 @@ def cuda_compatible() -> bool:
 
 
 def _bootstrap_python() -> str:
-    configured = os.environ.get("LLUNA_SEEDVR_PYTHON", "").strip()
-    candidates: list[str | Path] = [configured] if configured else []
-    candidates.extend(("python3.10", "python3.9"))
-    checked: set[str] = set()
-    for candidate in candidates:
-        executable = str(candidate) if Path(candidate).is_file() else shutil.which(str(candidate))
-        if not executable:
-            continue
-        executable = str(Path(executable).resolve())
-        if executable in checked:
-            continue
-        checked.add(executable)
-        result = subprocess.run(  # noqa: S603 - executable is selected from a reviewed Python version
-            [executable, "-c", "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"],
-            capture_output=True,
-            text=True,
-            timeout=15,
-            check=False,
-        )
-        if result.returncode == 0 and result.stdout.strip() in {"3.10", "3.9"}:
-            return executable
-    raise RuntimeError(
-        "SeedVR2 requires Python 3.10 or 3.9. Install Python 3.10 or set LLUNA_SEEDVR_PYTHON."
+    return bootstrap_reviewed_python(
+        env_var="LLUNA_SEEDVR_PYTHON",
+        versions=("3.10", "3.9"),
+        error_message="SeedVR2 requires Python 3.10 or 3.9. Install Python 3.10 or set LLUNA_SEEDVR_PYTHON.",
     )
+
+
+def _ensure_apex_wheel(python_tag: str) -> Path:
+    """Download (if needed) and verify the pinned Apex wheel for ``python_tag``."""
+    expected = APEX_WHEELS.get(python_tag)
+    if expected is None:
+        raise RuntimeError(
+            f"SeedVR2 has no reviewed Apex wheel for Python tag {python_tag}; "
+            "supported: " + ", ".join(sorted(APEX_WHEELS))
+        )
+    destination = checkpoints_dir() / expected["filename"]
+    if destination.is_file():
+        try:
+            verify_pinned_artifact(
+                destination, expected_size=expected["size"], expected_sha256=expected["sha256"]
+            )
+            return destination
+        except ValueError:
+            destination.unlink(missing_ok=True)
+
+    from backend.tools.shared.huggingface import snapshot_download_with_progress
+
+    staging = models_root() / ".downloads" / "apex"
+    shutil.rmtree(staging, ignore_errors=True)
+    snapshot_download_with_progress(
+        repo_id=APEX_WHEEL_REPO,
+        revision=MODEL_CONFIG["seedvr2-3b"]["revision"],
+        local_dir=str(staging),
+        allow_patterns=[expected["filename"]],
+    )
+    downloaded = staging / expected["filename"]
+    if not downloaded.is_file():
+        raise RuntimeError(f"Hugging Face did not provide {expected['filename']}.")
+    verify_pinned_artifact(
+        downloaded, expected_size=expected["size"], expected_sha256=expected["sha256"]
+    )
+    checkpoints_dir().mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_suffix(destination.suffix + ".part")
+    downloaded.replace(temporary)
+    temporary.replace(destination)
+    shutil.rmtree(staging, ignore_errors=True)
+    return destination
 
 
 def _install_runtime() -> None:
@@ -153,66 +212,31 @@ def _install_runtime() -> None:
     if os.name != "posix":
         raise RuntimeError("The official SeedVR2 runtime currently supports Linux CUDA installations only.")
     python = _bootstrap_python()
-    target = runtime_dir()
-    staging = target.with_name(".seedvr-python.staging")
-    if staging.exists():
-        shutil.rmtree(staging, ignore_errors=True)
-    staging.parent.mkdir(parents=True, exist_ok=True)
-    subprocess.run(  # noqa: S603 - reviewed Python executable and managed venv path
-        [python, "-m", "venv", str(staging)], check=True, timeout=300
-    )
-    runtime = staging / "bin" / "python"
-    subprocess.run(  # noqa: S603 - managed venv and reviewed CUDA package pins
-        [
-            str(runtime),
-            "-m",
-            "pip",
-            "install",
-            "--disable-pip-version-check",
-            "torch==2.4.0",
-            "torchvision==0.19.0",
-            "--index-url",
-            "https://download.pytorch.org/whl/cu121",
-        ],
-        check=True,
-        timeout=3600,
-    )
-    subprocess.run(  # noqa: S603 - managed venv and reviewed package pins
-        [str(runtime), "-m", "pip", "install", "--disable-pip-version-check", *SEEDVR_PACKAGES],
-        check=True,
-        timeout=3600,
-    )
-    subprocess.run(  # noqa: S603 - managed venv and fixed package name
-        [
-            str(runtime),
-            "-m",
-            "pip",
-            "install",
-            "--disable-pip-version-check",
-            "flash_attn==2.5.9.post1",
-            "--no-build-isolation",
-        ],
-        check=True,
-        timeout=1800,
-    )
-    version_probe = subprocess.run(  # noqa: S603 - managed venv and fixed probe
-        [str(runtime), "-c", "import sys; print(f'cp{sys.version_info.major}{sys.version_info.minor}')"],
+    version_probe = subprocess.run(  # noqa: S603 - reviewed Python executable and fixed probe
+        [python, "-c", "import sys; print(f'cp{sys.version_info.major}{sys.version_info.minor}')"],
         capture_output=True,
         text=True,
         check=True,
         timeout=30,
     )
     python_tag = version_probe.stdout.strip()
-    wheel = next(checkpoints_dir().glob(f"apex-0.1-{python_tag}-*.whl"), None)
-    if wheel is not None:
-        subprocess.run(  # noqa: S603 - managed venv and downloaded official wheel
-            [str(runtime), "-m", "pip", "install", str(wheel)], check=True, timeout=900
-        )
-    else:
-        raise RuntimeError("SeedVR2 could not find the official prebuilt Apex wheel for Python 3.10.")
-    atomic_write_json(
-        staging / "runtime.json",
-        {
+    wheel = _ensure_apex_wheel(python_tag)
+    create_isolated_venv(
+        python_executable=python,
+        target_dir=runtime_dir(),
+        staging_name=".seedvr-python.staging",
+        pip_install_steps=[
+            [
+                "torch==2.4.0",
+                "torchvision==0.19.0",
+                "--index-url",
+                "https://download.pytorch.org/whl/cu121",
+            ],
+            list(SEEDVR_PACKAGES),
+            ["flash_attn==2.5.9.post1", "--no-build-isolation"],
+            [str(wheel)],
+        ],
+        runtime_metadata={
             "profile": SEEDVR_RUNTIME_PROFILE,
             "bundledSource": SEEDVR_SOURCE_REPO,
             "sourceCommit": SEEDVR_COMMIT,
@@ -220,9 +244,6 @@ def _install_runtime() -> None:
             "managedBy": "lluna",
         },
     )
-    if target.exists():
-        shutil.rmtree(target, ignore_errors=True)
-    staging.replace(target)
 
 
 def _download_checkpoint(model_id: str) -> None:
@@ -233,35 +254,32 @@ def _download_checkpoint(model_id: str) -> None:
     if staging.exists():
         shutil.rmtree(staging, ignore_errors=True)
     staging.mkdir(parents=True, exist_ok=True)
-    patterns = [config["checkpoint"], "ema_vae.pth", "apex-*.whl"]
+    patterns = [config["checkpoint"], VAE_ARTIFACT["filename"]]
     snapshot_download_with_progress(
         repo_id=config["repo"],
+        revision=config["revision"],
         local_dir=str(staging),
         allow_patterns=patterns,
     )
-    required = (staging / config["checkpoint"], staging / "ema_vae.pth")
-    if not all(path.is_file() for path in required):
+    checkpoint_file = staging / config["checkpoint"]
+    vae_file = staging / VAE_ARTIFACT["filename"]
+    if not checkpoint_file.is_file() or not vae_file.is_file():
         raise RuntimeError(f"Hugging Face did not provide the complete SeedVR2 {model_id} checkpoint.")
+    verify_pinned_artifact(
+        checkpoint_file,
+        expected_size=config["checkpoint_size"],
+        expected_sha256=config["checkpoint_sha256"],
+    )
+    verify_pinned_artifact(
+        vae_file, expected_size=VAE_ARTIFACT["size"], expected_sha256=VAE_ARTIFACT["sha256"]
+    )
     checkpoints_dir().mkdir(parents=True, exist_ok=True)
-    for filename in (config["checkpoint"], "ema_vae.pth"):
+    for filename in (config["checkpoint"], VAE_ARTIFACT["filename"]):
         source = staging / filename
         target = checkpoints_dir() / filename
         temporary = target.with_suffix(target.suffix + ".part")
         source.replace(temporary)
         temporary.replace(target)
-    for wheel in staging.glob("apex-*.whl"):
-        shutil.copy2(wheel, checkpoints_dir() / wheel.name)
-    if not any(checkpoints_dir().glob("apex-*.whl")):
-        apex_staging = models_root() / ".downloads" / "apex"
-        shutil.rmtree(apex_staging, ignore_errors=True)
-        snapshot_download_with_progress(
-            repo_id="ByteDance-Seed/SeedVR2-3B",
-            local_dir=str(apex_staging),
-            allow_patterns=["apex-*.whl"],
-        )
-        for wheel in apex_staging.glob("apex-*.whl"):
-            shutil.copy2(wheel, checkpoints_dir() / wheel.name)
-        shutil.rmtree(apex_staging, ignore_errors=True)
     shutil.rmtree(staging, ignore_errors=True)
 
 
@@ -308,8 +326,12 @@ def uninstall_model(model_id: str) -> None:
         raise ValueError(f"Unknown SeedVR2 model: {model_id}")
     config = MODEL_CONFIG[model_id]
     discard_partial(model_id)
-    for filename in (config["checkpoint"],):
-        (checkpoints_dir() / filename).unlink(missing_ok=True)
+    (checkpoints_dir() / config["checkpoint"]).unlink(missing_ok=True)
+    # Remove this model's own marker dir first so the "any other model still
+    # installed" check below isn't fooled by its own stale marker - otherwise
+    # the shared checkpoints/runtime dirs would never be reclaimed even after
+    # every SeedVR2 model was uninstalled.
+    shutil.rmtree(model_dir(model_id), ignore_errors=True)
     if not any((model_dir(item) / ".lluna-installed").is_file() for item in MODEL_CONFIG):
         shutil.rmtree(checkpoints_dir(), ignore_errors=True)
         shutil.rmtree(runtime_dir(), ignore_errors=True)

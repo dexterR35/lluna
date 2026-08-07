@@ -34,16 +34,25 @@ def _generation_capabilities(
     dtypes: tuple[str, ...],
     negative_prompt: bool = False,
     image_to_image: bool = False,
+    steps_range: tuple[int, int] | None = None,
 ) -> ModelCapabilities:
     tasks = ("text-to-image", "image-to-image") if image_to_image else ("text-to-image",)
     inputs, outputs = _io_for_task("image-to-image" if image_to_image else "text-to-image")
+    if steps_range:
+        minimum, maximum = steps_range
+        steps_capability = NumberCapability(float(steps), float(minimum), float(maximum))
+    else:
+        # Distilled/turbo variants are trained for one exact step count; an
+        # arbitrary step count is not "lower quality", it's out of
+        # distribution, so these stay fixed rather than exposing a range.
+        steps_capability = NumberCapability(float(steps), float(steps), float(steps), (float(steps),))
     return ModelCapabilities(
         provenance=provenance,
         tasks=tasks,
         negative_prompt=negative_prompt,
         guidance=guidance,
         seed=True,
-        steps=NumberCapability(float(steps), float(steps), float(steps), (float(steps),)),
+        steps=steps_capability,
         guidance_scale=(NumberCapability(guidance_default, 0.0, 20.0) if guidance else None),
         supported_widths=(512, 768, 1024),
         supported_heights=(512, 768, 1024),
@@ -79,6 +88,10 @@ for repo, variant, steps, guidance, guidance_default, dtypes in (
             dtypes=dtypes,
             image_to_image=repo.lower().startswith("black-forest-labs/"),
             negative_prompt=guidance,
+            # Only the "base"/non-distilled variants tolerate a real step
+            # range; distilled/turbo checkpoints stay pinned to their exact
+            # trained step count (see _generation_capabilities above).
+            steps_range=(20, steps) if variant == "base" else None,
         ),
     )
 
