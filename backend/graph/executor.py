@@ -97,7 +97,7 @@ def _artifact_values(value: Any) -> list[ArtifactRecord]:
 def _primary_artifact_values(value: Any) -> list[ArtifactRecord]:
     """Return the visual/main output used by the node preview and status UI."""
     if isinstance(value, dict):
-        for port_id in ("image", "video", "output"):
+        for port_id in ("image", "video", "mask", "alpha", "output"):
             if port_id in value:
                 return _primary_artifact_values(value[port_id])
         first = next(iter(value.values()), None)
@@ -657,6 +657,18 @@ class RunManager:
                                 for artifact_id in artifact_ids
                             ]
                             value = artifacts if len(artifacts) > 1 else artifacts[-1]
+                            if (
+                                source.schema_id == "lluna.mask.select_object"
+                                and edge.source_port_id == "source_image"
+                            ):
+                                mask = artifacts[-1]
+                                value = next(
+                                    (
+                                        self._artifacts.get(input_id)
+                                        for input_id in mask.input_artifact_ids
+                                    ),
+                                    None,
+                                )
                         except (KeyError, FileNotFoundError) as exc:
                             raise ExecutionFailure(
                                 "BOUNDARY_INPUT_UNAVAILABLE",
@@ -728,8 +740,25 @@ class RunManager:
                 input_artifacts,
                 cache_key,
             )
+        elif definition.adapter == "image_effects":
+            result = self._apply_image_effects(
+                control,
+                node,
+                inputs,
+                input_artifacts,
+                cache_key,
+            )
         else:
             result = self._run_inference(control, node, inputs, input_artifacts, cache_key)
+        if node.schema_id == "lluna.mask.select_object" and isinstance(
+            result, ArtifactRecord
+        ):
+            source_image = inputs.get("image")
+            if isinstance(source_image, ArtifactRecord):
+                # The mask stays primary for persistence and preview. The
+                # original image is also exposed as a downstream port so LaMa
+                # can be wired entirely from Select Object.
+                result = {"mask": result, "source_image": source_image}
         self._node_state(control, node.id, "SUCCEEDED", 100)
         artifact_ids = [artifact.artifact_id for artifact in _primary_artifact_values(result)]
         with control.lock:
@@ -799,6 +828,18 @@ class RunManager:
                 progress_span = 100 / count
                 if definition.adapter == "composite":
                     artifact = self._composite_images(
+                        control,
+                        node,
+                        scalar_inputs,
+                        scalar_artifacts,
+                        item_cache_key,
+                        progress_offset=progress_offset,
+                        progress_span=progress_span,
+                        item_index=index,
+                        item_count=count,
+                    )
+                elif definition.adapter == "image_effects":
+                    artifact = self._apply_image_effects(
                         control,
                         node,
                         scalar_inputs,
@@ -1290,6 +1331,110 @@ class RunManager:
                 "itemIndex": item_index,
                 "itemCount": item_count,
                 "message": f"Composited item {item_index + 1} of {item_count}",
+            },
+        )
+        return artifact
+
+    def _apply_image_effects(
+        self,
+        control: _RunControl,
+        node: WorkflowNode,
+        inputs: dict[str, Any],
+        input_artifacts: list[ArtifactRecord],
+        cache_key: str,
+        *,
+        progress_offset: int = 0,
+        progress_span: float = 100,
+        item_index: int = 0,
+        item_count: int = 1,
+    ) -> ArtifactRecord:
+        """Apply lightweight, deterministic image effects as a real graph step."""
+        source = inputs.get("image")
+        if not isinstance(source, ArtifactRecord):
+            raise ExecutionFailure("MISSING_INPUT", "Image Effects needs an image.")
+        preset = str(node.parameters.get("preset") or "none")
+        presets = {
+            "none": (1.0, 1.0, 1.0, 1.0, 1.0),
+            "vivid": (1.0, 1.08, 1.35, 1.0, 1.0),
+            "soft": (1.08, 0.92, 0.82, 1.0, 1.0),
+            "warm": (1.0, 1.02, 1.16, 1.05, 0.92),
+            "cool": (1.0, 1.05, 0.94, 0.94, 1.06),
+            "mono": (1.0, 1.08, 0.0, 1.0, 1.0),
+        }
+        if preset not in presets:
+            raise ExecutionFailure("INVALID_PARAMETER", "Choose a valid image effect.")
+        preset_brightness, preset_contrast, preset_color, red_gain, blue_gain = presets[preset]
+        try:
+            from PIL import Image, ImageEnhance, ImageFilter
+
+            with Image.open(source.path) as opened:
+                rgba = opened.convert("RGBA")
+            alpha = rgba.getchannel("A")
+            image = rgba.convert("RGB")
+            if red_gain != 1.0 or blue_gain != 1.0:
+                red, green, blue = image.split()
+                red = red.point(lambda value: min(255, round(value * red_gain)))
+                blue = blue.point(lambda value: min(255, round(value * blue_gain)))
+                image = Image.merge("RGB", (red, green, blue))
+            brightness = float(node.parameters.get("brightness", 1.0))
+            contrast = float(node.parameters.get("contrast", 1.0))
+            saturation = float(node.parameters.get("saturation", 1.0))
+            blur = float(node.parameters.get("blur", 0.0))
+            sharpen = float(node.parameters.get("sharpen", 0.0))
+            image = ImageEnhance.Brightness(image).enhance(preset_brightness * brightness)
+            image = ImageEnhance.Contrast(image).enhance(preset_contrast * contrast)
+            image = ImageEnhance.Color(image).enhance(preset_color * saturation)
+            if blur > 0:
+                image = image.filter(ImageFilter.GaussianBlur(radius=min(20.0, blur)))
+            if sharpen > 0:
+                image = image.filter(
+                    ImageFilter.UnsharpMask(
+                        radius=2,
+                        percent=min(500, round(sharpen * 100)),
+                        threshold=3,
+                    )
+                )
+            result = image.convert("RGBA")
+            result.putalpha(alpha)
+            fd, output_raw = tempfile.mkstemp(prefix="lluna-effects-", suffix=".png")
+            os.close(fd)
+            result.save(output_raw, format="PNG")
+        except (OSError, TypeError, ValueError) as exc:
+            raise ExecutionFailure(
+                "IMAGE_EFFECT_FAILED",
+                f"Could not apply the image effect: {exc}",
+            ) from exc
+        artifact = self._artifacts.commit(
+            output_raw,
+            run_id=control.snapshot.run_id,
+            node_id=node.id,
+            schema_id=node.schema_id,
+            inputs=input_artifacts,
+            parameters_hash=cache_key,
+        )
+        Path(output_raw).unlink(missing_ok=True)
+        progress = min(100, int(progress_offset + progress_span))
+        message = f"Applied effect to item {item_index + 1} of {item_count}"
+        self._node_state(control, node.id, "RUNNING", progress, message)
+        self._events.publish(
+            "artifact.created",
+            run_id=control.snapshot.run_id,
+            node_id=node.id,
+            payload={
+                "artifactId": artifact.artifact_id,
+                "itemIndex": item_index,
+                "itemCount": item_count,
+            },
+        )
+        self._events.publish(
+            "node.progress",
+            run_id=control.snapshot.run_id,
+            node_id=node.id,
+            payload={
+                "progress": progress,
+                "itemIndex": item_index,
+                "itemCount": item_count,
+                "message": message,
             },
         )
         return artifact

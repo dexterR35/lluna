@@ -601,6 +601,18 @@ test("primitive value nodes stay out of the creation catalog", () => {
   expect(isVisibleCatalogNode({ schemaId: "lluna.input.llava" })).toBe(
     false,
   );
+  expect(isVisibleCatalogNode({ schemaId: "lluna.output.preview_image" })).toBe(
+    false,
+  );
+  expect(isVisibleCatalogNode({ schemaId: "lluna.output.preview_mask" })).toBe(
+    false,
+  );
+  expect(isVisibleCatalogNode({ schemaId: "lluna.output.preview_alpha" })).toBe(
+    false,
+  );
+  expect(isVisibleCatalogNode({ schemaId: "lluna.output.preview_video" })).toBe(
+    false,
+  );
   expect(isVisibleCatalogNode({ schemaId: "lluna.input.prompt" })).toBe(true);
   expect(isVisibleCatalogNode({ schemaId: "lluna.image.generate" })).toBe(
     true,

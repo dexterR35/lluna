@@ -80,6 +80,118 @@ def test_fake_worker_vertical_slice_commits_artifact(monkeypatch, tmp_path):
     assert cached_snapshot.nodes["enhance"].artifact_ids
 
 
+def test_select_object_passes_image_and_mask_to_lama_without_preview_node(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("LLUNA_FAKE_WORKER", "1")
+    source_path = tmp_path / "subject.png"
+    Image.new("RGB", (8, 6), (20, 40, 60)).save(source_path)
+    ArtifactStore._instance = ArtifactStore(tmp_path / "artifacts")
+    DesktopGrantStore._instance = None
+    grant = DesktopGrantStore.instance().issue(source_path)
+    RunManager._instance = None
+    manager = RunManager.instance()
+    source = WorkflowNode(
+        id="load",
+        schema_id="lluna.input.image",
+        parameters={"pathGrantId": grant.grant_id},
+    )
+    select = WorkflowNode(
+        id="select",
+        schema_id="lluna.mask.select_object",
+        parameters={"text": "person"},
+    )
+    retouch = WorkflowNode(id="retouch", schema_id="lluna.image.lama_retouch")
+    workflow = WorkflowDocument(
+        nodes=[source, select, retouch],
+        edges=[
+            WorkflowEdge(
+                source_node_id="load",
+                source_port_id="image",
+                target_node_id="select",
+                target_port_id="image",
+            ),
+            WorkflowEdge(
+                source_node_id="select",
+                source_port_id="source_image",
+                target_node_id="retouch",
+                target_port_id="image",
+            ),
+            WorkflowEdge(
+                source_node_id="select",
+                source_port_id="mask",
+                target_node_id="retouch",
+                target_port_id="mask",
+            ),
+        ],
+    )
+
+    snapshot = wait_for_run(manager, manager.start(workflow).run_id)
+    assert snapshot.status == "COMPLETED", snapshot.error
+    assert snapshot.nodes["select"].artifact_ids
+    assert snapshot.nodes["retouch"].artifact_ids
+    mask = ArtifactStore.instance().get(snapshot.nodes["select"].artifact_ids[-1])
+    assert mask.creating_schema_id == "lluna.mask.select_object"
+    assert mask.input_artifact_ids
+    select.result = {
+        "status": "SUCCEEDED",
+        "artifactIds": snapshot.nodes["select"].artifact_ids,
+    }
+    boundary = manager._boundary_values(workflow, {"retouch"})
+    assert boundary[("select", "mask")].artifact_id == mask.artifact_id
+    assert (
+        boundary[("select", "source_image")].artifact_id
+        == mask.input_artifact_ids[0]
+    )
+
+
+def test_image_effects_commit_the_visible_edit_and_preserve_alpha(tmp_path):
+    source_path = tmp_path / "input.png"
+    Image.new("RGBA", (2, 1), (100, 60, 20, 123)).save(source_path)
+    ArtifactStore._instance = ArtifactStore(tmp_path / "artifacts")
+    DesktopGrantStore._instance = None
+    grant = DesktopGrantStore.instance().issue(source_path)
+    RunManager._instance = None
+    manager = RunManager.instance()
+    source = WorkflowNode(
+        id="load",
+        schema_id="lluna.input.image",
+        parameters={"pathGrantId": grant.grant_id},
+    )
+    effects = WorkflowNode(
+        id="effects",
+        schema_id="lluna.image.effects",
+        parameters={"preset": "mono", "brightness": 1.2},
+    )
+    preview = WorkflowNode(id="preview", schema_id="lluna.output.preview_image")
+    workflow = WorkflowDocument(
+        nodes=[source, effects, preview],
+        edges=[
+            WorkflowEdge(
+                source_node_id="load",
+                source_port_id="image",
+                target_node_id="effects",
+                target_port_id="image",
+            ),
+            WorkflowEdge(
+                source_node_id="effects",
+                source_port_id="image",
+                target_node_id="preview",
+                target_port_id="image",
+            ),
+        ],
+    )
+
+    snapshot = wait_for_run(manager, manager.start(workflow).run_id)
+    assert snapshot.status == "COMPLETED", snapshot.error
+    artifact = ArtifactStore.instance().get(snapshot.nodes["effects"].artifact_ids[-1])
+    with Image.open(artifact.path) as result:
+        red, green, blue, alpha = result.convert("RGBA").getpixel((0, 0))
+    assert red == green == blue
+    assert alpha == 123
+    assert artifact.creating_schema_id == "lluna.image.effects"
+
+
 def test_image_queue_saves_lineage_names_and_requires_explicit_replace(monkeypatch, tmp_path):
     monkeypatch.setenv("LLUNA_FAKE_WORKER", "1")
     first_path = tmp_path / "portrait.png"

@@ -1,13 +1,22 @@
 import { useEffect, useState } from "react";
-import { Download, Image as ImageIcon, MousePointer2 } from "../icons";
+import {
+  Download,
+  Image as ImageIcon,
+  MousePointer2,
+  Play,
+} from "../icons";
 import { Badge, Button, Dialog, TextField } from "../components";
 import { ArtifactPreview, ArtifactThumbnail } from "../preview/ArtifactPreview";
 import { useArtifactSaver } from "../preview/useArtifactSaver";
 import { downstreamNodeIds, useEditorStore } from "../state/editorStore";
 import { useRunStore } from "../state/runStore";
 
-/** @param {{nodeId: string | null, onClose: () => void}} props */
-export function NodePreviewDialog({ nodeId, onClose }) {
+/** @param {{nodeId: string | null, onClose: () => void, onRun?: (nodeId: string) => void}} props */
+export function NodePreviewDialog({
+  nodeId,
+  onClose,
+  onRun,
+}) {
   const node = useEditorStore((store) =>
     store.nodes.find((item) => item.id === nodeId),
   );
@@ -29,6 +38,9 @@ export function NodePreviewDialog({ nodeId, onClose }) {
       : null,
   );
   const isSelectObject = node?.data.schemaId === "lluna.mask.select_object";
+  const isPreviewOutput = node?.data.schemaId.startsWith(
+    "lluna.output.preview_",
+  );
   const persistedResult = node?.data.result;
   const nodeArtifactIds = liveRun?.artifactIds?.length
     ? liveRun.artifactIds
@@ -68,7 +80,10 @@ export function NodePreviewDialog({ nodeId, onClose }) {
 
   if (!node || node.data.definition?.supportsPreview !== true) return null;
   const activeNode = node;
-
+  const status = liveRun?.status || persistedResult?.status || "IDLE";
+  const busy = ["QUEUED", "RUNNING", "PAUSED", "PAUSE_REQUESTED"].includes(
+    status,
+  );
   /** @param {Record<string, unknown>} patch */
   function updateParameters(patch) {
     const current = useEditorStore
@@ -90,10 +105,12 @@ export function NodePreviewDialog({ nodeId, onClose }) {
       open
       onClose={onClose}
       wide
-      title={isSelectObject ? "Select Object" : `${label} preview`}
+      title={isSelectObject || isPreviewOutput ? label : `${label} preview`}
       description={
         isSelectObject
           ? "Enter an object name or click the source image. Shift-click adds an exclusion point."
+          : isPreviewOutput && schemaId === "lluna.output.preview_image"
+            ? "Inspect the finished image here. Transparent pixels appear over the checkerboard."
           : "Latest locally stored image or video output."
       }
       bodyClassName="!max-h-[78vh]"
@@ -114,6 +131,14 @@ export function NodePreviewDialog({ nodeId, onClose }) {
             Save {artifactIds.length}
           </Button>
         )}
+        <Button
+          onClick={() => onRun?.(activeNode.id)}
+          disabled={busy}
+          className={`${artifactIds.length <= 1 ? "ml-auto" : ""} min-h-6 px-2 text-[9px]`}
+        >
+          <Play className="ui-icon-sm fill-current" />
+          {busy ? "Running" : "Run"}
+        </Button>
       </div>
       {isSelectObject && (
         <div className="mb-3 grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2">

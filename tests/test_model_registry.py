@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import hashlib
+import json
 
+from backend.models import service as model_service
 from backend.models.reference.catalog import MODEL_REGISTRY
 from backend.models.reference.metadata import ExpectedFile, ModelState
 from backend.models.verifier import verify_file
@@ -49,3 +51,18 @@ def test_verifier_checks_hash_and_rejects_traversal(tmp_path) -> None:
     digest = hashlib.sha256(content).hexdigest()
     assert verify_file(tmp_path, ExpectedFile("weight.bin", len(content), digest)).valid
     assert not verify_file(tmp_path, ExpectedFile("../outside.bin")).valid
+
+
+def test_select_object_pair_enables_and_disables_together(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("LLUNA_CONFIG_DIR", str(tmp_path))
+    monkeypatch.setattr(model_service, "_installed", lambda _model_id: True)
+
+    model_service._action("sam2", "enable")
+    state = json.loads((tmp_path / "model-lifecycle.json").read_text())
+    assert state["sam2"] is True
+    assert state["grounding-dino"] is True
+
+    model_service._action("grounding-dino", "disable")
+    state = json.loads((tmp_path / "model-lifecycle.json").read_text())
+    assert state["sam2"] is False
+    assert state["grounding-dino"] is False

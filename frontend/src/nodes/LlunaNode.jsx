@@ -327,6 +327,9 @@ function LlunaNodeComponent({ id, data, selected }) {
       )
     : [];
   const supportsPreview = definition.supportsPreview === true;
+  const isPreviewOutput = definition.schemaId.startsWith(
+    "lluna.output.preview_",
+  );
   const isSaveImage = definition.schemaId === "lluna.output.save_image";
   const reportedSaveItems = state
     ? state.saveItems || []
@@ -374,7 +377,11 @@ function LlunaNodeComponent({ id, data, selected }) {
   return (
     <article
       aria-label={`${nodeLabel} node`}
-      title="Use the settings button to edit this node"
+      title={
+        isPreviewOutput
+          ? "Open the media preview or connect another step"
+          : "Use the settings button to edit this node"
+      }
       className={`lluna-node ${selected ? "is-selected" : ""} ${data.disabled ? "is-disabled" : ""} ${showPorts ? "is-ports-open" : ""} ${promptFirst ? "is-prompt" : ""} ${isSettingsCard ? "is-settings-card" : ""}`}
       style={/** @type {import("react").CSSProperties} */ ({ "--node-accent": accent })}
       onMouseEnter={() => setHovered(true)}
@@ -406,19 +413,24 @@ function LlunaNodeComponent({ id, data, selected }) {
           aria-label={
             status !== "IDLE" && status !== "SUCCEEDED"
               ? `${nodeLabel} status ${status.replaceAll("_", " ")}`
-              : `Open ${nodeLabel} options`
+              : isPreviewOutput
+                ? `Open ${nodeLabel} preview`
+                : `Open ${nodeLabel} options`
           }
           title={nodeLabel}
           onPointerDown={stopPointer}
           onClick={(event) => {
             event.stopPropagation();
-            actions.onOpen?.(id);
+            if (isPreviewOutput) actions.onPreview?.(id);
+            else actions.onOpen?.(id);
           }}
         >
           {status !== "IDLE" && status !== "SUCCEEDED" ? (
             <StatusIcon
               className={status === "RUNNING" ? "animate-spin" : undefined}
             />
+          ) : isPreviewOutput ? (
+            <Eye aria-hidden />
           ) : (
             <Settings2 aria-hidden />
           )}
@@ -774,7 +786,7 @@ function LlunaNodeComponent({ id, data, selected }) {
         </div>
 
         <div className="lluna-node-footer-actions">
-          {supportsPreview && (artifactId || isSelectObject) && (
+          {supportsPreview && (
             <button
               type="button"
               className="nodrag nowheel lluna-node-icon-btn"
@@ -789,19 +801,21 @@ function LlunaNodeComponent({ id, data, selected }) {
               <Eye />
             </button>
           )}
-          <button
-            type="button"
-            className="nodrag nowheel lluna-node-icon-btn"
-            aria-label={`Open ${nodeLabel} options`}
-            title="Node options"
-            onPointerDown={stopPointer}
-            onClick={(event) => {
-              event.stopPropagation();
-              actions.onOpen?.(id);
-            }}
-          >
-            <Settings2 />
-          </button>
+          {!isPreviewOutput && (
+            <button
+              type="button"
+              className="nodrag nowheel lluna-node-icon-btn"
+              aria-label={`Open ${nodeLabel} options`}
+              title="Node options"
+              onPointerDown={stopPointer}
+              onClick={(event) => {
+                event.stopPropagation();
+                actions.onOpen?.(id);
+              }}
+            >
+              <Settings2 />
+            </button>
+          )}
           <button
             type="button"
             className="nodrag nowheel lluna-node-run"

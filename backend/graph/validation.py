@@ -23,21 +23,30 @@ def _node_label(node) -> str:
 
 
 def runnable_node_ids(workflow: WorkflowDocument) -> set[str]:
-    """Nodes that feed a Save/Preview output, in dependency order priority.
+    """Nodes that feed a Save output or terminal preview-capable node.
 
-    When the graph has no output nodes yet, every node stays runnable so
-    incomplete drafts still validate. Orphan nodes outside an output chain are
-    skipped once a Save/Preview exists.
+    Dedicated Preview output nodes are retained for saved-workflow compatibility,
+    but new workflows can end directly on any node whose result can be previewed.
+    When neither endpoint exists, every node stays runnable so incomplete drafts
+    still validate.
     """
     nodes = {node.id: node for node in workflow.nodes}
+    parents, children = _adjacency(workflow)
     outputs = [
         node.id
         for node in workflow.nodes
         if (definition := NODE_REGISTRY.get(node.schema_id)) and definition.kind == "output"
     ]
     if not outputs:
+        outputs = [
+            node.id
+            for node in workflow.nodes
+            if (definition := NODE_REGISTRY.get(node.schema_id))
+            and definition.supports_preview
+            and not children.get(node.id)
+        ]
+    if not outputs:
         return set(nodes)
-    parents, _children = _adjacency(workflow)
     return _closure(outputs, parents)
 
 
@@ -72,7 +81,7 @@ def scoped_node_ids(
 ) -> set[str]:
     """Choose which nodes execute for a run.
 
-    - all: every node feeding a Save/Preview output
+    - all: every node feeding a Save output or terminal previewable result
     - from: selected node and every downstream node
     - selected: selected node only
     """
@@ -488,7 +497,7 @@ def validate_workflow(
                 ValidationIssue(
                     severity="warning",
                     code="UNUSED_NODE",
-                    message=f"{_node_label(node)} is not connected to a Save/Preview output and will be skipped.",
+                    message=f"{_node_label(node)} is not connected to a saved or previewable final result and will be skipped.",
                     node_id=node.id,
                     action="Connect it into the output chain or delete it.",
                 )
@@ -527,19 +536,24 @@ def validate_workflow(
                     action="Remove the repeated operation or place it on a separate branch.",
                 )
             )
-    if (
-        mode == "all"
-        and workflow.nodes
-        and not any(
-            NODE_REGISTRY.get(node.schema_id) and NODE_REGISTRY[node.schema_id].kind == "output"
-            for node in workflow.nodes
-        )
-    ):
+    _parents, children = _adjacency(workflow)
+    has_explicit_output = any(
+        NODE_REGISTRY.get(node.schema_id)
+        and NODE_REGISTRY[node.schema_id].kind == "output"
+        for node in workflow.nodes
+    )
+    has_visual_endpoint = any(
+        (definition := NODE_REGISTRY.get(node.schema_id))
+        and definition.supports_preview
+        and not children.get(node.id)
+        for node in workflow.nodes
+    )
+    if mode == "all" and workflow.nodes and not has_explicit_output and not has_visual_endpoint:
         issues.append(
             ValidationIssue(
                 severity="warning",
                 code="NO_OUTPUT",
-                message="Workflow has no preview or save output.",
+                message="Workflow has no save output or previewable final node.",
             )
         )
     return ValidationResult(

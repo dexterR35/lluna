@@ -497,6 +497,7 @@ function EditorApp() {
       <NodePreviewDialog
         nodeId={previewNodeId}
         onClose={() => setPreviewNodeId(null)}
+        onRun={runFromHere}
       />
       <SettingsDialog />
       <Dialog

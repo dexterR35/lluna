@@ -42,10 +42,10 @@ You can use it to:
 Drag nodes onto the workspace, connect their ports left to right, and run the graph. Every node declares the model, capability, and hardware it needs, so incompatible connections and missing models are caught before you run anything.
 
 ```text
-Load Image → Select Object → Remove Background → Preview Image → Save Image
-Load Video → Remove Text from Video → Preview Video → Save Video
+Load Image → Select Object → Remove Background → Save Image
+Load Video → Remove Text from Video → Save Video
 Prompt → Generate Image → Upscale Image → Save Image
-Load Image → Describe Image → Generate Image → Preview Image → Save Image
+Load Image → Describe Image → Generate Image → Save Image
 ```
 
 Nodes are grouped by what they do:
@@ -56,7 +56,7 @@ Nodes are grouped by what they do:
 | **Image** | Generate Image, Edit Image, Upscale Image, Remove Background, Fix Low Light, Composite Background, LaMa Retouch, Remove Text from Image |
 | **Video** | Upscale Video, Remove Text from Video, Remove Background from Video |
 | **Mask** | Select Object |
-| **Output** | Preview Image, Preview Mask, Preview Alpha, Preview Video, Save Image, Save Video |
+| **Output** | Save Image, Save Video |
 
 A few notes on specific nodes:
 
@@ -64,6 +64,7 @@ A few notes on specific nodes:
 - **Generate Image** and **Edit Image** stream a live preview while the diffusion model is sampling, and support BF16, FP16, FP32, and (for custom models with `bitsandbytes`) INT8/INT4 precision.
 - **Select Object** creates a mask from canvas clicks or a text description, using SAM2 and Grounding DINO together.
 - **Describe Image** runs a vision-language model you install yourself and feeds its output straight into a **Prompt** input elsewhere in the graph.
+- Every visual node has its own preview button, so no separate Preview output node is required.
 
 Workflows are saved as `*.lluna.json` files, so a graph you build can be reopened, shared, or version-controlled.
 
@@ -235,32 +236,32 @@ Some models require accepting an upstream or gated-model license on Hugging Face
 
 **Remove text from an image**
 ```text
-Load Image → Remove Text from Image → Preview Image → Save Image
+Load Image → Remove Text from Image → Save Image
 ```
 
 **Remove subtitles from a video**
 ```text
-Load Video → Remove Text from Video → Preview Video → Save Video
+Load Video → Remove Text from Video → Save Video
 ```
 
 **Create a transparent cut-out**
 ```text
-Load Image → Remove Background → Preview Alpha → Save Image
+Load Image → Remove Background → Save Image
 ```
 
 **Generate and upscale an image**
 ```text
-Prompt → Generate Image → Upscale Image → Preview Image → Save Image
+Prompt → Generate Image → Upscale Image → Save Image
 ```
 
 **Select and retouch an object**
 ```text
-Load Image → Select Object → LaMa Retouch → Preview Image → Save Image
+Load Image → Select Object → LaMa Retouch → Save Image
 ```
 
 **Describe an image, then generate a new one from it**
 ```text
-Load Image → Describe Image → Generate Image → Preview Image → Save Image
+Load Image → Describe Image → Generate Image → Save Image
 ```
 
 ## Development

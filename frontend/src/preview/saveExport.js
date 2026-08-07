@@ -6,6 +6,7 @@ const SCHEMA_SUFFIXES = {
   "lluna.video.remove_text": "_nosub",
   "lluna.image.upscale": "_upscale",
   "lluna.image.low_light": "_lowlight",
+  "lluna.image.effects": "_effect",
 };
 
 /** @param {string | undefined} schemaId */

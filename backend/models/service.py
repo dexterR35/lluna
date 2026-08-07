@@ -103,9 +103,14 @@ def _enabled_overrides() -> dict[str, bool]:
 
 
 def _set_enabled_override(model_id: str, enabled: bool) -> None:
+    _set_enabled_overrides((model_id,), enabled)
+
+
+def _set_enabled_overrides(model_ids: tuple[str, ...], enabled: bool) -> None:
     with _STATE_LOCK:
         values = _enabled_overrides()
-        values[model_id] = enabled
+        for model_id in model_ids:
+            values[model_id] = enabled
         atomic_write_json(_state_path(), values)
 
 
@@ -574,12 +579,17 @@ def _action(model_id: str, operation: str) -> None:
 
         if operation == "install":
             install_pair(SelectObjectPairId.FAST, skip_if_complete=True)
-            _set_enabled_override(model_id, True)
+            _set_enabled_overrides(("sam2", "grounding-dino"), True)
         elif operation == "remove":
             uninstall_pair(SelectObjectPairId.FAST)
-            _set_enabled_override(model_id, False)
+            _set_enabled_overrides(("sam2", "grounding-dino"), False)
         else:
-            _set_enabled_override(model_id, operation == "enable")
+            if operation == "enable" and not _installed(model_id):
+                raise ValueError("SAM2 and Grounding DINO are not fully installed.")
+            _set_enabled_overrides(
+                ("sam2", "grounding-dino"),
+                operation == "enable",
+            )
         return
     if operation == "install" and model_id in {"lama", "sttn-auto", "sttn-detection", "propainter"}:
         from backend.models.paths import SubtitleModelPaths, prepare_bundled_subtitle_models

@@ -11,6 +11,7 @@ test("export suffixes follow processing schemas", () => {
   expect(exportSuffixForSchema("lluna.image.remove_text")).toBe("_nosub");
   expect(exportSuffixForSchema("lluna.video.remove_text")).toBe("_nosub");
   expect(exportSuffixForSchema("lluna.image.upscale")).toBe("_upscale");
+  expect(exportSuffixForSchema("lluna.image.effects")).toBe("_effect");
   expect(
     exportSuffixForSchemas([
       "lluna.image.low_light",

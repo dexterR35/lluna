@@ -79,6 +79,15 @@ def test_image_queue_and_composite_nodes_publish_batch_contracts():
     assert composite.adapter == "composite"
 
 
+def test_image_effects_are_a_saved_batch_processing_node():
+    effects = {item.schema_id: item for item in list_nodes()}["lluna.image.effects"]
+    assert effects.adapter == "image_effects"
+    assert effects.supports_preview is True
+    assert effects.inputs[0].multiple is True
+    assert effects.outputs[0].multiple is True
+    assert next(item for item in effects.parameters if item.id == "preset").default == "none"
+
+
 def test_only_media_nodes_publish_preview_support():
     catalog = {item.schema_id: item for item in list_nodes()}
     for schema_id in (
@@ -122,6 +131,45 @@ def test_select_object_requires_a_name_or_preview_point():
     )
 
 
+def test_select_object_passes_source_image_and_mask_directly_to_lama():
+    source = node("lluna.input.image", "source")
+    source.parameters = {"pathGrantId": "test-grant"}
+    select = node("lluna.mask.select_object", "select")
+    select.parameters = {"text": "person"}
+    retouch = node("lluna.image.lama_retouch", "retouch")
+    workflow = WorkflowDocument(
+        nodes=[source, select, retouch],
+        edges=[
+            WorkflowEdge(
+                source_node_id="source",
+                source_port_id="image",
+                target_node_id="select",
+                target_port_id="image",
+            ),
+            WorkflowEdge(
+                source_node_id="select",
+                source_port_id="source_image",
+                target_node_id="retouch",
+                target_port_id="image",
+            ),
+            WorkflowEdge(
+                source_node_id="select",
+                source_port_id="mask",
+                target_node_id="retouch",
+                target_port_id="mask",
+            ),
+        ],
+    )
+
+    result = validate_workflow(workflow)
+    assert result.valid, result.issues
+    assert [step.node_id for step in compile_workflow(workflow).steps] == [
+        "source",
+        "select",
+        "retouch",
+    ]
+
+
 def test_every_node_model_option_has_a_lifecycle_inventory_entry():
     lifecycle_ids = known_model_ids()
     option_ids = {
@@ -157,6 +205,32 @@ def test_typed_graph_validates_and_compiles_topologically():
     result = validate_workflow(workflow)
     assert result.valid
     assert [step.node_id for step in compile_workflow(workflow).steps] == ["source", "preview"]
+
+
+def test_previewable_terminal_node_replaces_a_preview_output_sink():
+    source = node("lluna.input.image", "source")
+    source.parameters = {"pathGrantId": "test-grant"}
+    enhance = node("lluna.image.upscale", "enhance")
+    orphan_prompt = node("lluna.input.prompt", "orphan-prompt")
+    workflow = WorkflowDocument(
+        nodes=[source, enhance, orphan_prompt],
+        edges=[
+            WorkflowEdge(
+                source_node_id="source",
+                source_port_id="image",
+                target_node_id="enhance",
+                target_port_id="image",
+            )
+        ],
+    )
+
+    result = validate_workflow(workflow)
+    assert result.valid
+    assert not any(issue.code == "NO_OUTPUT" for issue in result.issues)
+    assert [step.node_id for step in compile_workflow(workflow).steps] == [
+        "source",
+        "enhance",
+    ]
 
 
 def test_incompatible_connection_and_cycle_are_rejected():

@@ -859,6 +859,44 @@ _NODES = [
         adapter="low_light",
     ),
     node(
+        "lluna.image.effects",
+        "Image Effects",
+        "Image/Adjust",
+        "Applies a saved color or detail effect so the preview and exported image match.",
+        icon="sparkles",
+        inputs=[port("image", "Image queue", PortType.IMAGE, required=True, multiple=True)],
+        outputs=[port("image", "Images", PortType.IMAGE, multiple=True)],
+        parameters=[
+            parameter(
+                "preset",
+                "Effect",
+                "select",
+                "none",
+                options=[
+                    {"value": "none", "label": "Original"},
+                    {"value": "vivid", "label": "Vivid"},
+                    {"value": "soft", "label": "Soft light"},
+                    {"value": "warm", "label": "Warm"},
+                    {"value": "cool", "label": "Cool"},
+                    {"value": "mono", "label": "Monochrome"},
+                ],
+            ),
+            parameter(
+                "brightness", "Brightness", "number", 1.0,
+                minimum=0.25, maximum=2.0, step=0.05,
+            ),
+            parameter("contrast", "Contrast", "number", 1.0, minimum=0.25, maximum=2.0, step=0.05),
+            parameter(
+                "saturation", "Saturation", "number", 1.0,
+                minimum=0.0, maximum=2.0, step=0.05,
+            ),
+            parameter("blur", "Blur", "number", 0.0, minimum=0.0, maximum=20.0, step=0.5),
+            parameter("sharpen", "Sharpen", "number", 0.0, minimum=0.0, maximum=5.0, step=0.25),
+        ],
+        supports_preview=True,
+        adapter="image_effects",
+    ),
+    node(
         "lluna.image.composite",
         "Composite Background",
         "Image/Compose",
@@ -892,7 +930,10 @@ _NODES = [
         "Creates a mask from clicks or a text description.",
         icon="mouse-pointer-2",
         inputs=[port("image", "Image", PortType.IMAGE, required=True)],
-        outputs=[port("mask", "Mask", PortType.MASK)],
+        outputs=[
+            port("source_image", "Source Image", PortType.IMAGE),
+            port("mask", "Mask", PortType.MASK),
+        ],
         parameters=[
             parameter(
                 "text",
@@ -913,6 +954,7 @@ _NODES = [
         ],
         required_models=["sam2", "grounding-dino"],
         supports_preview=True,
+        cache_policy="none",
         adapter="select_subject",
     ),
     node(
