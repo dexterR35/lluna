@@ -95,6 +95,18 @@ export interface DownloadQueueState {
   recent: DownloadJob[];
 }
 
+export interface ParameterCondition {
+  parameterId: string;
+  equals: unknown;
+}
+
+export interface NodeCompanion {
+  schemaId: string;
+  targetPort: string;
+  sourcePort: string;
+  when: ParameterCondition[];
+}
+
 export interface NodeDefinition {
   schemaId: string;
   schemaVersion: number;
@@ -113,6 +125,7 @@ export interface NodeDefinition {
   supportsPreview?: boolean;
   available?: boolean;
   unavailableReason?: string;
+  companions?: NodeCompanion[];
 }
 
 export interface ArtifactResult {
@@ -162,14 +175,6 @@ export interface WorkflowNodeData extends Record<string, unknown> {
   result?: ArtifactResult | null;
   disabled?: boolean;
   collapsed?: boolean;
-  nodeActions?: {
-    onOpen?: (id: string) => void;
-    onRun?: (id: string) => void;
-    onPreview?: (id: string) => void;
-    onModelChange?: (id: string, value: string | number) => void;
-    onParameterChange?: (id: string, key: string, value: unknown) => void;
-  };
-  modelInventory?: ModelInventory[];
 }
 
 export interface SerializedWorkflowNode {
@@ -329,6 +334,7 @@ export interface EditorState extends EditorSnapshot {
   autoLayout(): void;
   undo(): void;
   redo(): void;
+  checkpoint(): void;
   markSaved(): void;
   setViewport(viewport: {x: number; y: number; zoom: number}): void;
   setProjectName(name: string): void;
@@ -365,11 +371,22 @@ export interface RunSnapshot {
   progress: number;
   nodes?: Record<string, NodeRunState>;
   artifactIds?: string[];
+  metadata?: {
+    generations?: Array<{
+      nodeId?: string;
+      schemaId?: string;
+      model?: string;
+      prompt?: string;
+      negativePrompt?: string;
+      seed?: number;
+    }>;
+  };
   error?: {code?: string; message?: string; retryable?: boolean};
 }
 
 export interface RunState {
   run: RunSnapshot | null;
+  starting: boolean;
   queue: {running: RunSnapshot | null; pending: RunSnapshot[]};
   history: RunSnapshot[];
   nodeStates: Record<string, NodeRunState>;
@@ -379,7 +396,8 @@ export interface RunState {
   hydrateResults(nodes: EditorNode[]): void;
   clearResults(): void;
   clearNodeResult(nodeId: string): void;
-  start(workflow: WorkflowDocument, mode?: string, selectedNodeIds?: string[], options?: {force?: boolean; queueFront?: boolean}): Promise<RunSnapshot>;
+  clearNodeResults(nodeIds: string[]): void;
+  start(workflow: WorkflowDocument, mode?: string, selectedNodeIds?: string[], options?: {force?: boolean; queueFront?: boolean}): Promise<RunSnapshot | null>;
   pause(): Promise<void>;
   resume(): Promise<void>;
   cancel(runId?: string): Promise<void>;

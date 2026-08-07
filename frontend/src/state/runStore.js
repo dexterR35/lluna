@@ -22,6 +22,11 @@ const createRunState = (set, get) => ({
   nodeStates: {},
   logs: [],
   connection: "connecting",
+  // True for the span of an in-flight `POST /api/runs`, i.e. before `run`
+  // reflects the new run's status. Without this, the Run button stays
+  // clickable during that window and rapid clicks/Ctrl+Enter fire
+  // concurrent `start()` calls whose responses can resolve out of order.
+  starting: false,
   setConnection: (connection) => set({ connection }),
   hydrateResults(nodes) {
     set({
@@ -57,17 +62,39 @@ const createRunState = (set, get) => ({
       return { nodeStates };
     });
   },
-  async start(workflow, mode = "all", selectedNodeIds = [], options = {}) {
-    const run = await api("/api/runs", {
-      method: "POST",
-      body: JSON.stringify({
-        workflow,
-        mode,
-        selectedNodeIds,
-        force: Boolean(options.force),
-        queueFront: Boolean(options.queueFront),
-      }),
+  /**
+   * Clear transient run state for a node and everything downstream of it,
+   * so a stale "SUCCEEDED"/"CACHED" badge can't outlive the edit that
+   * invalidated it - see editorStore's matching `result.status = "STALE"`.
+   * @param {string[]} nodeIds
+   */
+  clearNodeResults(nodeIds) {
+    if (!nodeIds?.length) return;
+    set((state) => {
+      const nodeStates = { ...state.nodeStates };
+      for (const nodeId of nodeIds) delete nodeStates[nodeId];
+      return { nodeStates };
     });
+  },
+  async start(workflow, mode = "all", selectedNodeIds = [], options = {}) {
+    if (get().starting) return get().run;
+    set({ starting: true });
+    /** @type {import("../types").RunSnapshot} */
+    let run;
+    try {
+      run = await api("/api/runs", {
+        method: "POST",
+        body: JSON.stringify({
+          workflow,
+          mode,
+          selectedNodeIds,
+          force: Boolean(options.force),
+          queueFront: Boolean(options.queueFront),
+        }),
+      });
+    } finally {
+      set({ starting: false });
+    }
     set((state) => ({
       run,
       nodeStates: Object.fromEntries(

@@ -200,6 +200,21 @@ class DynamicModelRegistry:
         except KeyError as exc:
             raise KeyError(model_id) from exc
 
+    def revision_stamp(self, model_id: str, *, refresh: bool = False) -> str:
+        """Fingerprint of a custom model's on-disk files.
+
+        Changes whenever the model's watched files are replaced (re-import,
+        reconfigure) even though its id stays the same, so content-addressed
+        node caches (see `backend.graph.cache.build_cache_key`) can tell a
+        stale cached artifact apart from a genuinely-unchanged model.
+        """
+        try:
+            record = self.get(model_id, refresh=refresh)
+        except KeyError:
+            return ""
+        mtime_ns, size = _path_stamp(record.path, record.manifest.expected_files)
+        return f"{mtime_ns}:{size}"
+
     def register(self, manifest: ModelManifest) -> Path:
         from backend.models.reference.catalog import MODEL_REGISTRY
 

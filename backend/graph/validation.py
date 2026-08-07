@@ -272,7 +272,7 @@ def validate_workflow(
                 None,
             )
             capabilities = selected_option.get("capabilities") if selected_option else None
-            if node.schema_id == "lluna.generate.image":
+            if node.schema_id in {"lluna.generate.image", "lluna.generate.image.edit"}:
                 from backend.models.reference.validation import validate_generation_inputs
 
                 capability_issues = (
@@ -290,6 +290,17 @@ def validate_workflow(
                             action="Choose supported values or review the model manifest.",
                         )
                     )
+                if node.schema_id == "lluna.generate.image.edit" and isinstance(capabilities, dict):
+                    if "image-to-image" not in (capabilities.get("tasks") or []):
+                        issues.append(
+                            ValidationIssue(
+                                severity="error",
+                                code="MODEL_CAPABILITY",
+                                message="The selected model does not support image-to-image editing.",
+                                node_id=node.id,
+                                action="Choose an image-conditioned model.",
+                            )
+                        )
         for parameter in definition.parameters:
             if parameter.required and not node.parameters.get(parameter.id):
                 issues.append(

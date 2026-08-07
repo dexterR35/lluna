@@ -29,6 +29,7 @@ export function EditorToolbar({ actions }) {
   const undo = useEditorStore((store) => store.undo);
   const redo = useEditorStore((store) => store.redo);
   const run = useRunStore((store) => store.run);
+  const starting = useRunStore((store) => store.starting);
   const pause = useRunStore((store) => store.pause);
   const resume = useRunStore((store) => store.resume);
   const cancel = useRunStore((store) => store.cancel);
@@ -107,6 +108,7 @@ export function EditorToolbar({ actions }) {
         <Button
           onClick={actions.run}
           className="min-w-20"
+          loading={starting}
           title="Run workflow (Ctrl+Enter). Use Ctrl+Shift+Enter to queue next."
         >
           <Play className="ui-icon fill-current" />

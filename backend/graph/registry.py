@@ -2,7 +2,15 @@
 
 from __future__ import annotations
 
-from backend.graph.schema import NodeDefinition, ParameterDefinition, PortDefinition
+import threading
+
+from backend.graph.schema import (
+    NodeCompanion,
+    NodeDefinition,
+    ParameterCondition,
+    ParameterDefinition,
+    PortDefinition,
+)
 from backend.graph.types import PortType
 
 
@@ -117,6 +125,7 @@ GENERATE_MODELS = [
     ),
     option("Qwen-Image", "Qwen-Image", "generate:Qwen-Image", "Apache-licensed image generation."),
 ]
+IMAGE_EDIT_MODELS = [item for item in GENERATE_MODELS if item["value"] != "Qwen-Image"]
 
 
 def node(schema_id: str, name: str, category: str, description: str, **kwargs) -> NodeDefinition:
@@ -303,6 +312,32 @@ _NODES = [
             ),
         ],
         capabilities=["diffusers"],
+        required_models=["flux"],
+        supports_preview=True,
+        adapter="generate",
+    ),
+    node(
+        "lluna.generate.image.edit",
+        "Edit Image",
+        "Image/Generate",
+        "Transforms a reference image with a prompt using an image-conditioned Diffusers model.",
+        icon="wand-sparkles",
+        inputs=[
+            port("image", "Reference image", PortType.IMAGE, required=True),
+            port("prompt", "Prompt", PortType.PROMPT, required=True),
+        ],
+        outputs=[port("image", "Image", PortType.IMAGE)],
+        parameters=[
+            parameter("model", "Model", "model", "FLUX.2-klein-base-4B", options=IMAGE_EDIT_MODELS),
+            parameter("width", "Width", "integer", 768, minimum=64, maximum=8192, capability="width"),
+            parameter("height", "Height", "integer", 768, minimum=64, maximum=8192, capability="height"),
+            parameter("steps", "Steps", "integer", 4, minimum=1, maximum=250, capability="steps"),
+            parameter("guidance", "Guidance", "number", 4.0, minimum=0, maximum=20, step=0.1, capability="guidance"),
+            parameter("denoiseStrength", "Denoise strength", "number", 0.65, minimum=0.01, maximum=1, step=0.01, description="Lower values preserve more of the reference image."),
+            parameter("negativePrompt", "Negative prompt", "textarea", "", capability="negativePrompt"),
+            parameter("seed", "Seed", "integer", -1, description="Use -1 for a random seed.", capability="seed"),
+        ],
+        capabilities=["diffusers", "image-to-image"],
         required_models=["flux"],
         supports_preview=True,
         adapter="generate",
@@ -619,6 +654,17 @@ _NODES = [
         required_models=[],
         supports_preview=True,
         adapter="enhance",
+        companions=[
+            NodeCompanion(
+                schema_id="lluna.input.llava",
+                target_port="llava",
+                source_port="config",
+                when=[
+                    ParameterCondition(parameter_id="model", equals="SUPIR"),
+                    ParameterCondition(parameter_id="useLlava", equals=True),
+                ],
+            )
+        ],
     ),
     node(
         "lluna.video.upscale",
@@ -955,7 +1001,48 @@ _NODES = [
 NODE_REGISTRY = {definition.schema_id: definition for definition in _NODES}
 
 
-def list_nodes() -> list[NodeDefinition]:
+# `_build_catalog` deep-copies every node definition, recomputes each model's
+# capability contract, and (worst case) rescans the whole custom-model folder
+# on disk. That's too expensive to redo on every `get_node()` call - validation
+# and inference call it once per node (and, for batch nodes, once per item).
+# The result is cached and only rebuilt when the dynamic model registry
+# actually changes, via its existing `subscribe()` notification hook.
+_catalog_lock = threading.RLock()
+_catalog_cache: list[NodeDefinition] | None = None
+_catalog_registry_ref: object | None = None
+_catalog_unsubscribe = None
+
+
+def _invalidate_catalog_cache() -> None:
+    global _catalog_cache
+    with _catalog_lock:
+        _catalog_cache = None
+
+
+def _rebind_catalog_listener_locked() -> None:
+    """(Re)subscribe to whichever DynamicModelRegistry instance is current.
+
+    Tests swap the singleton instance directly (`monkeypatch.setattr(..., "_instance", ...)`),
+    so identity - not just "have we ever subscribed" - has to be checked on every call.
+    """
+    global _catalog_registry_ref, _catalog_unsubscribe
+    try:
+        from backend.models.dynamic_registry import DynamicModelRegistry
+
+        current = DynamicModelRegistry.instance()
+    except (ImportError, OSError, ValueError):
+        return
+    if current is _catalog_registry_ref:
+        return
+    global _catalog_cache
+    if _catalog_unsubscribe is not None:
+        _catalog_unsubscribe()
+    _catalog_registry_ref = current
+    _catalog_unsubscribe = current.subscribe(_invalidate_catalog_cache)
+    _catalog_cache = None
+
+
+def _build_catalog() -> list[NodeDefinition]:
     values = [definition.model_copy(deep=True) for definition in NODE_REGISTRY.values()]
     from backend.models.reference.capabilities import builtin_contract
 
@@ -973,50 +1060,42 @@ def list_nodes() -> list[NodeDefinition]:
         from backend.models.dynamic_registry import DynamicModelRegistry
         from backend.models.reference.runtimes import runtime_status
 
-        custom_records = [
+        configured_records = [
             record
             for record in DynamicModelRegistry.instance().records()
             if record.installed
             and record.enabled
             and record.manifest.is_configured()
             and runtime_status(record.manifest)["compatible"]
-            and record.manifest.adapter == "diffusers"
-            and record.manifest.task == "text-to-image"
         ]
-        custom = []
-        for record in custom_records:
-            model_option = option(
-                f"custom:{record.manifest.id}",
-                record.manifest.name,
-                record.manifest.id,
-                record.manifest.description or "Custom Diffusers model.",
-            )
-            model_option["variant"] = record.manifest.variant.to_dict()
-            model_option["capabilities"] = record.manifest.capabilities.to_dict(
-                record.manifest.task
-            )
-            custom.append(model_option)
-        if custom:
+        diffusers_records = [
+            record
+            for record in configured_records
+            if record.manifest.adapter == "diffusers" and record.manifest.task == "text-to-image"
+        ]
+        if diffusers_records:
+            custom = []
+            for record in diffusers_records:
+                model_option = option(
+                    f"custom:{record.manifest.id}",
+                    record.manifest.name,
+                    record.manifest.id,
+                    record.manifest.description or "Custom Diffusers model.",
+                )
+                model_option["variant"] = record.manifest.variant.to_dict()
+                model_option["capabilities"] = record.manifest.capabilities.to_dict(
+                    record.manifest.task
+                )
+                custom.append(model_option)
             generate = next(item for item in values if item.schema_id == "lluna.generate.image")
             model_parameter = next(item for item in generate.parameters if item.id == "model")
             model_parameter.options.extend(custom)
-    except (ImportError, OSError, ValueError):
-        pass
-    try:
-        from backend.models.dynamic_registry import DynamicModelRegistry
-        from backend.models.reference.runtimes import runtime_status
-
-        custom_records = [
+        birefnet_records = [
             record
-            for record in DynamicModelRegistry.instance().records()
-            if record.installed
-            and record.enabled
-            and record.manifest.is_configured()
-            and runtime_status(record.manifest)["compatible"]
-            and record.manifest.adapter == "birefnet"
-            and record.manifest.task == "image-segmentation"
+            for record in configured_records
+            if record.manifest.adapter == "birefnet" and record.manifest.task == "image-segmentation"
         ]
-        if custom_records:
+        if birefnet_records:
             custom_options = [
                 option(
                     f"custom:{record.manifest.id}",
@@ -1024,7 +1103,7 @@ def list_nodes() -> list[NodeDefinition]:
                     record.manifest.id,
                     record.manifest.description or "Custom BiRefNet checkpoint.",
                 )
-                for record in custom_records
+                for record in birefnet_records
             ]
             for schema_id in ("lluna.image.remove_background", "lluna.video.remove_background"):
                 definition = next(item for item in values if item.schema_id == schema_id)
@@ -1035,8 +1114,23 @@ def list_nodes() -> list[NodeDefinition]:
     return values
 
 
+def _cached_catalog() -> list[NodeDefinition]:
+    with _catalog_lock:
+        _rebind_catalog_listener_locked()
+        global _catalog_cache
+        if _catalog_cache is None:
+            _catalog_cache = _build_catalog()
+        return _catalog_cache
+
+
+def list_nodes() -> list[NodeDefinition]:
+    return [definition.model_copy(deep=True) for definition in _cached_catalog()]
+
+
 def get_node(schema_id: str) -> NodeDefinition:
-    definition = next((item for item in list_nodes() if item.schema_id == schema_id), None)
+    definition = next(
+        (item for item in _cached_catalog() if item.schema_id == schema_id), None
+    )
     if definition is None:
         raise KeyError(f"Unknown node schema: {schema_id}")
-    return definition
+    return definition.model_copy(deep=True)

@@ -48,6 +48,34 @@ test("graph edits are undoable", () => {
   useEditorStore.getState().redo();
   expect(useEditorStore.getState().nodes).toHaveLength(1);
 });
+test("rapid parameter edits to the same node coalesce into one undo step", () => {
+  const id = addNode();
+  const before = useEditorStore.getState().past.length;
+  useEditorStore.getState().updateNode(id, { parameters: { value: 2 } });
+  const afterFirst = useEditorStore.getState().past.length;
+  useEditorStore.getState().updateNode(id, { parameters: { value: 3 } });
+  useEditorStore.getState().updateNode(id, { parameters: { value: 4 } });
+  expect(afterFirst).toBe(before + 1);
+  expect(useEditorStore.getState().past.length).toBe(afterFirst);
+  expect(useEditorStore.getState().nodes[0].data.parameters.value).toBe(4);
+  useEditorStore.getState().undo();
+  expect(useEditorStore.getState().nodes[0].data.parameters.value).toBe(1);
+});
+test("checkpoint lets a drag's pre-move position be undone", () => {
+  const id = addNode("test.number", { x: 1, y: 2 });
+  useEditorStore.getState().checkpoint();
+  useEditorStore.setState((state) => ({
+    nodes: state.nodes.map((node) =>
+      node.id === id ? { ...node, position: { x: 50, y: 60 } } : node,
+    ),
+  }));
+  expect(useEditorStore.getState().nodes[0].position).toEqual({
+    x: 50,
+    y: 60,
+  });
+  useEditorStore.getState().undo();
+  expect(useEditorStore.getState().nodes[0].position).toEqual({ x: 1, y: 2 });
+});
 test("serialization never copies backend definitions", () => {
   addNode();
   const document = useEditorStore.getState().serialize();
@@ -76,6 +104,17 @@ test("SUPIR LLaVA toggle adds and removes its companion node", () => {
     inputs: [
       { id: "image", label: "Image", type: "IMAGE" },
       { id: "llava", label: "LLaVA settings", type: "MODEL" },
+    ],
+    companions: [
+      {
+        schemaId: "lluna.input.llava",
+        targetPort: "llava",
+        sourcePort: "config",
+        when: [
+          { parameterId: "model", equals: "SUPIR" },
+          { parameterId: "useLlava", equals: true },
+        ],
+      },
     ],
   });
   const llava = /** @type {import("../src/types").NodeDefinition} */ ({

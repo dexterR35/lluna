@@ -16,7 +16,11 @@ import {
 } from "../icons";
 import { ArtifactThumbGrid, ArtifactThumbnail } from "../preview/ArtifactPreview";
 import { useRunStore } from "../state/runStore";
-import { enabledModelOptions } from "../models/modelAvailability";
+import { useNodeActionsContext } from "./NodeActionsContext";
+import {
+  enabledModelOptions,
+  selectedModelOption as resolveSelectedModelOption,
+} from "../models/modelAvailability";
 import {
   capabilityContract,
   parametersForCapabilities,
@@ -35,6 +39,7 @@ const STATUS_TONE = {
   PAUSED: "warning",
   PAUSE_REQUESTED: "warning",
   DISABLED: "neutral",
+  STALE: "warning",
 };
 
 /**
@@ -218,6 +223,7 @@ function SaveProgressList({ items }) {
 /** @param {import("@xyflow/react").NodeProps<import("../types").EditorNode>} props */
 function LlunaNodeComponent({ id, data, selected }) {
   const state = useRunStore((store) => store.nodeStates[id]);
+  const { actions, modelInventory } = useNodeActionsContext();
   const [hovered, setHovered] = useState(false);
   /** @type {import("../types").NodeDefinition} */
   const definition = data.definition || {
@@ -247,7 +253,6 @@ function LlunaNodeComponent({ id, data, selected }) {
   const showPorts = selected || hovered || busy;
   const nodeLabel = data.label || definition.name;
   const runLabel = definition.kind === "input" ? "Run" : "Run from here";
-  const actions = data.nodeActions || {};
   const parameters = definition.parameters || [];
   const modelParameter = parameters.find(
     (parameter) => parameter.id === "model" || parameter.type === "model",
@@ -255,7 +260,7 @@ function LlunaNodeComponent({ id, data, selected }) {
   const modelValue = data.parameters?.model || modelParameter?.default;
   const modelOptions = enabledModelOptions(
     modelParameter?.options || [],
-    data.modelInventory || [],
+    modelInventory || [],
   );
   const modelLabel = String(
     modelParameter?.options?.find((option) => option.value === modelValue)
@@ -266,12 +271,12 @@ function LlunaNodeComponent({ id, data, selected }) {
   const modelAvailable = modelOptions.some(
     (option) => String(option.value) === String(modelValue),
   );
-  const selectedModelOption =
-    modelOptions.find((option) => String(option.value) === String(modelValue)) ||
-    modelParameter?.options?.find(
-      (option) => String(option.value) === String(modelValue),
-    );
-  const selectedCapabilities = capabilityContract(selectedModelOption);
+  const selectedOption = resolveSelectedModelOption(
+    modelParameter?.options || [],
+    modelOptions,
+    modelValue,
+  );
+  const selectedCapabilities = capabilityContract(selectedOption);
   const visibleParameters = parametersForCapabilities(
     parameters,
     selectedCapabilities,

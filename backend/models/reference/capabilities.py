@@ -32,12 +32,15 @@ def _generation_capabilities(
     guidance: bool,
     guidance_default: float,
     dtypes: tuple[str, ...],
+    negative_prompt: bool = False,
+    image_to_image: bool = False,
 ) -> ModelCapabilities:
-    inputs, outputs = _io_for_task("text-to-image")
+    tasks = ("text-to-image", "image-to-image") if image_to_image else ("text-to-image",)
+    inputs, outputs = _io_for_task("image-to-image" if image_to_image else "text-to-image")
     return ModelCapabilities(
         provenance=provenance,
-        tasks=("text-to-image",),
-        negative_prompt=False,
+        tasks=tasks,
+        negative_prompt=negative_prompt,
         guidance=guidance,
         seed=True,
         steps=NumberCapability(float(steps), float(steps), float(steps), (float(steps),)),
@@ -74,6 +77,8 @@ for repo, variant, steps, guidance, guidance_default, dtypes in (
             guidance=guidance,
             guidance_default=guidance_default,
             dtypes=dtypes,
+            image_to_image=repo.lower().startswith("black-forest-labs/"),
+            negative_prompt=guidance,
         ),
     )
 

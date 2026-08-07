@@ -100,6 +100,7 @@ import {
   Paintbrush,
   Pause,
   Play,
+  RefreshCw,
   Save,
   Scan,
   Scissors,
@@ -213,6 +214,7 @@ export const STATUS_ICONS = Object.freeze({
   PAUSE_REQUESTED: Clock3,
   DISABLED: Ban,
   INVALID: AlertTriangle,
+  STALE: RefreshCw,
 });
 
 /** Settings preference section → Lucide component. */

@@ -581,6 +581,20 @@ def _job_generate(run_id, payload, cancel_event, on_progress, heartbeat_log, evt
     )
     seed = payload.get("seed")
     seed_i = int(seed) if seed is not None and str(seed).strip() != "" else None
+    source_image = None
+    input_path = str(payload.get("input_path") or "").strip()
+    if input_path:
+        try:
+            from PIL import Image
+
+            with Image.open(input_path) as source:
+                source_image = source.convert("RGB")
+        except (OSError, ValueError) as exc:
+            _emit(evt_queue, error(run_id, f"Could not load image-to-image input: {exc}"))
+            return
+    if payload.get("strength") is not None and source_image is None:
+        _emit(evt_queue, error(run_id, "Edit Image needs a source image."))
+        return
 
     heartbeat_log(run_id, f"Generate model: {mode.value}")
     on_progress(run_id, 2)
@@ -616,6 +630,9 @@ def _job_generate(run_id, payload, cancel_event, on_progress, heartbeat_log, evt
                 steps=steps,
                 guidance=guidance,
                 seed=seed_i,
+                negative_prompt=str(payload.get("negative_prompt") or "").strip() or None,
+                image=source_image,
+                strength=(float(payload["strength"]) if payload.get("strength") is not None else None),
                 progress=prog,
                 cancel_event=cancel_event,
             )

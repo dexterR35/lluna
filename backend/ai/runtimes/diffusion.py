@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import threading
 import time
 from typing import Callable, Optional, Protocol
@@ -118,6 +119,9 @@ class _BaseRunner(Protocol):
         steps: int,
         guidance: float,
         seed: Optional[int],
+        negative_prompt: Optional[str],
+        image: Optional[Image.Image],
+        strength: Optional[float],
         progress: ProgressCb,
         cancel_event: CancelEvent,
         generation: int,
@@ -186,6 +190,9 @@ class _DiffusersRunner:
         steps: int,
         guidance: float,
         seed: Optional[int],
+        negative_prompt: Optional[str],
+        image: Optional[Image.Image],
+        strength: Optional[float],
         progress: ProgressCb,
         cancel_event: CancelEvent,
         generation: int,
@@ -207,6 +214,9 @@ class _DiffusersRunner:
             steps=steps,
             guidance=guidance,
             generator=gen,
+            negative_prompt=negative_prompt,
+            image=image,
+            strength=strength,
         )
         out = self.pipe(
             **kwargs,
@@ -229,8 +239,11 @@ class _DiffusersRunner:
         steps: int,
         guidance: float,
         generator,
+        negative_prompt: Optional[str] = None,
+        image: Optional[Image.Image] = None,
+        strength: Optional[float] = None,
     ) -> dict:
-        return {
+        kwargs = {
             "prompt": prompt,
             "height": int(height),
             "width": int(width),
@@ -238,6 +251,21 @@ class _DiffusersRunner:
             "num_inference_steps": int(steps),
             "generator": generator,
         }
+        # Not every Diffusers pipeline __call__ accepts these kwargs (e.g. the
+        # Flux2 family has no `negative_prompt` or `strength` parameter at all),
+        # so only pass through what the loaded pipeline actually declares.
+        supported = set(inspect.signature(self.pipe.__call__).parameters)
+        if negative_prompt and "negative_prompt" in supported:
+            kwargs["negative_prompt"] = negative_prompt
+        if image is not None:
+            if "image" not in supported:
+                raise RuntimeError(
+                    f"{type(self.pipe).__name__} does not support image-to-image editing."
+                )
+            kwargs["image"] = image
+            if "strength" in supported:
+                kwargs["strength"] = float(strength if strength is not None else 0.65)
+        return kwargs
 
 
 class _FluxKleinRunner(_DiffusersRunner):
@@ -309,10 +337,13 @@ class _QwenImageRunner(_DiffusersRunner):
         steps: int,
         guidance: float,
         generator,
+        negative_prompt: Optional[str] = None,
+        image: Optional[Image.Image] = None,
+        strength: Optional[float] = None,
     ) -> dict:
         return {
             "prompt": prompt,
-            "negative_prompt": " ",
+            "negative_prompt": negative_prompt or " ",
             "height": int(height),
             "width": int(width),
             "true_cfg_scale": float(guidance),
@@ -363,6 +394,9 @@ def generate_image(
     steps: Optional[int] = None,
     guidance: Optional[float] = None,
     seed: Optional[int] = None,
+    negative_prompt: Optional[str] = None,
+    image: Optional[Image.Image] = None,
+    strength: Optional[float] = None,
     progress: ProgressCb = None,
     cancel_event: CancelEvent = None,
 ) -> Image.Image:
@@ -372,6 +406,10 @@ def generate_image(
     prompt = (prompt or "").strip()
     if not prompt:
         raise ValueError("Prompt is empty.")
+    if image is not None and not isinstance(image, Image.Image):
+        raise ValueError("Image-to-image input must be a PIL image.")
+    if image is not None and strength is not None and not 0.0 < float(strength) <= 1.0:
+        raise ValueError("Image-to-image strength must be between 0 and 1.")
 
     ok, reason = cuda_ready_for_generate()
     if not ok:
@@ -420,6 +458,9 @@ def generate_image(
                 steps=steps,
                 guidance=guidance,
                 seed=seed,
+                negative_prompt=(negative_prompt or "").strip() or None,
+                image=image,
+                strength=strength,
                 progress=prog,
                 cancel_event=cancel_event,
                 generation=generation,

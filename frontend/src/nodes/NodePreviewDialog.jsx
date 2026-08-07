@@ -1,15 +1,13 @@
 import { useEffect, useState } from "react";
 import { Download, Image as ImageIcon, MousePointer2 } from "../icons";
 import { Badge, Button, Dialog, TextField } from "../components";
-import { useToast } from "../components/ToastContext";
 import { ArtifactPreview, ArtifactThumbnail } from "../preview/ArtifactPreview";
-import { saveArtifactsExport } from "../preview/saveExport";
-import { useEditorStore } from "../state/editorStore";
+import { useArtifactSaver } from "../preview/useArtifactSaver";
+import { downstreamNodeIds, useEditorStore } from "../state/editorStore";
 import { useRunStore } from "../state/runStore";
 
 /** @param {{nodeId: string | null, onClose: () => void}} props */
 export function NodePreviewDialog({ nodeId, onClose }) {
-  const toast = useToast();
   const node = useEditorStore((store) =>
     store.nodes.find((item) => item.id === nodeId),
   );
@@ -66,6 +64,7 @@ export function NodePreviewDialog({ nodeId, onClose }) {
     if (!artifactIds.includes(selectedArtifactId))
       setSelectedArtifactId(artifactId || "");
   }, [artifactId, artifactIds, selectedArtifactId]);
+  const saveAll = useArtifactSaver(artifactIds, null, schemaId);
 
   if (!node || node.data.definition?.supportsPreview !== true) return null;
   const activeNode = node;
@@ -79,25 +78,11 @@ export function NodePreviewDialog({ nodeId, onClose }) {
     updateNode(activeNode.id, {
       parameters: { ...current.data.parameters, ...patch },
     });
-    useRunStore.getState().clearNodeResult(activeNode.id);
-  }
-
-  async function saveAll() {
-    if (!artifactIds.length) return;
-    try {
-      const saved = await saveArtifactsExport(artifactIds, { schemaId });
-      if (!saved) return;
-      toast.push(
-        saved.length === 1
-          ? `Saved ${saved[0]}`
-          : `Saved ${saved.length} files`,
+    useRunStore
+      .getState()
+      .clearNodeResults(
+        downstreamNodeIds([activeNode.id], useEditorStore.getState().edges),
       );
-    } catch (error) {
-      toast.push(
-        error instanceof Error ? error.message : String(error),
-        "error",
-      );
-    }
   }
 
   return (

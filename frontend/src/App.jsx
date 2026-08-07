@@ -180,6 +180,9 @@ function EditorApp() {
           selectedNodeIds,
           options,
         );
+        // `null` means a run was already starting and this call was a no-op
+        // (see runStore.start's re-entrant guard) - nothing new to report.
+        if (!run) return;
         window.llunaDesktop?.setRunProgress((run.progress || 0) / 100);
         const desktop = useDesktopStore.getState();
         desktop.setValue("drawerVisible", true);

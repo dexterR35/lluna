@@ -69,6 +69,7 @@ class RunSnapshot(BaseModel):
     current_node_id: str | None = None
     nodes: dict[str, NodeRun] = Field(default_factory=dict)
     artifact_ids: list[str] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
     error: dict[str, Any] | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     started_at: datetime | None = None
@@ -104,6 +105,28 @@ def _primary_artifact_values(value: Any) -> list[ArtifactRecord]:
     if isinstance(value, (list, tuple)):
         return [item for entry in value for item in _primary_artifact_values(entry)]
     return [value] if isinstance(value, ArtifactRecord) else []
+
+
+def _model_revision_for_node(node: WorkflowNode) -> str:
+    """Fingerprint the node's selected custom model, if any.
+
+    Built-in models are immutable once downloaded, so an empty revision is
+    fine for them. A *custom* model's on-disk files can be replaced in place
+    (re-import, reconfigure) while keeping the same id, which would otherwise
+    let a stale cached artifact survive a model update - see
+    `DynamicModelRegistry.revision_stamp`.
+    """
+    model_value = str(node.parameters.get("model") or "")
+    if not model_value.startswith("custom:"):
+        return ""
+    try:
+        from backend.models.dynamic_registry import DynamicModelRegistry
+
+        return DynamicModelRegistry.instance().revision_stamp(
+            model_value.removeprefix("custom:")
+        )
+    except (ImportError, OSError, ValueError):
+        return ""
 
 
 def _stable_value_hash(value: Any) -> str:
@@ -202,11 +225,37 @@ class RunManager:
             frozen_graph, sort_keys=True, separators=(",", ":"), ensure_ascii=False
         ).encode("utf-8")
         priority = -1 if queue_front else 0
+        generation_history = []
+        workflow_nodes = {item.id: item for item in workflow.nodes}
+        for step in plan.steps:
+            if step.schema_id not in {"lluna.generate.image", "lluna.generate.image.edit"}:
+                continue
+            item = workflow_nodes.get(step.node_id)
+            if item is None:
+                continue
+            prompt = str(item.parameters.get("prompt") or "").strip()
+            for edge in workflow.edges:
+                if edge.target_node_id == item.id and edge.target_port_id == "prompt":
+                    source = workflow_nodes.get(edge.source_node_id)
+                    if source is not None:
+                        prompt = str(source.parameters.get("value") or prompt).strip()
+                        break
+            generation_history.append(
+                {
+                    "nodeId": item.id,
+                    "schemaId": item.schema_id,
+                    "model": str(item.parameters.get("model") or ""),
+                    "prompt": prompt,
+                    "negativePrompt": str(item.parameters.get("negativePrompt") or "").strip(),
+                    "seed": item.parameters.get("seed", -1),
+                }
+            )
         snapshot = RunSnapshot(
             run_id=run_id,
             workflow_id=workflow.project_id,
             workflow_hash=hashlib.sha256(graph_bytes).hexdigest(),
             priority=priority,
+            metadata={"generations": generation_history},
             nodes={step.node_id: NodeRun(node_id=step.node_id) for step in plan.steps},
         )
         control = _RunControl(
@@ -461,6 +510,7 @@ class RunManager:
                 cache_key = build_cache_key(
                     node,
                     input_hashes,
+                    model_revision=_model_revision_for_node(node),
                 )
                 has_batch_input = any(
                     isinstance(value, (list, tuple)) for value in input_values.values()
@@ -710,6 +760,7 @@ class RunManager:
         count = lengths.pop()
         outputs: list[Any] = []
         definition = NODE_REGISTRY[node.schema_id]
+        model_revision = _model_revision_for_node(node)
         for index in range(count):
             self._wait_if_paused(control)
             if control.cancel.is_set():
@@ -728,7 +779,9 @@ class RunManager:
                 input_signatures.append(
                     f"llava:{_stable_value_hash(scalar_inputs['llava'])}"
                 )
-            item_cache_key = build_cache_key(node, input_signatures)
+            item_cache_key = build_cache_key(
+                node, input_signatures, model_revision=model_revision
+            )
             artifact = None
             if (
                 get_settings().runtime.smart_cache_enabled
@@ -1426,6 +1479,15 @@ class RunManager:
                     params.get("steps") or step_contract.get("default") or settings.generation.steps
                 ),
             )
+            if node.schema_id == "lluna.generate.image.edit":
+                input_path = artifact_path("image")
+                if not input_path:
+                    raise ExecutionFailure("MISSING_INPUT", "Edit Image needs a source image.")
+                payload["input_path"] = input_path
+                denoise_strength = params.get("denoiseStrength")
+                payload["strength"] = float(
+                    denoise_strength if denoise_strength is not None else 0.65
+                )
             if capabilities.get("guidance") is True:
                 payload["guidance"] = float(
                     params.get(

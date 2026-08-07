@@ -24,42 +24,14 @@ import { useServerStore } from "../state/serverStore";
 import { SettingsForm } from "./SettingsForm";
 import { AddModelDialog, HuggingFaceConnection } from "./AddModelDialog";
 import { capabilityIssues } from "../models/modelManifestCapabilities";
+import { formatTransferProgress, useCancelInstall } from "../models/downloadFormat";
 import { CapabilityEditor } from "./CapabilityEditor";
-
-/** @param {number | null | undefined} bytes */
-function formatBytes(bytes) {
-  if (!Number.isFinite(bytes) || bytes == null || bytes < 0) return null;
-  if (bytes < 1024) return `${bytes} B`;
-  const units = ["KB", "MB", "GB", "TB"];
-  let value = bytes / 1024;
-  let unit = units[0];
-  for (let index = 1; value >= 1024 && index < units.length; index += 1) {
-    value /= 1024;
-    unit = units[index];
-  }
-  return `${value >= 10 ? value.toFixed(0) : value.toFixed(1)} ${unit}`;
-}
-
-/** @param {number | null | undefined} seconds */
-function formatEta(seconds) {
-  if (!Number.isFinite(seconds) || seconds == null || seconds < 0) return null;
-  const rounded = Math.ceil(seconds);
-  if (rounded < 60) return `${rounded}s remaining`;
-  return `${Math.ceil(rounded / 60)}m remaining`;
-}
 
 /** @param {import("../types").DownloadJob} job */
 function formatTransfer(job) {
-  const downloaded = formatBytes(job.downloadedBytes);
-  const total = formatBytes(job.totalBytes);
-  const speed = formatBytes(job.bytesPerSecond);
-  const eta = formatEta(job.etaSeconds);
-  const parts = [];
-  if (downloaded && total) parts.push(`${downloaded} of ${total}`);
-  else if (downloaded) parts.push(downloaded);
-  if (speed) parts.push(`${speed}/s`);
-  if (eta) parts.push(eta);
-  return parts.join(" · ") || "Download progress will appear here.";
+  return (
+    formatTransferProgress(job) || "Download progress will appear here."
+  );
 }
 
 /**
@@ -593,7 +565,7 @@ export function ModelsPanel() {
   const downloads = useServerStore((store) => store.downloads);
   const settings = useServerStore((store) => store.settings);
   const refreshDownloads = useServerStore((store) => store.refreshDownloads);
-  const cancelDownload = useServerStore((store) => store.cancelDownload);
+  const cancelDownloadJob = useCancelInstall();
   const setLifecycleState = useServerStore(
     (store) => store.setModelLifecycleState,
   );
@@ -604,16 +576,9 @@ export function ModelsPanel() {
   const refreshModels = useServerStore((store) => store.refreshModels);
   const sections = useMemo(() => groupModels(models), [models]);
 
-  async function cancelInstall(/** @type {import("../types").DownloadJob} */ job) {
-    try {
-      await cancelDownload(job.jobId);
-      toast.push("Cancellation requested. Partial installation is being rolled back.", "success");
-    } catch (error) {
-      toast.push(
-        error instanceof Error ? error.message : String(error),
-        "error",
-      );
-    }
+  /** @param {import("../types").DownloadJob} job */
+  function cancelInstall(job) {
+    return cancelDownloadJob(job.jobId);
   }
 
   async function rescan() {

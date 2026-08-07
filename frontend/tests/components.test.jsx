@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { ReactFlowProvider } from "@xyflow/react";
 import { Dialog, ProgressBar, Switch } from "../src/components";
 import { LlunaNode } from "../src/nodes/LlunaNode";
+import { NodeActionsProvider } from "../src/nodes/NodeActionsContext";
 import { NodeParameterField } from "../src/nodes/NodeParameterField";
 import { enabledModelOptions } from "../src/models/modelAvailability";
 import { NodeLibrary } from "../src/workflow/NodeLibrary";
@@ -176,32 +177,37 @@ test("model selection is in the node body and reacts to enabled inventory", asyn
   });
   render(
     <ReactFlowProvider>
-      <LlunaNode
-        id="node-1"
-        type="lluna"
-        draggable
-        dragging={false}
-        selectable
-        deletable
-        zIndex={0}
-        isConnectable
-        positionAbsoluteX={0}
-        positionAbsoluteY={0}
-        selected={false}
-        data={{
-          schemaId: definition.schemaId,
-          schemaVersion: 1,
-          label: "Generate",
-          definition,
-          parameters: { model: "a" },
-          appearance: { cardStyle: "visual", showPreview: false },
+      <NodeActionsProvider
+        value={{
+          actions: { onModelChange },
           modelInventory: /** @type {any} */ ([
             { id: "model-a", installed: true, enabled: false },
             { id: "model-b", installed: true, enabled: true },
           ]),
-          nodeActions: { onModelChange },
         }}
-      />
+      >
+        <LlunaNode
+          id="node-1"
+          type="lluna"
+          draggable
+          dragging={false}
+          selectable
+          deletable
+          zIndex={0}
+          isConnectable
+          positionAbsoluteX={0}
+          positionAbsoluteY={0}
+          selected={false}
+          data={{
+            schemaId: definition.schemaId,
+            schemaVersion: 1,
+            label: "Generate",
+            definition,
+            parameters: { model: "a" },
+            appearance: { cardStyle: "visual", showPreview: false },
+          }}
+        />
+      </NodeActionsProvider>
     </ReactFlowProvider>,
   );
   const selector = screen.getByRole("combobox", { name: "Model for Generate" });

@@ -9,9 +9,8 @@ import {
 } from "../icons";
 import { api, artifactObjectUrl, artifactThumbnailUrl } from "../api/client";
 import { Badge, Button, EmptyState, LoadingState } from "../components";
-import { useToast } from "../components/ToastContext";
 import { IMAGE_EFFECTS } from "./imageEffects";
-import { saveArtifactsExport } from "./saveExport";
+import { useArtifactSaver } from "./useArtifactSaver";
 
 /** @param {string | undefined} artifactId @param {{thumbnail?: boolean, maxEdge?: number}} [options] */
 function useArtifact(artifactId, options = {}) {
@@ -88,35 +87,6 @@ function ArtifactMedia({
       style={style}
     />
   );
-}
-
-/**
- * @param {string | string[] | undefined} artifactIds
- * @param {import("../types").ArtifactPreviewState | null | undefined} state
- * @param {string | undefined} schemaId
- */
-function useArtifactSaver(artifactIds, state, schemaId) {
-  const toast = useToast();
-  return async function save() {
-    const ids = /** @type {string[]} */ (
-      (Array.isArray(artifactIds) ? artifactIds : [artifactIds]).filter(
-        (id) => typeof id === "string" && id.length > 0,
-      )
-    );
-    if (!ids.length) return;
-    if (state && !state.url && ids.length === 1) return;
-    try {
-      const saved = await saveArtifactsExport(ids, { schemaId });
-      if (!saved) return;
-      if (saved.length === 1) toast.push(`Saved ${saved[0]}`);
-      else toast.push(`Saved ${saved.length} files`);
-    } catch (error) {
-      toast.push(
-        error instanceof Error ? error.message : String(error),
-        "error",
-      );
-    }
-  };
 }
 
 /** @param {number | undefined} value */

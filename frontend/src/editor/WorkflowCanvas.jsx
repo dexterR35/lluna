@@ -14,12 +14,18 @@ import { Check, Layers3, Play, X, resolveFlowColor } from "../icons";
 import "@xyflow/react/dist/style.css";
 import { Badge, ContextMenu } from "../components";
 import { useDesktopStore } from "../state/desktopStore";
-import { boundsForNodes, findFlowContainingPoint, useEditorStore } from "../state/editorStore";
+import {
+  boundsForNodes,
+  downstreamNodeIds,
+  findFlowContainingPoint,
+  useEditorStore,
+} from "../state/editorStore";
 import { useRunStore } from "../state/runStore";
 import { useServerStore } from "../state/serverStore";
 import { useToast } from "../components/ToastContext";
 import { LlunaEdge } from "./LlunaEdge";
 import { LlunaNode } from "../nodes/LlunaNode";
+import { NodeActionsProvider } from "../nodes/NodeActionsContext";
 /** @typedef {import("../types").EditorNode} EditorNode */
 /** @typedef {{onAdd: (position: {x: number, y: number}) => void, onRunFlow?: (ids: string[]) => void, onRunNode?: (id: string) => void, onOpenNode?: (id: string) => void, onPreviewNode?: (id: string) => void, onViewportChange?: (viewport: import("@xyflow/react").Viewport) => void}} CanvasProps */
 /** @type {import("@xyflow/react").NodeTypes} */
@@ -114,6 +120,7 @@ function FlowBox({ group, nodes, selected, onSelect, onRun }) {
           event.stopPropagation();
           event.preventDefault();
           onSelect();
+          useEditorStore.getState().checkpoint();
           dragRef.current = { x: event.clientX, y: event.clientY };
           event.currentTarget.setPointerCapture(event.pointerId);
         }}
@@ -223,7 +230,11 @@ function CanvasBody({
   const changeModel = useCallback(
     (/** @type {string} */ nodeId, /** @type {string | number} */ value) => {
       setNodeModel(nodeId, value);
-      useRunStore.getState().clearNodeResult(nodeId);
+      useRunStore
+        .getState()
+        .clearNodeResults(
+          downstreamNodeIds([nodeId], useEditorStore.getState().edges),
+        );
     },
     [setNodeModel],
   );
@@ -240,35 +251,31 @@ function CanvasBody({
       updateNode(nodeId, {
         parameters: { ...current.data.parameters, [key]: value },
       });
-      useRunStore.getState().clearNodeResult(nodeId);
+      useRunStore
+        .getState()
+        .clearNodeResults(
+          downstreamNodeIds([nodeId], useEditorStore.getState().edges),
+        );
     },
     [updateNode],
   );
-  const canvasNodes = useMemo(
-    () =>
-      nodes.map((node) => ({
-        ...node,
-        data: {
-          ...node.data,
-          nodeActions: {
-            onOpen: onOpenNode,
-            onRun: onRunNode,
-            onPreview: onPreviewNode,
-            onModelChange: changeModel,
-            onParameterChange: changeParameter,
-          },
-          modelInventory: models,
-        },
-      })),
-    [
-      changeModel,
-      changeParameter,
-      models,
-      nodes,
-      onOpenNode,
-      onPreviewNode,
-      onRunNode,
-    ],
+  // Node action callbacks and the model inventory are provided via context
+  // (see NodeActionsProvider below) rather than merged into each node's
+  // `data`, so editing one node doesn't force xyflow to see a new `data`
+  // object - and therefore re-render - every other node on the canvas.
+  const nodeActions = useMemo(
+    () => ({
+      onOpen: onOpenNode,
+      onRun: onRunNode,
+      onPreview: onPreviewNode,
+      onModelChange: changeModel,
+      onParameterChange: changeParameter,
+    }),
+    [changeModel, changeParameter, onOpenNode, onPreviewNode, onRunNode],
+  );
+  const nodeActionsValue = useMemo(
+    () => ({ actions: nodeActions, modelInventory: models }),
+    [nodeActions, models],
   );
   const drop = useCallback(
     async (/** @type {import("react").DragEvent<HTMLDivElement>} */ event) => {
@@ -369,143 +376,146 @@ function CanvasBody({
     [addNode, flow, toast],
   );
   return (
-    <div
-      ref={wrapper}
-      className="relative h-full w-full"
-      onContextMenu={(event) => {
-        event.preventDefault();
-        setMenu({
-          x: event.clientX,
-          y: event.clientY,
-          position: flow.screenToFlowPosition({
+    <NodeActionsProvider value={nodeActionsValue}>
+      <div
+        ref={wrapper}
+        className="relative h-full w-full"
+        onContextMenu={(event) => {
+          event.preventDefault();
+          setMenu({
             x: event.clientX,
             y: event.clientY,
-          }),
-        });
-      }}
-    >
-      <ReactFlow
-        className={spacePressed ? "artboard-panning" : ""}
-        nodes={canvasNodes}
-        edges={edges}
-        nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onPaneClick={() => useEditorStore.getState().deselect()}
-        onConnect={(connection) => {
-          const result = connect(connection);
-          if (!result.valid) toast.push(result.reason, "error");
+            position: flow.screenToFlowPosition({
+              x: event.clientX,
+              y: event.clientY,
+            }),
+          });
         }}
-        isValidConnection={(connection) =>
-          useEditorStore.getState().canConnect(connection).valid
-        }
-        onDrop={drop}
-        onDragOver={(event) => {
-          event.preventDefault();
-          event.dataTransfer.dropEffect = "copy";
-        }}
-        onNodeDragStop={(_, node) => {
-          const editor = useEditorStore.getState();
-          const alreadyInFlow = editor.groups.some(
-            (group) =>
-              group.kind === "flow" && group.nodeIds.includes(node.id),
-          );
-          if (alreadyInFlow) return;
-          const center = {
-            x:
-              node.position.x +
-              (node.measured?.width || node.width || 256) / 2,
-            y:
-              node.position.y +
-              (node.measured?.height || node.height || 190) / 2,
-          };
-          const targetFlow = findFlowContainingPoint(
-            editor.groups,
-            editor.nodes,
-            center,
-            editor.selectedGroupId,
-          );
-          if (targetFlow) editor.addNodesToFlow(targetFlow.id, [node.id]);
-        }}
-        onMove={(_, viewport) => onViewportChange?.(viewport)}
-        onMoveEnd={(_, viewport) => {
-          setViewport(viewport);
-          onViewportChange?.(viewport);
-        }}
-        defaultViewport={DEFAULT_VIEWPORT}
-        fitView
-        fitViewOptions={FIT_VIEW_OPTIONS}
-        zoomOnDoubleClick={false}
-        zoomOnScroll={false}
-        zoomActivationKeyCode={["Control", "Meta"]}
-        panOnScroll={false}
-        panOnDrag={spacePressed}
-        panActivationKeyCode={null}
-        nodesDraggable={!spacePressed}
-        elementsSelectable={!spacePressed}
-        snapToGrid
-        snapGrid={[16, 16]}
-        selectionOnDrag={!spacePressed}
-        deleteKeyCode={["Backspace", "Delete"]}
-        multiSelectionKeyCode="Shift"
-        minZoom={0.2}
-        maxZoom={2}
-        connectionRadius={26}
       >
-        <Background
-          variant={BackgroundVariant.Dots}
-          gap={24}
-          size={1}
-          color="#2a2f3a"
-          bgColor="#0a0b0f"
-        />
-        <Controls showInteractive={false} />
-        {minimap && (
-          <MiniMap
-            pannable
-            zoomable
-            nodeColor="#343844"
-            maskColor="rgba(9,10,13,.76)"
-          />
-        )}
-        <ViewportPortal>
-          {groups.map((group) => (
-            <FlowBox
-              key={group.id}
-              group={group}
-              nodes={nodes}
-              selected={selectedGroupId === group.id}
-              onSelect={() => selectGroup(group.id)}
-              onRun={(ids) => onRunFlow?.(ids)}
-            />
-          ))}
-        </ViewportPortal>
-      </ReactFlow>
-      <ContextMenu
-        open={Boolean(menu)}
-        x={menu?.x || 0}
-        y={menu?.y || 0}
-        onClose={() => setMenu(null)}
-        onSelect={(id) => {
-          if (id === "add" && menu) onAdd(menu.position);
-          if (id === "flow") {
-            const created = useEditorStore.getState().createFlowFromSelected();
-            if (!created) toast.push("Select a start node first", "error");
+        <ReactFlow
+          className={spacePressed ? "artboard-panning" : ""}
+          nodes={nodes}
+          edges={edges}
+          nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onPaneClick={() => useEditorStore.getState().deselect()}
+          onConnect={(connection) => {
+            const result = connect(connection);
+            if (!result.valid) toast.push(result.reason, "error");
+          }}
+          isValidConnection={(connection) =>
+            useEditorStore.getState().canConnect(connection).valid
           }
-          if (id === "fit") flow.fitView(FIT_VIEW_OPTIONS);
-          if (id === "select") useEditorStore.getState().selectAll();
-          if (id === "layout") useEditorStore.getState().autoLayout();
-        }}
-        items={[
-          { id: "add", label: "Add node…" },
-          { id: "flow", label: "Create flow box to end" },
-          { id: "select", label: "Select all", shortcut: "Ctrl+A" },
-          { id: "fit", label: "Fit workflow", shortcut: "F" },
-          { id: "layout", label: "Auto layout" },
-        ]}
-      />
-    </div>
+          onDrop={drop}
+          onDragOver={(event) => {
+            event.preventDefault();
+            event.dataTransfer.dropEffect = "copy";
+          }}
+          onNodeDragStart={() => useEditorStore.getState().checkpoint()}
+          onNodeDragStop={(_, node) => {
+            const editor = useEditorStore.getState();
+            const alreadyInFlow = editor.groups.some(
+              (group) =>
+                group.kind === "flow" && group.nodeIds.includes(node.id),
+            );
+            if (alreadyInFlow) return;
+            const center = {
+              x:
+                node.position.x +
+                (node.measured?.width || node.width || 256) / 2,
+              y:
+                node.position.y +
+                (node.measured?.height || node.height || 190) / 2,
+            };
+            const targetFlow = findFlowContainingPoint(
+              editor.groups,
+              editor.nodes,
+              center,
+              editor.selectedGroupId,
+            );
+            if (targetFlow) editor.addNodesToFlow(targetFlow.id, [node.id]);
+          }}
+          onMove={(_, viewport) => onViewportChange?.(viewport)}
+          onMoveEnd={(_, viewport) => {
+            setViewport(viewport);
+            onViewportChange?.(viewport);
+          }}
+          defaultViewport={DEFAULT_VIEWPORT}
+          fitView
+          fitViewOptions={FIT_VIEW_OPTIONS}
+          zoomOnDoubleClick={false}
+          zoomOnScroll={false}
+          zoomActivationKeyCode={["Control", "Meta"]}
+          panOnScroll={false}
+          panOnDrag={spacePressed}
+          panActivationKeyCode={null}
+          nodesDraggable={!spacePressed}
+          elementsSelectable={!spacePressed}
+          snapToGrid
+          snapGrid={[16, 16]}
+          selectionOnDrag={!spacePressed}
+          deleteKeyCode={["Backspace", "Delete"]}
+          multiSelectionKeyCode="Shift"
+          minZoom={0.2}
+          maxZoom={2}
+          connectionRadius={26}
+        >
+          <Background
+            variant={BackgroundVariant.Dots}
+            gap={24}
+            size={1}
+            color="#2a2f3a"
+            bgColor="#0a0b0f"
+          />
+          <Controls showInteractive={false} />
+          {minimap && (
+            <MiniMap
+              pannable
+              zoomable
+              nodeColor="#343844"
+              maskColor="rgba(9,10,13,.76)"
+            />
+          )}
+          <ViewportPortal>
+            {groups.map((group) => (
+              <FlowBox
+                key={group.id}
+                group={group}
+                nodes={nodes}
+                selected={selectedGroupId === group.id}
+                onSelect={() => selectGroup(group.id)}
+                onRun={(ids) => onRunFlow?.(ids)}
+              />
+            ))}
+          </ViewportPortal>
+        </ReactFlow>
+        <ContextMenu
+          open={Boolean(menu)}
+          x={menu?.x || 0}
+          y={menu?.y || 0}
+          onClose={() => setMenu(null)}
+          onSelect={(id) => {
+            if (id === "add" && menu) onAdd(menu.position);
+            if (id === "flow") {
+              const created = useEditorStore.getState().createFlowFromSelected();
+              if (!created) toast.push("Select a start node first", "error");
+            }
+            if (id === "fit") flow.fitView(FIT_VIEW_OPTIONS);
+            if (id === "select") useEditorStore.getState().selectAll();
+            if (id === "layout") useEditorStore.getState().autoLayout();
+          }}
+          items={[
+            { id: "add", label: "Add node…" },
+            { id: "flow", label: "Create flow box to end" },
+            { id: "select", label: "Select all", shortcut: "Ctrl+A" },
+            { id: "fit", label: "Fit workflow", shortcut: "F" },
+            { id: "layout", label: "Auto layout" },
+          ]}
+        />
+      </div>
+    </NodeActionsProvider>
   );
 }
 /** @param {CanvasProps} props */

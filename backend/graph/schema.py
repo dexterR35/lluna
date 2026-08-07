@@ -46,6 +46,31 @@ class ParameterDefinition(ContractModel):
     visible_for_models: list[str] = Field(default_factory=list)
 
 
+class ParameterCondition(ContractModel):
+    """One `node.parameters[parameter_id] == equals` check."""
+
+    parameter_id: str
+    equals: Any
+
+
+class NodeCompanion(ContractModel):
+    """Auto-attach/detach a companion node while `when` conditions hold.
+
+    Declarative equivalent of "when this node's parameters look like X,
+    make sure a connected companion node of schema Y exists" - e.g. the
+    Upscale node's SUPIR model wants a LLaVA Caption node wired into its
+    `llava` input whenever `useLlava` is on. Keeping this on the node
+    definition (backend-owned, versioned with the rest of the contract)
+    means the frontend editor can implement the behavior generically
+    instead of special-casing specific schema/model ids.
+    """
+
+    schema_id: str
+    target_port: str
+    source_port: str = "config"
+    when: list[ParameterCondition] = Field(default_factory=list)
+
+
 class NodeDefinition(ContractModel):
     schema_version: int = 1
     schema_id: str
@@ -68,6 +93,7 @@ class NodeDefinition(ContractModel):
     available: bool = True
     unavailable_reason: str = ""
     adapter: str | None = None
+    companions: list[NodeCompanion] = Field(default_factory=list)
 
 
 class Position(ContractModel):

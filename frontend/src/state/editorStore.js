@@ -16,13 +16,49 @@ const snap = (state) => ({
   edges: structuredClone(state.edges),
   groups: structuredClone(state.groups),
 });
-/** @param {EditorState} state @param {Partial<EditorState>} patch */
-const history = (state, patch) => ({
-  ...patch,
-  past: [...state.past.slice(-(MAX_HISTORY - 1)), snap(state)],
-  future: [],
-  dirty: true,
-});
+// A burst of rapid same-target edits (typing in one field, nudging one
+// slider) shares a single undo checkpoint instead of one `structuredClone`
+// of the whole graph per keystroke. Any edit outside the window - or with no
+// `coalesceWith` key - always gets its own checkpoint, so unrelated actions
+// (delete, connect, paste...) are never merged together.
+const COALESCE_WINDOW_MS = 700;
+let coalesceKey = /** @type {string | null} */ (null);
+let coalesceStamp = 0;
+/**
+ * @param {EditorState} state
+ * @param {Partial<EditorState>} patch
+ * @param {string | null} [coalesceWith]
+ */
+const history = (state, patch, coalesceWith = null) => {
+  const now = Date.now();
+  const coalescing =
+    coalesceWith != null &&
+    coalesceWith === coalesceKey &&
+    now - coalesceStamp < COALESCE_WINDOW_MS;
+  coalesceKey = coalesceWith;
+  coalesceStamp = now;
+  return {
+    ...patch,
+    past: coalescing
+      ? state.past
+      : [...state.past.slice(-(MAX_HISTORY - 1)), snap(state)],
+    future: [],
+    dirty: true,
+  };
+};
+/**
+ * Push an undo checkpoint for the current state without changing anything -
+ * used before a drag gesture starts, since drags update positions on every
+ * pointer-move frame and only the pre-drag position should be undoable.
+ * @param {EditorState} state
+ */
+const checkpoint = (state) => {
+  coalesceKey = null;
+  return {
+    past: [...state.past.slice(-(MAX_HISTORY - 1)), snap(state)],
+    future: [],
+  };
+};
 /** @param {NodeDefinition[]} definitions */
 const definitionsById = (definitions) =>
   Object.fromEntries(definitions.map((value) => [value.schemaId, value]));
@@ -74,70 +110,77 @@ function createNode(definition, position) {
   };
 }
 
-const UPSCALE_SCHEMA_ID = "lluna.image.upscale";
-const LLAVA_SCHEMA_ID = "lluna.input.llava";
-
 /**
- * Keep the SUPIR LLaVA toggle and its visible companion node in sync.
+ * Attach/detach one declared companion (see NodeDefinition.companions) for a
+ * host node, e.g. the Upscale node's SUPIR model wants a LLaVA Caption node
+ * wired into its `llava` input whenever `useLlava` is on. Data-driven from
+ * the backend node definition so the store never needs to know specific
+ * schema/model ids itself.
  * @param {EditorState} state
  * @param {EditorNode[]} nodes
  * @param {EditorEdge[]} edges
- * @param {string} upscaleId
+ * @param {WorkflowGroup[]} groups
+ * @param {string} hostId
+ * @param {import("../types").NodeCompanion} companion
  */
-function reconcileLlavaCompanion(state, nodes, edges, upscaleId) {
-  const upscale = nodes.find((node) => node.id === upscaleId);
-  if (!upscale || upscale.data.schemaId !== UPSCALE_SCHEMA_ID)
-    return { nodes, edges, groups: state.groups };
+function reconcileCompanion(state, nodes, edges, groups, hostId, companion) {
+  const host = nodes.find((node) => node.id === hostId);
+  if (!host) return { nodes, edges, groups };
 
   const connectedEdges = edges.filter(
-    (edge) => edge.target === upscaleId && edge.targetHandle === "llava",
+    (edge) =>
+      edge.target === hostId && edge.targetHandle === companion.targetPort,
   );
   const companionIds = new Set(
     connectedEdges.flatMap((edge) => {
       const source = nodes.find((node) => node.id === edge.source);
-      return source?.data.schemaId === LLAVA_SCHEMA_ID ? [source.id] : [];
+      return source?.data.schemaId === companion.schemaId ? [source.id] : [];
     }),
   );
-  const shouldExist =
-    upscale.data.parameters?.model === "SUPIR" &&
-    Boolean(upscale.data.parameters?.useLlava);
+  const shouldExist = (companion.when || []).every(
+    (condition) =>
+      host.data.parameters?.[condition.parameterId] === condition.equals,
+  );
 
   if (shouldExist && !companionIds.size && !connectedEdges.length) {
     const definition = state.definitions.find(
-      (item) => item.schemaId === LLAVA_SCHEMA_ID,
+      (item) => item.schemaId === companion.schemaId,
     );
-    if (!definition) return { nodes, edges, groups: state.groups };
-    const companion = {
+    if (!definition) return { nodes, edges, groups };
+    const companionNode = {
       ...createNode(definition, {
-        x: upscale.position.x - 320,
-        y: upscale.position.y + 32,
+        x: host.position.x - 320,
+        y: host.position.y + 32,
       }),
       selected: false,
     };
-    const nextNodes = [...nodes, companion];
+    const sourcePort = definition.outputs.find(
+      (port) => port.id === companion.sourcePort,
+    );
+    const nextNodes = [...nodes, companionNode];
     const nextEdges = [
       ...edges,
       {
         id: crypto.randomUUID(),
-        source: companion.id,
-        sourceHandle: "config",
-        target: upscaleId,
-        targetHandle: "llava",
+        source: companionNode.id,
+        sourceHandle: companion.sourcePort,
+        target: hostId,
+        targetHandle: companion.targetPort,
         type: "lluna",
-        data: { portType: "MODEL" },
+        data: { portType: sourcePort?.type || "" },
       },
     ];
-    let groups = state.groups;
-    const targetGroup = state.groups.find((group) =>
-      group.nodeIds.includes(upscaleId),
+    const targetGroup = groups.find((group) =>
+      group.nodeIds.includes(hostId),
     );
-    if (targetGroup)
-      groups = state.groups.map((group) =>
-        group.id === targetGroup.id
-          ? expandFlowGroup(group, [companion.id], nextNodes, nextEdges)
-          : group,
-      );
-    return { nodes: nextNodes, edges: nextEdges, groups };
+    const nextGroups = targetGroup
+      ? groups.map((group) =>
+          group.id === targetGroup.id
+            ? expandFlowGroup(group, [companionNode.id], nextNodes, nextEdges)
+            : group,
+        )
+      : groups;
+    return { nodes: nextNodes, edges: nextEdges, groups: nextGroups };
   }
 
   if (!shouldExist && companionIds.size) {
@@ -149,10 +192,29 @@ function reconcileLlavaCompanion(state, nodes, edges, upscaleId) {
     return {
       nodes: nextNodes,
       edges: nextEdges,
-      groups: refreshFlowGroups(state.groups, nextNodes, nextEdges),
+      groups: refreshFlowGroups(groups, nextNodes, nextEdges),
     };
   }
-  return { nodes, edges, groups: state.groups };
+  return { nodes, edges, groups };
+}
+
+/**
+ * Reconcile every companion a node declares.
+ * @param {EditorState} state
+ * @param {EditorNode[]} nodes
+ * @param {EditorEdge[]} edges
+ * @param {string} hostId
+ */
+function reconcileCompanions(state, nodes, edges, hostId) {
+  const host = nodes.find((node) => node.id === hostId);
+  const companions = host?.data.definition?.companions;
+  if (!host || !companions?.length)
+    return { nodes, edges, groups: state.groups };
+  return companions.reduce(
+    (acc, companion) =>
+      reconcileCompanion(state, acc.nodes, acc.edges, acc.groups, hostId, companion),
+    { nodes, edges, groups: state.groups },
+  );
 }
 /** @returns {import("../types").EditorProject} */
 function projectTemplate() {
@@ -634,42 +696,86 @@ const createEditorState = (set, get) => ({
     }),
   updateNode: (id, patch) =>
     set((state) => {
-      const nodes = state.nodes.map((node) =>
-        node.id === id
-          ? {
-              ...node,
-              data: {
-                ...node.data,
-                ...patch,
-                parameters: patch.parameters ?? node.data.parameters,
-              },
-            }
-          : node,
-      );
+      // Any parameter edit invalidates this node's last result (unless the
+      // patch sets its own `result`, e.g. dropping a file that's already
+      // loaded) and every downstream node's result, since they consumed the
+      // now-stale output. Both editorStore's persisted `result.status` and
+      // runStore's transient run state have to reflect this - see the
+      // `downstreamNodeIds(...)` call at each `updateNode`/`setNodeModel`
+      // call site, which clears the matching runStore entries.
+      const staleDownstreamIds = patch.parameters
+        ? new Set(
+            downstreamNodeIds([id], state.edges).filter(
+              (nodeId) => nodeId !== id,
+            ),
+          )
+        : null;
+      const nodes = state.nodes.map((node) => {
+        if (node.id === id) {
+          const nextResult =
+            "result" in patch
+              ? patch.result
+              : patch.parameters && node.data.result
+                ? { ...node.data.result, status: "STALE" }
+                : node.data.result;
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              ...patch,
+              parameters: patch.parameters ?? node.data.parameters,
+              result: nextResult,
+            },
+          };
+        }
+        if (staleDownstreamIds?.has(node.id) && node.data.result) {
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              result: { ...node.data.result, status: "STALE" },
+            },
+          };
+        }
+        return node;
+      });
       const synced = patch.parameters
-        ? reconcileLlavaCompanion(state, nodes, state.edges, id)
+        ? reconcileCompanions(state, nodes, state.edges, id)
         : { nodes, edges: state.edges, groups: state.groups };
-      return history(state, synced);
+      return history(state, synced, patch.parameters ? id : null);
     }),
   setNodeModel: (id, value) =>
     set((state) => {
-      const nodes = state.nodes.map((node) =>
-        node.id === id
-          ? {
-              ...node,
-              data: {
-                ...node.data,
-                parameters: { ...node.data.parameters, model: value },
-                result: node.data.result
-                  ? { ...node.data.result, status: "STALE" }
-                  : node.data.result,
-              },
-            }
-          : node,
+      const staleDownstreamIds = new Set(
+        downstreamNodeIds([id], state.edges).filter(
+          (nodeId) => nodeId !== id,
+        ),
       );
+      const nodes = state.nodes.map((node) => {
+        if (node.id === id)
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              parameters: { ...node.data.parameters, model: value },
+              result: node.data.result
+                ? { ...node.data.result, status: "STALE" }
+                : node.data.result,
+            },
+          };
+        if (staleDownstreamIds.has(node.id) && node.data.result)
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              result: { ...node.data.result, status: "STALE" },
+            },
+          };
+        return node;
+      });
       return history(
         state,
-        reconcileLlavaCompanion(state, nodes, state.edges, id),
+        reconcileCompanions(state, nodes, state.edges, id),
       );
     }),
   recordNodeResult: (id, result) =>
@@ -932,6 +1038,7 @@ const createEditorState = (set, get) => ({
         dirty: true,
       };
     }),
+  checkpoint: () => set((state) => checkpoint(state)),
   markSaved: () => set({ dirty: false }),
   setViewport: (viewport) =>
     set((state) => ({ project: { ...state.project, viewport } })),
@@ -993,8 +1100,8 @@ const createEditorState = (set, get) => ({
       groups: refreshFlowGroups(document.groups || [], nodes, edges),
     };
     for (const node of nodes) {
-      if (node.data.schemaId !== UPSCALE_SCHEMA_ID) continue;
-      synced = reconcileLlavaCompanion(
+      if (!node.data.definition?.companions?.length) continue;
+      synced = reconcileCompanions(
         { ...get(), definitions, groups: synced.groups },
         synced.nodes,
         synced.edges,

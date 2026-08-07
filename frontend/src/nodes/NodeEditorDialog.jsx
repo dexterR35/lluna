@@ -17,11 +17,14 @@ import {
   Select,
   TextField,
 } from "../components";
-import { useEditorStore } from "../state/editorStore";
+import { downstreamNodeIds, useEditorStore } from "../state/editorStore";
 import { useRunStore } from "../state/runStore";
 import { useServerStore } from "../state/serverStore";
 import { NodeParameterField } from "./NodeParameterField";
-import { enabledModelOptions } from "../models/modelAvailability";
+import {
+  enabledModelOptions,
+  selectedModelOption,
+} from "../models/modelAvailability";
 import {
   applyCapabilityDefaults,
   capabilityContract,
@@ -77,8 +80,10 @@ export function NodeEditorDialog({ nodeId, onClose, onManageModels }) {
     modelParameter?.default ||
     modelOptions[0]?.value ||
     "";
-  const selectedOption = modelOptions.find(
-    (option) => option.value === currentModel,
+  const selectedOption = selectedModelOption(
+    allModelOptions,
+    modelOptions,
+    currentModel,
   );
   const selectedCapabilities = capabilityContract(selectedOption);
   const effectiveRequiredModels = selectedOption?.modelId
@@ -136,7 +141,6 @@ export function NodeEditorDialog({ nodeId, onClose, onManageModels }) {
           : `${selections.length} selections`;
     }
     if (artifactIds.length) {
-      useRunStore.getState().clearNodeResult(activeNode.id);
       changes.result = {
         status: "READY",
         artifactIds,
@@ -148,6 +152,11 @@ export function NodeEditorDialog({ nodeId, onClose, onManageModels }) {
       };
     }
     update(activeNode.id, changes);
+    useRunStore
+      .getState()
+      .clearNodeResults(
+        downstreamNodeIds([activeNode.id], useEditorStore.getState().edges),
+      );
   }
 
   function selectModel(/** @type {import("../types").ParameterOption} */ option) {
@@ -157,6 +166,11 @@ export function NodeEditorDialog({ nodeId, onClose, onManageModels }) {
         ? applyCapabilityDefaults(activeNode.data.parameters || {}, capabilities, option.value)
         : { ...activeNode.data.parameters, model: option.value },
     });
+    useRunStore
+      .getState()
+      .clearNodeResults(
+        downstreamNodeIds([activeNode.id], useEditorStore.getState().edges),
+      );
   }
 
   return (
@@ -276,7 +290,9 @@ export function NodeEditorDialog({ nodeId, onClose, onManageModels }) {
                     ? "running"
                     : ["SUCCEEDED", "CACHED"].includes(status)
                       ? "success"
-                      : "neutral"
+                      : status === "STALE"
+                        ? "warning"
+                        : "neutral"
               }
             >
               {status}
