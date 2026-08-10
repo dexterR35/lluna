@@ -1,4 +1,8 @@
 -r requirements-test-core.txt
+# torch.onnx.export needs the onnx package to serialize a graph; only the ONNX
+# adapter tests build one, so it stays a test-only dependency (onnxruntime itself
+# ships in the per-backend requirements and needs no help from this).
+onnx>=1.17.0
 pytest-cov==7.0.0
 pytest-mock==3.15.1
 pytest-timeout==2.4.0

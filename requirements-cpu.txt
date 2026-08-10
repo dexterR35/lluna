@@ -2,3 +2,6 @@
 torch==2.7.0
 torchvision==0.22.0
 paddlepaddle==3.0.0
+# ONNX Runtime, CPU build. The -gpu/-directml variants below are mutually
+# exclusive with this one, so each backend group installs exactly one.
+onnxruntime>=1.20.0

@@ -47,7 +47,7 @@ _cancel_generation = 0
 _cancel_lock = threading.Lock()
 _busy = False
 
-MAX_CACHED_MODELS = 1
+MAX_CACHED_MODELS = 1  # floor; the live budget comes from max_cached_models()
 DEFAULT_WIDTH = 768
 DEFAULT_HEIGHT = 768
 MIN_START_INTERVAL_MS = 400
@@ -515,7 +515,12 @@ def _get_runner(mode: GenerateMode, dtype: Optional[str] = None) -> _BaseRunner:
     if runner is not None:
         return runner
 
-    while len(_session_cache) >= MAX_CACHED_MODELS:
+    from backend.tools.shared.memory import max_cached_models
+
+    # Evict least-recently-inserted first; dict preserves insertion order and
+    # _get_runner re-inserts nothing on a hit, so this is FIFO, not true LRU.
+    budget = max(MAX_CACHED_MODELS, max_cached_models())
+    while len(_session_cache) >= budget:
         old_key = next(iter(_session_cache))
         old = _session_cache.pop(old_key, None)
         if old is not None:

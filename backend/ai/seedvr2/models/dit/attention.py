@@ -15,7 +15,10 @@
 import torch
 import torch.nn.functional as F
 
-from flash_attn import flash_attn_varlen_func
+try:
+    from flash_attn import flash_attn_varlen_func
+except ImportError:  # no prebuilt wheel for this platform - see varlen_sdpa
+    from ..varlen_sdpa import flash_attn_varlen_func
 
 from torch import nn
 

@@ -162,7 +162,11 @@ def _bootstrap_python() -> str:
     return bootstrap_reviewed_python(
         env_var="LLUNA_SUPIR_PYTHON",
         versions=("3.10", "3.9", "3.8"),
-        error_message="SUPIR requires Python 3.8–3.10. Install Python 3.10 or set LLUNA_SUPIR_PYTHON.",
+        error_message=(
+            "SUPIR requires Python 3.8-3.10, and one could not be found or downloaded. "
+            "Install Python 3.10 or point LLUNA_SUPIR_PYTHON at an existing one."
+        ),
+        provision=True,
     )
 
 

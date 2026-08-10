@@ -18,6 +18,7 @@ MODEL_FILE_EXTENSIONS = {
     ".bin",
     ".pdmodel",
     ".pdiparams",
+    ".onnx",
 }
 SUPPORTED_ADAPTERS = {
     "diffusers",
@@ -27,6 +28,7 @@ SUPPORTED_ADAPTERS = {
     "lluna-native",
     "supir",
     "seedvr",
+    "onnx",
 }
 SUPPORTED_TASKS = {
     "text-to-image",

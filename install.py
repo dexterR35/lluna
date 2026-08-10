@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 """
-Lluna installer - detects CUDA vs CPU, lets you choose, then installs deps + verifies models.
+Lluna installer - detects CUDA vs CPU, installs deps + verifies models. No prompts.
 
-GPU mode needs NVIDIA drivers (nvidia-smi). You do NOT need the NVIDIA CUDA Toolkit (full SDK) —
-install.py pulls GPU PyTorch/Paddle wheels that bundle the CUDA runtime libs.
+An NVIDIA GPU (nvidia-smi present) gets the CUDA wheels, which also contain the CPU
+kernels, so one install covers both and every CPU-capable model still runs. Machines
+without a usable GPU fall back to the CPU wheels. You do NOT need the NVIDIA CUDA
+Toolkit (full SDK) — the GPU PyTorch/Paddle wheels bundle the CUDA runtime libs.
 
 Usage:
   python install.py
-  python install.py --mode cpu
-  python install.py --mode cuda --yes
-  python install.py --mode directml --yes
-  python install.py --mode mps --yes
+  python install.py --mode cpu       # force CPU wheels on a GPU machine
+  python install.py --mode directml
+  python install.py --mode mps
 """
 
 from __future__ import annotations
@@ -182,10 +183,23 @@ def detect_cuda() -> CudaInfo:
     if not out:
         return CudaInfo(False, message="nvidia-smi returned no GPUs. Default: CPU.")
 
-    first = out.splitlines()[0]
-    parts = [p.strip() for p in first.split(",")]
-    gpu_name = parts[0] if parts else "NVIDIA GPU"
-    compute_cap = parts[2] if len(parts) >= 3 else ""
+    # One wheel serves every GPU in the machine, so it has to satisfy the *newest*
+    # architecture present: picking from index 0 would install cu126 on a
+    # 3060 + 5090 box and leave the 5090 (sm_120) unusable. Older cards keep
+    # working on the newer wheel, so the highest compute capability wins.
+    rows = [[p.strip() for p in line.split(",")] for line in out.splitlines() if line.strip()]
+
+    def _capability(row: list[str]) -> float:
+        try:
+            return float(row[2])
+        except (IndexError, ValueError):
+            return 0.0
+
+    best = max(rows, key=_capability)
+    gpu_name = best[0] if best else "NVIDIA GPU"
+    compute_cap = best[2] if len(best) >= 3 else ""
+    if len(rows) > 1:
+        log(f"Detected {len(rows)} NVIDIA GPUs; building for the newest ({gpu_name}).")
     total_vram_mb = 0.0
     try:
         mem_out = subprocess.check_output(
@@ -195,7 +209,11 @@ def detect_cuda() -> CudaInfo:
             timeout=15,
         ).strip()
         if mem_out:
-            total_vram_mb = float(mem_out.splitlines()[0].strip())
+            # Report the largest card: this figure feeds the "will heavy models
+            # fit" hints, and the smallest GPU in the box does not decide that.
+            total_vram_mb = max(
+                float(line.strip()) for line in mem_out.splitlines() if line.strip()
+            )
     except Exception:
         pass
 
@@ -410,85 +428,17 @@ def map_cuda_tag(
     return driver_tag, reason, warning
 
 
-def choose_mode_gui(default_cuda: bool, detect_msg: str) -> str:
-    import tkinter as tk
-    from tkinter import ttk
-
-    result: dict[str, str] = {"mode": "cuda" if default_cuda else "cpu"}
-
-    root = tk.Tk()
-    root.title("Lluna Installer")
-    root.resizable(False, False)
-    root.attributes("-topmost", True)
-
-    frame = ttk.Frame(root, padding=20)
-    frame.grid()
-
-    ttk.Label(frame, text="Lluna Installer", font=("Segoe UI", 14, "bold")).grid(
-        row=0, column=0, columnspan=2, sticky="w", pady=(0, 8)
-    )
-    ttk.Label(frame, text=detect_msg, wraplength=420).grid(
-        row=1, column=0, columnspan=2, sticky="w", pady=(0, 8)
-    )
-    ttk.Label(frame, text=_NO_CUDA_TOOLKIT_NOTE, wraplength=420).grid(
-        row=2, column=0, columnspan=2, sticky="w", pady=(0, 16)
-    )
-    ttk.Label(frame, text="Choose acceleration:").grid(
-        row=3, column=0, columnspan=2, sticky="w", pady=(0, 8)
-    )
-
-    def pick(mode: str) -> None:
-        result["mode"] = mode
-        root.destroy()
-
-    cuda_btn = ttk.Button(frame, text="CUDA (NVIDIA GPU)", command=lambda: pick("cuda"))
-    cpu_btn = ttk.Button(frame, text="CPU", command=lambda: pick("cpu"))
-    cuda_btn.grid(row=4, column=0, padx=(0, 8), sticky="ew")
-    cpu_btn.grid(row=4, column=1, sticky="ew")
-
-    if default_cuda:
-        cuda_btn.focus_set()
-    else:
-        cpu_btn.focus_set()
-
-    root.update_idletasks()
-    w, h = root.winfo_width(), root.winfo_height()
-    x = (root.winfo_screenwidth() - w) // 2
-    y = (root.winfo_screenheight() - h) // 3
-    root.geometry(f"+{x}+{y}")
-    root.mainloop()
-    return result["mode"]
-
-
-def choose_mode_cli(default_cuda: bool, detect_msg: str, allow_cuda: bool) -> str:
-    log(detect_msg)
-    log("")
-    log(f"  {_NO_CUDA_TOOLKIT_NOTE}")
-    log("")
-    log("  1) CUDA (NVIDIA GPU)")
-    log("  2) CPU")
-    default = "1" if default_cuda else "2"
-    prompt = f"Select [1/2] (default {default}): "
-    while True:
-        choice = input(prompt).strip() or default
-        if choice in {"1", "cuda", "CUDA"}:
-            return "cuda"
-        if choice in {"2", "cpu", "CPU"}:
-            return "cpu"
-        log("Please enter 1 or 2.")
-
-
 def choose_mode(
     cuda: CudaInfo,
-    forced: Optional[str],
-    yes: bool,
+    forced: Optional[str] = None,
     cuda_tag_override: Optional[str] = None,
 ) -> tuple[str, str]:
-    """Return (mode, torch_tag). mode is 'cuda' or 'cpu'."""
-    default_cuda = cuda.available
-    detect_msg = cuda.message
-    if cuda.warning:
-        detect_msg = f"{detect_msg}\n  WARNING: {cuda.warning}"
+    """Return (mode, torch_tag), detected from the hardware. Never prompts.
+
+    CUDA wheels ship the CPU kernels too, so an NVIDIA machine gets one install
+    that covers both; CPU wheels are only for machines without a usable GPU.
+    ``forced`` (from ``--mode``) overrides detection.
+    """
 
     def resolve_tag(mode: str) -> str:
         if mode != "cuda":
@@ -503,40 +453,16 @@ def choose_mode(
             return cuda_tag_override
         return cuda.torch_tag or "cu118"
 
+    log(cuda.message)
     if forced in {"cuda", "cpu", "directml", "mps"}:
         mode = forced
         if mode == "cuda" and not cuda.available:
             log("CUDA was requested but not detected. Falling back to CPU.")
             return "cpu", ""
-        if cuda.warning and mode == "cuda":
-            log(f"WARNING: {cuda.warning}")
-        return mode, resolve_tag(mode)
+    else:
+        mode = "cuda" if cuda.available else "cpu"
 
-    if yes:
-        mode = "cuda" if default_cuda else "cpu"
-        log(detect_msg)
-        if cuda.warning and mode == "cuda":
-            log(f"WARNING: {cuda.warning}")
-        log(
-            f"Non-interactive: installing {mode.upper()}"
-            + (f" ({resolve_tag(mode)})" if mode == "cuda" else "")
-        )
-        return mode, resolve_tag(mode)
-
-    mode = None
-    try:
-        mode = choose_mode_gui(default_cuda, detect_msg)
-    except Exception:
-        mode = None
-
-    if mode is None:
-        mode = choose_mode_cli(default_cuda, detect_msg, allow_cuda=cuda.available)
-
-    if mode == "cuda" and not cuda.available:
-        log("CUDA selected but not available. Falling back to CPU.")
-        return "cpu", ""
-
-    if cuda.warning and mode == "cuda":
+    if mode == "cuda" and cuda.warning:
         log(f"WARNING: {cuda.warning}")
     return mode, resolve_tag(mode)
 
@@ -863,7 +789,7 @@ def install_desktop_dependencies() -> None:
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
-        description="Lluna installer (CUDA auto-detect + CPU/CUDA choice)",
+        description="Lluna installer (CUDA auto-detect, no prompts)",
         epilog=_NO_CUDA_TOOLKIT_NOTE,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -871,7 +797,7 @@ def parse_args() -> argparse.Namespace:
         "--mode",
         choices=["cuda", "cpu", "directml", "mps", "auto"],
         default="auto",
-        help="Force install mode (default: auto-detect then prompt)",
+        help="Force install mode (default: auto-detect from the hardware)",
     )
     p.add_argument(
         "--cuda-tag",
@@ -884,7 +810,7 @@ def parse_args() -> argparse.Namespace:
         "--yes",
         "-y",
         action="store_true",
-        help="Non-interactive: use detected default (CUDA if available, else CPU)",
+        help="Deprecated no-op: the installer is always non-interactive",
     )
     p.add_argument(
         "--schedule-default-models",
@@ -911,7 +837,7 @@ def main() -> int:
     forced = None if args.mode == "auto" else args.mode
     if forced is None and platform.system() == "Darwin":
         forced = "mps"
-    mode, torch_tag = choose_mode(cuda, forced, args.yes, cuda_tag_override=args.cuda_tag)
+    mode, torch_tag = choose_mode(cuda, forced, cuda_tag_override=args.cuda_tag)
 
     python_bin = find_python()
     validate_python(python_bin)

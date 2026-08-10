@@ -92,17 +92,50 @@ class _PendingJob:
 
 class InferClient:
     """
-    Singleton parent-side controller.
-    - One persistent worker process (never two model workers)
-    - One active job at a time
+    Parent-side controller for one inference worker process.
+    - One persistent worker process per device (never two on the same device)
+    - One active job at a time, per worker
     - Same job type while busy: FIFO wait queue (batch / within-tool)
     - Different job type while busy: reject with BUSY (no cross-tool overlap)
     - coalesce=True: single pending slot that cancels/replaces the active job
     - Watchdog: silence → kill → CRASH → respawn
+
+    ``instance()`` remains the default worker and the only one used on a
+    single-GPU machine. ``for_device()`` returns an additional worker pinned to
+    another GPU, which is what allows two model jobs to run at once; each child
+    is pinned with CUDA_VISIBLE_DEVICES so its own code still simply sees cuda:0.
     """
 
     _instance: Optional["InferClient"] = None
     _lock = threading.Lock()
+    _by_device: Dict[str, "InferClient"] = {}
+
+    @classmethod
+    def available_devices(cls) -> tuple:
+        """Devices that currently have (or may have) a worker, best first.
+
+        Multi-worker execution is opt-in: spawning a second CUDA worker doubles
+        resident weights, which is a loss on any machine where the two cards are
+        not both large. LLUNA_INFER_DEVICES="cuda:0,cuda:1" turns it on.
+        """
+        configured = os.environ.get("LLUNA_INFER_DEVICES", "").strip()
+        if not configured:
+            return ("cuda:0",)
+        devices = tuple(item.strip() for item in configured.split(",") if item.strip())
+        return devices or ("cuda:0",)
+
+    @classmethod
+    def for_device(cls, device: str) -> "InferClient":
+        """The worker pinned to ``device``; the default worker for the first one."""
+        if device in {"", "cpu"} or device == cls.available_devices()[0]:
+            return cls.instance()
+        with cls._lock:
+            client = cls._by_device.get(device)
+            if client is None:
+                client = InferClient(device=device)
+                cls._by_device[device] = client
+                atexit.register(client.shutdown)
+            return client
 
     HARD_CANCEL_TYPES = {
         JobType.LAMA_RETOUCH.value,
@@ -111,7 +144,8 @@ class InferClient:
         JobType.SEEDVR.value,
     }
 
-    def __init__(self):
+    def __init__(self, device: str = ""):
+        self._device = device
         self._cmd_queue = None
         self._evt_queue = None
         self._process = None
@@ -185,7 +219,7 @@ class InferClient:
         self._evt_queue = ctx.Queue()
         self._process = ctx.Process(
             target=infer_worker_main,
-            args=(self._cmd_queue, self._evt_queue, hw),
+            args=(self._cmd_queue, self._evt_queue, hw, self._device),
             name="lluna-infer-worker",
             daemon=True,
         )

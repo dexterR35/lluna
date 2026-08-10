@@ -40,6 +40,32 @@ _BIREFNET_WEIGHTS_MB = 800.0
 _BIREFNET_PER_MPX_MB = 600.0
 
 
+# How many heavy pipelines may stay resident at once. One is the only safe answer
+# on the 12-24 GB cards most people run: a single FLUX-class pipeline is 12-24 GB,
+# so a second cached model is not an optimisation, it is an OOM. Above that, the
+# headroom is real and reloading from disk on every node switch is pure waste.
+# Deliberately conservative - keeping a model resident costs nothing but memory,
+# while evicting one only costs load time.
+_CACHE_BUDGET_MB = ((81920.0, 3), (49152.0, 2))
+
+
+def max_cached_models(total_vram_mb: float | None = None) -> int:
+    """Resident-pipeline budget for this machine's largest accelerator."""
+    if total_vram_mb is None:
+        try:
+            from backend.hardware.detector import get_hardware_profile
+
+            gpu = get_hardware_profile().largest_gpu
+            total_vram_mb = gpu.total_vram_mb if gpu else 0.0
+        except (ImportError, OSError, RuntimeError):
+            total_vram_mb = 0.0
+    for threshold, allowance in _CACHE_BUDGET_MB:
+        # Nominal card sizes report slightly low, so match runtimes.py's tolerance.
+        if total_vram_mb >= threshold * 0.95:
+            return allowance
+    return 1
+
+
 class VramBudgetError(RuntimeError):
     """Job cannot fit in available VRAM (or size caps)."""
 

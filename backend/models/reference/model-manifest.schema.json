@@ -21,7 +21,7 @@
       ]
     },
     "adapter": {
-      "enum": ["diffusers", "transformers", "paddle", "lluna-native", "supir"]
+      "enum": ["diffusers", "transformers", "birefnet", "paddle", "lluna-native", "supir", "seedvr", "onnx"]
     },
     "license": { "type": "string" },
     "gated": { "type": "boolean" },

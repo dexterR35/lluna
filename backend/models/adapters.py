@@ -20,7 +20,37 @@ class AdapterError(RuntimeError):
 
 
 class RuntimeAdapter:
+    """Contract every runtime implements: what it can do, and load/run/unload.
+
+    ``supported_tasks`` empty means "no task restriction beyond the manifest".
+    ``probe`` reports whether this adapter's imports resolve right now, which is
+    what lets the platform distinguish "this machine cannot run the model" from
+    "the runtime is not built yet" without importing heavy modules eagerly.
+    """
+
     id = "base"
+    supported_tasks: tuple[str, ...] = ()
+    supported_backends: tuple[str, ...] = ("cpu", "cuda", "directml", "mps")
+    required_modules: tuple[str, ...] = ()
+
+    def probe(self) -> bool:
+        import importlib.util
+
+        return all(
+            importlib.util.find_spec(module) is not None for module in self.required_modules
+        )
+
+    def validate(self, record: DynamicModelRecord) -> tuple[str, ...]:
+        """Reasons this adapter cannot serve ``record``; empty means it can."""
+        reasons: list[str] = []
+        if self.supported_tasks and record.manifest.task not in self.supported_tasks:
+            reasons.append(
+                f"The {self.id} runtime does not implement {record.manifest.task} models."
+            )
+        if not self.probe():
+            missing = ", ".join(self.required_modules)
+            reasons.append(f"The {self.id} runtime is not installed (needs {missing}).")
+        return tuple(reasons)
 
     def load(self, record: DynamicModelRecord, *, dtype: str | None = None) -> Any:
         raise NotImplementedError
@@ -303,9 +333,94 @@ class SeedVRAdapter(RuntimeAdapter):
         raise AdapterError("SeedVR2 models run through the Upscale Image workflow node.")
 
 
+# ONNX Runtime picks its device through "execution providers" rather than a torch
+# device string. Ordered best-first: the session takes the first provider actually
+# available in the installed build (onnxruntime-gpu / -directml / plain CPU) and
+# silently falls back down the list, so one adapter covers all three backends.
+_ONNX_PROVIDERS = {
+    "cuda": "CUDAExecutionProvider",
+    "directml": "DmlExecutionProvider",
+    "cpu": "CPUExecutionProvider",
+}
+
+
+class OnnxAdapter(RuntimeAdapter):
+    """Runs a single .onnx graph through onnxruntime.
+
+    Deliberately generic: tensors in, tensors out. ONNX earns its place for the
+    smaller detection/segmentation/restoration models where it removes a Python
+    implementation and a torch build from the dependency surface, not for
+    diffusion pipelines, which are orchestration as much as they are a graph.
+    """
+
+    id = "onnx"
+    required_modules = ("onnxruntime",)
+    supported_backends = ("cpu", "cuda", "directml")
+
+    def _graph(self, record: DynamicModelRecord):
+        if record.path.is_file() and record.path.suffix.lower() == ".onnx":
+            return record.path
+        candidates = sorted(record.path.glob("*.onnx"))
+        if not candidates:
+            raise AdapterError("An ONNX model folder must contain a .onnx graph.")
+        if len(candidates) > 1:
+            declared = [name for name in record.manifest.expected_files if name.endswith(".onnx")]
+            if len(declared) == 1:
+                return record.path / declared[0]
+            raise AdapterError(
+                "This folder holds several .onnx graphs; name the one to use in "
+                "the manifest's expectedFiles."
+            )
+        return candidates[0]
+
+    def load(self, record: DynamicModelRecord, *, dtype: str | None = None) -> Any:
+        del dtype  # precision is baked into an exported graph
+        import onnxruntime
+
+        available = set(onnxruntime.get_available_providers())
+        preferred = [
+            _ONNX_PROVIDERS[backend]
+            for backend in record.manifest.hardware.backends
+            if backend in _ONNX_PROVIDERS
+        ]
+        providers = [name for name in preferred if name in available]
+        if "CPUExecutionProvider" not in providers:
+            providers.append("CPUExecutionProvider")
+        options = onnxruntime.SessionOptions()
+        # An imported graph is data, not code, but ORT still parses it; keep the
+        # optimiser at its default level rather than enabling extended passes.
+        return onnxruntime.InferenceSession(str(self._graph(record)), options, providers=providers)
+
+    def run(self, loaded: Any, inputs: dict[str, Any], *, progress: Progress = None, cancel_event: CancelEvent = None) -> Any:
+        del progress  # a single ORT Run() call is not divisible into progress steps
+        if cancel_event is not None and cancel_event.is_set():
+            raise AdapterError("Cancelled before the ONNX session ran.")
+        expected = {item.name for item in loaded.get_inputs()}
+        feed = {name: value for name, value in inputs.items() if name in expected}
+        missing = expected - set(feed)
+        if missing:
+            raise AdapterError(
+                f"This graph needs input(s) {', '.join(sorted(missing))}; "
+                f"got {', '.join(sorted(inputs)) or 'nothing'}."
+            )
+        outputs = loaded.run(None, feed)
+        names = [item.name for item in loaded.get_outputs()]
+        return dict(zip(names, outputs))
+
+    def unload(self, loaded: Any) -> None:
+        # ORT frees device memory when the session is collected; drop the handle.
+        del loaded
+
+
 ADAPTERS: dict[str, RuntimeAdapter] = {
     adapter.id: adapter
-    for adapter in (DiffusersAdapter(), TransformersAdapter(), BiRefNetAdapter(), SeedVRAdapter())
+    for adapter in (
+        DiffusersAdapter(),
+        TransformersAdapter(),
+        BiRefNetAdapter(),
+        SeedVRAdapter(),
+        OnnxAdapter(),
+    )
 }
 
 
@@ -313,7 +428,11 @@ class DynamicRuntimeManager:
     _instance: "DynamicRuntimeManager | None" = None
     _lock = threading.Lock()
 
-    def __init__(self, *, cache_size: int = 1) -> None:
+    def __init__(self, *, cache_size: int | None = None) -> None:
+        if cache_size is None:
+            from backend.tools.shared.memory import max_cached_models
+
+            cache_size = max_cached_models()
         self.cache_size = max(1, cache_size)
         self._cache: OrderedDict[str, tuple[RuntimeAdapter, Any]] = OrderedDict()
         self._cache_lock = threading.RLock()
@@ -342,8 +461,11 @@ class DynamicRuntimeManager:
         from backend.models.reference.runtimes import runtime_status
 
         status = runtime_status(record.manifest)
-        if not status["compatible"]:
-            raise AdapterError(" ".join(status["reasons"]))
+        if not status["runnable"]:
+            reasons = list(status["reasons"])
+            if not reasons and not status["installed"]:
+                reasons.append(f"The {status['profile']} runtime is not installed.")
+            raise AdapterError(" ".join(reasons))
         if record.manifest.task in {"text-to-image", "image-to-image", "inpainting"}:
             from backend.models.reference.validation import validate_generation_inputs
 
@@ -356,6 +478,9 @@ class DynamicRuntimeManager:
             adapter = ADAPTERS[record.manifest.adapter]
         except KeyError as exc:
             raise AdapterError(f"No in-process adapter is available for {record.manifest.adapter}.") from exc
+        adapter_issues = adapter.validate(record)
+        if adapter_issues:
+            raise AdapterError(" ".join(adapter_issues))
         cache_key = f"{model_id}:{(dtype or 'auto').strip().lower()}"
         with self._cache_lock:
             cached = self._cache.pop(cache_key, None)

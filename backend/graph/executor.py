@@ -10,6 +10,7 @@ import os
 import shutil
 import tempfile
 import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
@@ -26,6 +27,14 @@ from backend.graph.cache import build_cache_key
 from backend.graph.compiler import compile_workflow
 from backend.graph.registry import NODE_REGISTRY, get_node
 from backend.graph.schema import WorkflowDocument, WorkflowNode
+from backend.graph.scheduler import (
+    LIGHT,
+    DeviceScheduler,
+    concurrency_enabled,
+    execution_waves,
+    node_kind,
+    plan_concurrency,
+)
 from backend.tools.inference.protocol import JobType
 
 
@@ -134,6 +143,22 @@ def _stable_value_hash(value: Any) -> str:
         "utf-8"
     )
     return hashlib.sha256(encoded).hexdigest()
+
+
+class _Progress:
+    """Completed-node counter, since concurrent waves have no single index."""
+
+    def __init__(self, total: int) -> None:
+        self._total = max(1, total)
+        self._done = 0
+        self._lock = threading.Lock()
+
+    def advance(self, control: "_RunControl") -> None:
+        with self._lock:
+            self._done += 1
+            percent = int(self._done * 100 / self._total)
+        with control.lock:
+            control.snapshot.progress = min(100, percent)
 
 
 class _RunControl:
@@ -485,85 +510,7 @@ class RunManager:
         try:
             values = self._boundary_values(workflow, active)
             total = max(len(plan.steps), 1)
-            for index, step in enumerate(plan.steps):
-                self._wait_if_paused(control)
-                if control.cancel.is_set():
-                    raise ExecutionFailure("CANCELLED", "Run cancelled.")
-                node = nodes[step.node_id]
-                definition = NODE_REGISTRY[node.schema_id]
-                input_values: dict[str, Any] = {}
-                for port_id, sources in incoming.get(node.id, {}).items():
-                    connected = [values[source] for source in sources if source in values]
-                    if not connected:
-                        continue
-                    if len(connected) == 1:
-                        input_values[port_id] = connected[0]
-                        continue
-                    combined: list[Any] = []
-                    for value in connected:
-                        combined.extend(value if isinstance(value, (list, tuple)) else [value])
-                    input_values[port_id] = combined
-                input_artifacts = _artifact_values(input_values)
-                input_hashes = [item.content_hash for item in input_artifacts]
-                if "llava" in input_values:
-                    input_hashes.append(f"llava:{_stable_value_hash(input_values['llava'])}")
-                cache_key = build_cache_key(
-                    node,
-                    input_hashes,
-                    model_revision=_model_revision_for_node(node),
-                )
-                has_batch_input = any(
-                    isinstance(value, (list, tuple)) for value in input_values.values()
-                )
-                cached_id = (
-                    self._cache.get(cache_key)
-                    if get_settings().runtime.smart_cache_enabled
-                    and not control.force
-                    and definition.cache_policy == "content-addressed"
-                    and not has_batch_input
-                    else None
-                )
-                if cached_id:
-                    try:
-                        artifact = self._artifacts.get(cached_id)
-                        result = artifact
-                        self._node_state(control, node.id, "CACHED", 100, "Loaded from cache")
-                        with control.lock:
-                            control.snapshot.nodes[node.id].artifact_ids = [artifact.artifact_id]
-                        self._events.publish(
-                            "node.cached",
-                            run_id=snapshot.run_id,
-                            node_id=node.id,
-                            payload={"artifactIds": [artifact.artifact_id]},
-                        )
-                    except (KeyError, FileNotFoundError):
-                        result = self._run_node(
-                            control, node, input_values, input_artifacts, cache_key
-                        )
-                else:
-                    result = self._run_node(control, node, input_values, input_artifacts, cache_key)
-                output_ports = definition.outputs
-                if isinstance(result, dict) and not isinstance(result, ArtifactRecord):
-                    for port_id, value in result.items():
-                        values[(node.id, port_id)] = value
-                elif output_ports and result is not None:
-                    for port in output_ports:
-                        values[(node.id, port.id)] = result
-                result_artifacts = _artifact_values(result)
-                if result_artifacts:
-                    with control.lock:
-                        snapshot.artifact_ids.extend(
-                            artifact.artifact_id for artifact in result_artifacts
-                        )
-                    if (
-                        isinstance(result, ArtifactRecord)
-                        and definition.cache_policy == "content-addressed"
-                    ):
-                        with self._cache_lock:
-                            self._cache[cache_key] = result.artifact_id
-                            self._save_cache()
-                with control.lock:
-                    snapshot.progress = int((index + 1) * 100 / total)
+            self._run_steps(control, plan, nodes, incoming, values, total)
             with control.lock:
                 snapshot.status = RunStatus.COMPLETED
                 snapshot.progress = 100
@@ -622,6 +569,173 @@ class RunManager:
                 node_id=snapshot.current_node_id,
                 payload=error,
             )
+
+    def _run_steps(
+        self,
+        control: _RunControl,
+        plan: Any,
+        nodes: dict[str, WorkflowNode],
+        incoming: dict[str, dict[str, list[tuple[str, str]]]],
+        values: dict[tuple[str, str], Any],
+        total: int,
+    ) -> None:
+        """Execute every planned node, running independent branches together.
+
+        Nodes are grouped into dependency waves; within a wave, order no longer
+        matters by construction, so they are handed to a pool. Admission is what
+        keeps this safe: `DeviceScheduler` allows only one model-backed node onto
+        an inference device at a time, so concurrency buys overlap between CPU
+        work and GPU work rather than two pipelines fighting over VRAM.
+        """
+        order = [step.node_id for step in plan.steps]
+        kinds = {
+            node_id: node_kind(NODE_REGISTRY[nodes[node_id].schema_id]) for node_id in order
+        }
+        waves = execution_waves(order, control.workflow.edges)
+        scheduler = DeviceScheduler(heavy_devices=self._heavy_devices())
+        values_lock = threading.Lock()
+        progress = _Progress(total)
+
+        for wave in waves:
+            workers = plan_concurrency(wave, kinds, scheduler) if concurrency_enabled() else 1
+            if workers <= 1 or len(wave) == 1:
+                for node_id in wave:
+                    self._run_step(
+                        control, nodes[node_id], incoming, values, values_lock, scheduler, kinds
+                    )
+                    progress.advance(control)
+                continue
+            # A failure in any branch must stop the others rather than let the run
+            # limp on; the cancel flag is the same one the Stop button sets.
+            with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="lluna-node") as pool:
+                futures = {
+                    pool.submit(
+                        self._run_step,
+                        control,
+                        nodes[node_id],
+                        incoming,
+                        values,
+                        values_lock,
+                        scheduler,
+                        kinds,
+                    ): node_id
+                    for node_id in wave
+                }
+                failure: BaseException | None = None
+                for future in as_completed(futures):
+                    try:
+                        future.result()
+                    except BaseException as exc:  # noqa: BLE001 - re-raised below
+                        if failure is None:
+                            failure = exc
+                            control.cancel.set()
+                    else:
+                        progress.advance(control)
+            if failure is not None:
+                raise failure
+
+    def _heavy_devices(self) -> tuple[str, ...]:
+        """Devices that may hold a model-backed node concurrently.
+
+        One entry means today's behaviour exactly: heavy nodes take turns. The
+        shared inference worker is a single process serving one job at a time, so
+        a second GPU only becomes a second slot once a worker is pinned to it -
+        see InferClient.for_device().
+        """
+        from backend.tools.inference.client import InferClient
+
+        return InferClient.available_devices()
+
+    def _run_step(
+        self,
+        control: _RunControl,
+        node: WorkflowNode,
+        incoming: dict[str, dict[str, list[tuple[str, str]]]],
+        values: dict[tuple[str, str], Any],
+        values_lock: threading.Lock,
+        scheduler: DeviceScheduler,
+        kinds: dict[str, str],
+    ) -> None:
+        snapshot = control.snapshot
+        self._wait_if_paused(control)
+        if control.cancel.is_set():
+            raise ExecutionFailure("CANCELLED", "Run cancelled.")
+        definition = NODE_REGISTRY[node.schema_id]
+        input_values: dict[str, Any] = {}
+        with values_lock:
+            for port_id, sources in incoming.get(node.id, {}).items():
+                connected = [values[source] for source in sources if source in values]
+                if not connected:
+                    continue
+                if len(connected) == 1:
+                    input_values[port_id] = connected[0]
+                    continue
+                combined: list[Any] = []
+                for value in connected:
+                    combined.extend(value if isinstance(value, (list, tuple)) else [value])
+                input_values[port_id] = combined
+        input_artifacts = _artifact_values(input_values)
+        input_hashes = [item.content_hash for item in input_artifacts]
+        if "llava" in input_values:
+            input_hashes.append(f"llava:{_stable_value_hash(input_values['llava'])}")
+        cache_key = build_cache_key(
+            node,
+            input_hashes,
+            model_revision=_model_revision_for_node(node),
+        )
+        has_batch_input = any(isinstance(value, (list, tuple)) for value in input_values.values())
+        with self._cache_lock:
+            cached_id = (
+                self._cache.get(cache_key)
+                if get_settings().runtime.smart_cache_enabled
+                and not control.force
+                and definition.cache_policy == "content-addressed"
+                and not has_batch_input
+                else None
+            )
+        result = None
+        ran = False
+        if cached_id:
+            try:
+                artifact = self._artifacts.get(cached_id)
+                result = artifact
+                self._node_state(control, node.id, "CACHED", 100, "Loaded from cache")
+                with control.lock:
+                    control.snapshot.nodes[node.id].artifact_ids = [artifact.artifact_id]
+                self._events.publish(
+                    "node.cached",
+                    run_id=snapshot.run_id,
+                    node_id=node.id,
+                    payload={"artifactIds": [artifact.artifact_id]},
+                )
+                ran = True
+            except (KeyError, FileNotFoundError):
+                ran = False
+        if not ran:
+            # The slot is held only around the work itself: cache hits and input
+            # assembly must never occupy a device other nodes are waiting for.
+            with scheduler.slot(kinds.get(node.id, LIGHT)):
+                if control.cancel.is_set():
+                    raise ExecutionFailure("CANCELLED", "Run cancelled.")
+                result = self._run_node(control, node, input_values, input_artifacts, cache_key)
+        output_ports = definition.outputs
+        with values_lock:
+            if isinstance(result, dict) and not isinstance(result, ArtifactRecord):
+                for port_id, value in result.items():
+                    values[(node.id, port_id)] = value
+            elif output_ports and result is not None:
+                for port in output_ports:
+                    values[(node.id, port.id)] = result
+        result_artifacts = _artifact_values(result)
+        if result_artifacts:
+            with control.lock:
+                snapshot.artifact_ids.extend(
+                    artifact.artifact_id for artifact in result_artifacts
+                )
+            if isinstance(result, ArtifactRecord) and definition.cache_policy == "content-addressed":
+                with self._cache_lock:
+                    self._cache[cache_key] = result.artifact_id
+                    self._save_cache()
 
     def _boundary_values(
         self,

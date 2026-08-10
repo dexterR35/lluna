@@ -2,3 +2,5 @@
 torch==2.7.0
 torchvision==0.22.0
 paddlepaddle==3.0.0
+# ONNX Runtime, CPU build (the macOS wheel carries CoreML/CPU providers).
+onnxruntime>=1.20.0

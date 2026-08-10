@@ -19,7 +19,7 @@ def detect_nvidia_smi_gpus() -> tuple[GpuInfo, ...]:
         output = subprocess.check_output(  # noqa: S603  # nosec B603
             [
                 executable,
-                "--query-gpu=name,memory.total,memory.free,driver_version,compute_cap",
+                "--query-gpu=name,memory.total,memory.free,driver_version,compute_cap,index,uuid",
                 "--format=csv,noheader,nounits",
             ],
             text=True,
@@ -29,7 +29,7 @@ def detect_nvidia_smi_gpus() -> tuple[GpuInfo, ...]:
     except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
         return ()
     detected: list[GpuInfo] = []
-    for row in csv.reader(output.splitlines()):
+    for position, row in enumerate(csv.reader(output.splitlines())):
         if len(row) < 5:
             continue
         try:
@@ -37,6 +37,10 @@ def detect_nvidia_smi_gpus() -> tuple[GpuInfo, ...]:
             available = float(row[2].strip())
         except ValueError:
             total = available = 0.0
+        try:
+            index = int(row[5].strip()) if len(row) >= 6 else position
+        except ValueError:
+            index = position
         detected.append(
             GpuInfo(
                 vendor="NVIDIA",
@@ -47,6 +51,8 @@ def detect_nvidia_smi_gpus() -> tuple[GpuInfo, ...]:
                 cuda_driver_version="",
                 compute_capability=row[4].strip(),
                 confidence=Confidence.REPORTED,
+                index=index,
+                uuid=row[6].strip() if len(row) >= 7 else "",
             )
         )
     return tuple(detected)
@@ -80,6 +86,8 @@ def detect_torch_cuda_gpus() -> tuple[GpuInfo, ...]:
                     cuda_runtime_version=str(getattr(torch.version, "cuda", "") or ""),
                     compute_capability=capability,
                     confidence=Confidence.VERIFIED,
+                    index=index,
+                    uuid=str(getattr(props, "uuid", "") or ""),
                 )
             )
         return tuple(gpus)
@@ -109,6 +117,7 @@ def detect_gpus() -> tuple[GpuInfo, ...]:
                 cuda_driver_version=reported.cuda_driver_version,
                 compute_capability=torch_gpu.compute_capability or reported.compute_capability,
                 confidence=Confidence.VERIFIED,
+                uuid=torch_gpu.uuid or reported.uuid,
             )
         )
     return tuple(merged)

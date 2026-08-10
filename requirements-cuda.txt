@@ -4,3 +4,5 @@ paddlepaddle==3.0.0
 # INT8/INT4 quantized loading for custom Diffusers models (backend/models/adapters.py).
 # CUDA-only; not installed for the DirectML/macOS/CPU backend groups.
 bitsandbytes>=0.43.0
+# ONNX Runtime, CUDA build (conflicts with plain onnxruntime; see requirements-cpu.txt).
+onnxruntime-gpu>=1.20.0

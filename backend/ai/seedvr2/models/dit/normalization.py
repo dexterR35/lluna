@@ -40,8 +40,20 @@ def get_norm_layer(norm_type: Optional[str]) -> norm_layer_type:
                 elementwise_affine=elementwise_affine,
             )
 
+        # Apex only publishes prebuilt wheels for Linux, and building it from
+        # source needs a CUDA Toolkit on the user's machine. Its fused kernels
+        # compute the same functions as torch's own LayerNorm/RMSNorm, so when
+        # apex is absent we fall back to those: same maths and same weight
+        # names, just without the fused-kernel speedup.
         if norm_type == "fusedln":
-            from apex.normalization import FusedLayerNorm
+            try:
+                from apex.normalization import FusedLayerNorm
+            except ImportError:
+                return nn.LayerNorm(
+                    normalized_shape=dim,
+                    eps=eps,
+                    elementwise_affine=elementwise_affine,
+                )
 
             return FusedLayerNorm(
                 normalized_shape=dim,
@@ -50,7 +62,14 @@ def get_norm_layer(norm_type: Optional[str]) -> norm_layer_type:
             )
 
         if norm_type == "fusedrms":
-            from apex.normalization import FusedRMSNorm
+            try:
+                from apex.normalization import FusedRMSNorm
+            except ImportError:
+                return RMSNorm(
+                    dim=dim,
+                    eps=eps,
+                    elementwise_affine=elementwise_affine,
+                )
 
             return FusedRMSNorm(
                 normalized_shape=dim,

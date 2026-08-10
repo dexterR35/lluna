@@ -9,13 +9,78 @@ duplicating it.
 from __future__ import annotations
 
 import hashlib
+import importlib
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 from typing import Sequence
 
 from backend.core.atomic import atomic_write_json
+
+
+def _uv_executable() -> str | None:
+    """Return a usable ``uv`` binary, preferring one already on PATH.
+
+    Falls back to the ``uv`` PyPI package installed into this interpreter, which
+    ships the binary and exposes its path via ``uv.find_uv_bin()``.
+    """
+    found = shutil.which("uv")
+    if found:
+        return found
+    for attempt in range(2):
+        try:
+            import uv  # noqa: PLC0415 - optional, resolved lazily
+
+            binary = str(uv.find_uv_bin())
+            if Path(binary).is_file():
+                return binary
+        except (ImportError, AttributeError, FileNotFoundError):
+            pass
+        if attempt:
+            break
+        result = subprocess.run(  # noqa: S603 - fixed argv, current interpreter
+            [sys.executable, "-m", "pip", "install", "--quiet", "uv"],
+            capture_output=True,
+            text=True,
+            timeout=600,
+            check=False,
+        )
+        if result.returncode != 0:
+            return None
+        importlib.invalidate_caches()
+    return None
+
+
+def provision_python(version: str) -> str | None:
+    """Download a managed CPython ``version`` with uv and return its path.
+
+    Returns ``None`` when uv is unavailable or the download fails; callers treat
+    that as "no interpreter" rather than a hard error.
+    """
+    uv_bin = _uv_executable()
+    if uv_bin is None:
+        return None
+    try:
+        subprocess.run(  # noqa: S603 - resolved uv binary, fixed argv
+            [uv_bin, "python", "install", version],
+            capture_output=True,
+            text=True,
+            timeout=1800,
+            check=True,
+        )
+        found = subprocess.run(  # noqa: S603 - resolved uv binary, fixed argv
+            [uv_bin, "python", "find", version],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=True,
+        )
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
+        return None
+    candidate = found.stdout.strip()
+    return candidate if candidate and Path(candidate).is_file() else None
 
 
 def bootstrap_reviewed_python(
@@ -23,13 +88,21 @@ def bootstrap_reviewed_python(
     env_var: str,
     versions: tuple[str, ...],
     error_message: str,
+    provision: bool = False,
 ) -> str:
     """Locate a Python interpreter matching one of ``versions``.
 
     Checks (in order): the interpreter pinned by ``env_var``, bare
     ``pythonX.Y`` on PATH, and any matching interpreter managed by ``uv``
     (``~/.local/share/uv/python`` on POSIX, ``%LOCALAPPDATA%\\uv\\python`` on
-    Windows). Raises ``RuntimeError(error_message)`` if none match.
+    Windows). When none match and ``provision`` is set, the first of
+    ``versions`` is downloaded with uv, so a machine that has never installed
+    that Python version still gets a working runtime. Raises
+    ``RuntimeError(error_message)`` if every route fails.
+
+    ``provision`` defaults to off so that merely *asking* which interpreter would
+    be used never downloads one; installers opt in when they are about to build a
+    runtime.
     """
     configured = os.environ.get(env_var, "").strip()
     candidates: list[str | Path] = [configured] if configured else []
@@ -82,6 +155,10 @@ def bootstrap_reviewed_python(
         )
         if result.returncode == 0 and result.stdout.strip() in versions:
             return executable
+    if provision and versions:
+        provisioned = provision_python(versions[0])
+        if provisioned:
+            return provisioned
     raise RuntimeError(error_message)
 
 

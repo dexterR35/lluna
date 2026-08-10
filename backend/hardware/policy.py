@@ -23,6 +23,16 @@ def select_execution_policy(
     # CUDA is the preferred backend whenever it is usable. DirectML and MPS
     # remain GPU fallbacks for machines without CUDA.
     if caps.torch_cuda:
+        # On a mixed machine the biggest card, not index 0, is the one that
+        # decides which models fit; addressing it explicitly keeps heavy work off
+        # a small display GPU that happens to be enumerated first.
+        gpu = profile.largest_gpu
+        if gpu is not None and len(profile.gpus) > 1:
+            return ExecutionPolicy(
+                "cuda",
+                gpu.device_id,
+                (f"Torch CUDA is available; selected {gpu.model or gpu.device_id}.",),
+            )
         return ExecutionPolicy("cuda", "cuda:0", ("Torch CUDA is available.",))
     if caps.torch_directml:
         return ExecutionPolicy("directml", "privateuseone", ("DirectML is available.",))

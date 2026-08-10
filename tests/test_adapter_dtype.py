@@ -309,7 +309,13 @@ def test_runtime_manager_cache_key_is_dtype_aware(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(DynamicModelRegistry, "_instance", _StubRegistry(record))
     monkeypatch.setattr(
         "backend.models.reference.runtimes.runtime_status",
-        lambda _manifest: {"compatible": True, "reasons": []},
+        lambda _manifest: {
+            "compatible": True,
+            "runnable": True,
+            "installed": True,
+            "profile": "transformers-torch",
+            "reasons": [],
+        },
     )
     fake_adapter = _RecordingAdapter()
     monkeypatch.setitem(sys.modules, "backend.models.adapters", sys.modules["backend.models.adapters"])

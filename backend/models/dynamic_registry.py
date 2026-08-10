@@ -45,6 +45,9 @@ class DynamicModelRecord:
             if self.installed
             else "not_installed"
         )
+        # Model installed, runtime installed and hardware compatible are three
+        # independent facts; a model is only usable when all three hold.
+        runnable = self.installed and not needs_configuration and status["runnable"]
         return {
             "id": self.manifest.id,
             "display_name": self.manifest.name,
@@ -55,7 +58,8 @@ class DynamicModelRecord:
             "gated": self.manifest.gated,
             "resolved_path": str(self.path),
             "installed": self.installed,
-            "enabled": self.enabled and self.installed and not needs_configuration and status["compatible"],
+            "enabled": self.enabled and runnable,
+            "runtime_installed": status["installed"],
             "state": state,
             "disk_usage_bytes": _disk_usage(self.path),
             # Only "huggingface" has a working installer (importer.py's
@@ -65,7 +69,7 @@ class DynamicModelRecord:
             # installable here would promise something that always fails.
             "can_install": self.manifest.source.type == "huggingface" and not self.installed,
             "can_uninstall": True,
-            "can_toggle": not needs_configuration and status["compatible"],
+            "can_toggle": not needs_configuration and status["runnable"],
             "dynamic": True,
             "discovered": self.discovered,
             "needs_configuration": needs_configuration,
@@ -311,13 +315,26 @@ def _fingerprint(records: dict[str, DynamicModelRecord]) -> tuple:
 
 
 def _path_stamp(path: Path, expected_files: tuple[str, ...]) -> tuple[int, int]:
+    """Cheap fingerprint of everything that can change a model's output.
+
+    Watches every recognized weight file on disk, not just the manifest's
+    ``expected_files``: a discovered or hand-edited model may declare an
+    incomplete list, and a weight file swapped in place keeps the directory's
+    own mtime, so a stamp built only from the declared list would not move and
+    node caches would serve artifacts produced by the previous weights.
+
+    Metadata only (mtime plus size) - hashing multi-gigabyte weights on every
+    inventory refresh would cost far more than it is worth here.
+    """
     try:
         if path.is_file():
             stat = path.stat()
             return stat.st_mtime_ns, stat.st_size
-        watched = [path / MANIFEST_FILENAME, path / ".lluna-installed"]
-        watched.extend(path / relative for relative in expected_files)
-        stamps = [item.stat() for item in watched if item.is_file()]
+        watched = {path / MANIFEST_FILENAME, path / ".lluna-installed"}
+        watched.update(path / relative for relative in expected_files)
+        watched.update(model_files(path))
+        watched.update(item for item in path.glob("*.json"))
+        stamps = [item.stat() for item in sorted(watched) if item.is_file()]
         root = path.stat()
         return max((stamp.st_mtime_ns for stamp in stamps), default=root.st_mtime_ns), sum(
             stamp.st_size for stamp in stamps

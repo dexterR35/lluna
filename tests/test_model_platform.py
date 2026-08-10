@@ -16,6 +16,7 @@ from backend.api.app import create_app
 from backend.artifacts.store import DesktopGrantStore
 from backend.core.paths import AppPaths
 from backend.graph.registry import list_nodes
+from backend.tools.installers import _shared
 from backend.graph.schema import WorkflowDocument, WorkflowNode
 from backend.graph.validation import validate_workflow
 from backend.models.dynamic_registry import DynamicModelRegistry
@@ -417,9 +418,53 @@ def test_supir_rejects_configured_unsupported_python(tmp_path, monkeypatch) -> N
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("PATH", "")
     monkeypatch.setenv("LLUNA_SUPIR_PYTHON", str(python))
+    # Provisioning would otherwise download a real interpreter; this test is about
+    # refusing the *configured* one, which test_supir_provisions_python covers next.
+    monkeypatch.setattr(_shared, "provision_python", lambda version: None)
 
-    with pytest.raises(RuntimeError, match="Python 3.8–3.10"):
+    with pytest.raises(RuntimeError, match="Python 3.8-3.10"):
         supir_models._bootstrap_python()
+
+
+def test_supir_provisions_python_when_none_is_installed(tmp_path, monkeypatch) -> None:
+    """A machine that has never installed Python 3.10 must still get a runtime."""
+    from backend.tools.installers import supir as supir_models
+
+    provisioned = tmp_path / "managed-python3.10"
+    provisioned.write_text("#!/bin/sh\nprintf '3.10\\n'\n", encoding="utf-8")
+    requested: list[str] = []
+
+    def fake_provision(version: str) -> str:
+        requested.append(version)
+        return str(provisioned)
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("PATH", "")
+    monkeypatch.delenv("LLUNA_SUPIR_PYTHON", raising=False)
+    monkeypatch.setattr(_shared, "provision_python", fake_provision)
+
+    assert supir_models._bootstrap_python() == str(provisioned)
+    assert requested == ["3.10"]
+
+
+def test_looking_up_an_interpreter_never_downloads_one(monkeypatch) -> None:
+    """Provisioning is an installer step, not a side effect of asking a question."""
+    called = False
+
+    def fake_provision(version: str) -> str | None:
+        nonlocal called
+        called = True
+        return None
+
+    monkeypatch.setattr(_shared, "provision_python", fake_provision)
+    monkeypatch.setenv("PATH", "")
+
+    with pytest.raises(RuntimeError):
+        _shared.bootstrap_reviewed_python(
+            env_var="LLUNA_UNUSED_PYTHON", versions=("3.10",), error_message="nope"
+        )
+
+    assert called is False
 
 
 def test_supir_run_throws_clear_error_without_cuda(monkeypatch) -> None:

@@ -119,7 +119,11 @@ def _bootstrap_python() -> str:
     return bootstrap_reviewed_python(
         env_var="LLUNA_BIREFNET_PYTHON",
         versions=("3.11", "3.10", "3.12"),
-        error_message="BiRefNet requires Python 3.10-3.12. Install one or set LLUNA_BIREFNET_PYTHON.",
+        error_message=(
+            "BiRefNet requires Python 3.10-3.12, and one could not be found or downloaded. "
+            "Install one or point LLUNA_BIREFNET_PYTHON at an existing one."
+        ),
+        provision=True,
     )
 
 

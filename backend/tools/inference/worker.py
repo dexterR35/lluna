@@ -137,8 +137,20 @@ def _release_all_except(keep: Optional[str] = None) -> None:
     empty_cuda_cache()
 
 
-def infer_worker_main(cmd_queue, evt_queue, hardware_accel: bool = True) -> None:
-    """Child process entry: long-lived control loop."""
+def infer_worker_main(
+    cmd_queue, evt_queue, hardware_accel: bool = True, device: str = ""
+) -> None:
+    """Child process entry: long-lived control loop.
+
+    ``device`` pins this worker to one GPU. Pinning happens through
+    CUDA_VISIBLE_DEVICES before any framework is imported, so every runtime in
+    this process keeps addressing its GPU as cuda:0 and needs no device argument
+    threaded through it. This must stay the first statement in the function:
+    once torch has initialised CUDA, the variable is ignored.
+    """
+    if device.startswith("cuda:"):
+        os.environ["CUDA_VISIBLE_DEVICES"] = device.split(":", 1)[1]
+
     from backend.ai.runtimes.paddle import disable_paddle_background_services
 
     # Must happen before hardware/framework detection can import native code.

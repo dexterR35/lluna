@@ -22,8 +22,17 @@ def test_supported_python_policy(monkeypatch):
 
 def test_explicit_hardware_modes():
     cuda = install.CudaInfo(False)
-    assert install.choose_mode(cuda, "directml", True) == ("directml", "")
-    assert install.choose_mode(cuda, "mps", True) == ("mps", "")
+    assert install.choose_mode(cuda, "directml") == ("directml", "")
+    assert install.choose_mode(cuda, "mps") == ("mps", "")
+
+
+def test_mode_is_detected_without_prompting(monkeypatch):
+    monkeypatch.setattr("builtins.input", lambda *a: pytest.fail("installer must not prompt"))
+    assert install.choose_mode(install.CudaInfo(False)) == ("cpu", "")
+    assert install.choose_mode(install.CudaInfo(True, torch_tag="cu128")) == ("cuda", "cu128")
+    # A GPU machine forced to CPU still installs; CUDA requested without a GPU degrades.
+    assert install.choose_mode(install.CudaInfo(True, torch_tag="cu128"), "cpu") == ("cpu", "")
+    assert install.choose_mode(install.CudaInfo(False), "cuda") == ("cpu", "")
 
 
 def test_source_installer_bootstraps_electron_not_legacy_launchers():

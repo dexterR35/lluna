@@ -7,6 +7,10 @@ from backend.models.reference.metadata import ModelMetadata as M
 
 _UPSTREAM = "See upstream model card"
 _TORCH_BACKENDS = ("cpu", "cuda", "directml", "mps")
+# Models with a minimum_vram_mb floor are rejected outright on the CPU backend by
+# compatible_backend(), so listing "cpu" for them would advertise a capability the
+# platform refuses. Use this for anything that declares a VRAM requirement.
+_ACCELERATED_BACKENDS = ("cuda", "directml", "mps")
 _BIREFNET_BACKENDS = ("cpu", "cuda", "mps")
 
 REALESRGAN_X2_ARTIFACT = F(
@@ -125,7 +129,7 @@ MODEL_REGISTRY: dict[str, M] = {
             (F("infer_model.pth"),),
             minimum_ram_mb=4096,
             minimum_vram_mb=4096,
-            compatible_backends=_TORCH_BACKENDS,
+            compatible_backends=_ACCELERATED_BACKENDS,
             enabled_by_default=True,
         ),
         M(
@@ -140,7 +144,7 @@ MODEL_REGISTRY: dict[str, M] = {
             (F("sttn.pth"),),
             minimum_ram_mb=4096,
             minimum_vram_mb=4096,
-            compatible_backends=_TORCH_BACKENDS,
+            compatible_backends=_ACCELERATED_BACKENDS,
         ),
         M(
             "lama",
@@ -168,7 +172,7 @@ MODEL_REGISTRY: dict[str, M] = {
             (F("ProPainter.pth"), F("raft-things.pth"), F("recurrent_flow_completion.pth")),
             minimum_ram_mb=8192,
             minimum_vram_mb=8192,
-            compatible_backends=_TORCH_BACKENDS,
+            compatible_backends=_ACCELERATED_BACKENDS,
         ),
         M(
             "paddleocr-server",
@@ -300,7 +304,7 @@ MODEL_REGISTRY: dict[str, M] = {
             "backend/models/select_object",
             minimum_ram_mb=8192,
             minimum_vram_mb=4500,
-            compatible_backends=_TORCH_BACKENDS,
+            compatible_backends=_ACCELERATED_BACKENDS,
         ),
         M(
             "grounding-dino",
@@ -313,7 +317,7 @@ MODEL_REGISTRY: dict[str, M] = {
             "backend/models/select_object",
             minimum_ram_mb=8192,
             minimum_vram_mb=4500,
-            compatible_backends=_TORCH_BACKENDS,
+            compatible_backends=_ACCELERATED_BACKENDS,
         ),
         M(
             "flux",

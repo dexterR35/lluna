@@ -103,7 +103,7 @@ The installer creates the `llunaEnv` Python environment, picks the right depende
 
 ```bash
 chmod +x install.sh   # only if the script is not already executable
-./install.sh --mode auto
+./install.sh
 ```
 
 **Windows**
@@ -112,23 +112,28 @@ chmod +x install.sh   # only if the script is not already executable
 install.bat
 ```
 
-`--mode auto` detects your hardware. You can also pick a profile explicitly, and add `--yes` to skip the interactive confirmation:
+The install is non-interactive and detects your hardware: an NVIDIA GPU gets the CUDA
+wheels, anything else gets CPU wheels (Apple silicon gets MPS). The CUDA wheels include
+the CPU kernels, so a GPU install covers both — there is no separate CPU install to add,
+and CPU-capable models such as BiRefNet, LaMa, Real-ESRGAN, MIRNet, and PaddleOCR simply
+run on the GPU instead.
+
+You can still force a profile:
 
 ```bash
-./install.sh --mode cpu
-./install.sh --mode cuda --yes
-./install.sh --mode directml --yes
-./install.sh --mode mps --yes
+./install.sh --mode cpu        # CPU wheels even on a GPU machine
+./install.sh --mode directml
+./install.sh --mode mps
 ```
 
 ```bat
-install.bat --mode cuda --yes
+install.bat --mode cpu
 ```
 
 Optionally, queue a small starter set of models (Real-ESRGAN x2, MIRNet LOL, and the fast SAM2 + Grounding DINO pair) to download during install:
 
 ```bash
-./install.sh --mode auto --schedule-default-models
+./install.sh --schedule-default-models
 ```
 
 ### 3. Start Lluna
@@ -281,7 +286,7 @@ See [packaging/build.py](packaging/build.py) for packaged builds and frozen side
 
 ```bash
 git pull
-./install.sh --mode auto        # install.bat --mode auto on Windows
+./install.sh                    # install.bat on Windows
 npm install --allow-git=all
 npm run dev
 ```

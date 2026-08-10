@@ -1,3 +1,6 @@
 -r requirements.txt
 torch-directml==0.2.5.dev240914
 paddlepaddle==3.0.0
+# ONNX Runtime, DirectML build: the only runtime that reaches AMD/Intel GPUs on
+# Windows (conflicts with plain onnxruntime; see requirements-cpu.txt).
+onnxruntime-directml>=1.20.0

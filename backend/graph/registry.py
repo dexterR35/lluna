@@ -1189,7 +1189,7 @@ def _build_catalog() -> list[NodeDefinition]:
             if record.installed
             and record.enabled
             and record.manifest.is_configured()
-            and runtime_status(record.manifest)["compatible"]
+            and runtime_status(record.manifest)["runnable"]
         ]
         def _diffusers_option(record) -> dict:
             model_option = option(
