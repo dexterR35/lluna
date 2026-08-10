@@ -5,11 +5,14 @@ from __future__ import annotations
 import inspect
 import threading
 from collections import OrderedDict
-from typing import Any, Callable
+from typing import Any, Callable, Sequence
 
 from PIL import Image
 
 from backend.models.dynamic_registry import DynamicModelRecord, DynamicModelRegistry
+from backend.models.controlnet import call_kwargs as controlnet_kwargs
+from backend.models.controlnet import composed as controlnet_composed
+from backend.models.lora import applied as lora_applied
 
 Progress = Callable[[int], None] | None
 CancelEvent = threading.Event | None
@@ -246,7 +249,14 @@ class DiffusersAdapter(RuntimeAdapter):
             if "mask_image" not in parameters:
                 raise AdapterError(f"{type(pipeline).__name__} does not support inpainting.")
             kwargs["mask_image"] = mask_image
-        result = pipeline(**kwargs)
+        # Both kinds of conditioning are composed for this call only; the manager
+        # caches loaded pipelines, so neither may outlive the generation that
+        # asked for it. ControlNet wraps the pipeline (a different class), LoRA
+        # merges into it, so the ControlNet view is what actually gets called.
+        controlnets = inputs.get("controlnets") or ()
+        with lora_applied(pipeline, inputs.get("loras") or ()):
+            with controlnet_composed(pipeline, controlnets) as active:
+                result = active(**kwargs, **controlnet_kwargs(controlnets))
         images = getattr(result, "images", None)
         if not images:
             raise AdapterError("The Diffusers pipeline returned no image.")
@@ -517,6 +527,8 @@ def generate_with_custom_model(
     strength: float | None = None,
     progress: Progress = None,
     cancel_event: CancelEvent = None,
+    loras: "Sequence[Any]" = (),
+    controlnets: "Sequence[Any]" = (),
 ) -> Image.Image:
     result = DynamicRuntimeManager.instance().run(
         model_id,
@@ -529,6 +541,8 @@ def generate_with_custom_model(
             **({"guidance": guidance} if guidance is not None else {}),
             **({"negative_prompt": negative_prompt} if negative_prompt else {}),
             **({"image": image, "strength": strength} if image is not None else {}),
+            **({"loras": list(loras)} if loras else {}),
+            **({"controlnets": list(controlnets)} if controlnets else {}),
         },
         dtype=dtype,
         progress=progress,

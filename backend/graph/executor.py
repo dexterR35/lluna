@@ -125,17 +125,30 @@ def _model_revision_for_node(node: WorkflowNode) -> str:
     let a stale cached artifact survive a model update - see
     `DynamicModelRegistry.revision_stamp`.
     """
+    parts: list[str] = []
     model_value = str(node.parameters.get("model") or "")
-    if not model_value.startswith("custom:"):
+    ids = [model_value.removeprefix("custom:")] if model_value.startswith("custom:") else []
+    # A LoRA changes the output as surely as the base model does, and its files
+    # can be replaced in place just the same, so every selected adapter has to
+    # contribute to the fingerprint. (Which LoRAs and at what weight is already
+    # covered: node.parameters is part of the cache key.)
+    for item in node.parameters.get("loras") or []:
+        if isinstance(item, str):
+            ids.append(item.removeprefix("custom:"))
+        elif isinstance(item, dict):
+            raw = str(item.get("modelId") or item.get("model_id") or item.get("id") or "")
+            if raw:
+                ids.append(raw.removeprefix("custom:"))
+    if not ids:
         return ""
     try:
         from backend.models.dynamic_registry import DynamicModelRegistry
 
-        return DynamicModelRegistry.instance().revision_stamp(
-            model_value.removeprefix("custom:")
-        )
+        registry = DynamicModelRegistry.instance()
+        parts = [f"{model_id}:{registry.revision_stamp(model_id)}" for model_id in ids]
     except (ImportError, OSError, ValueError):
         return ""
+    return "|".join(parts)
 
 
 def _stable_value_hash(value: Any) -> str:
@@ -179,7 +192,12 @@ class _RunControl:
         self.cancel = threading.Event()
         self.pause = threading.Event()
         self.condition = threading.Condition()
-        self.worker_run_id: int | None = None
+        # Worker jobs this run currently owns, as (client, worker run id). A run
+        # can hold more than one at a time when several inference devices are
+        # configured, and each client numbers its jobs independently, so cancelling
+        # by bare run id against the default client would miss - or worse, hit the
+        # wrong job. Guarded by `lock`.
+        self.worker_jobs: set[tuple[Any, int]] = set()
         self.lock = threading.RLock()
 
 
@@ -379,12 +397,10 @@ class RunManager:
                     "message": "Run cancelled before execution.",
                     "retryable": False,
                 }
-            worker_run_id = control.worker_run_id
-        if worker_run_id is not None:
+            worker_jobs = tuple(control.worker_jobs)
+        for client, worker_run_id in worker_jobs:
             try:
-                from backend.tools.inference.client import InferClient
-
-                InferClient.instance().cancel(worker_run_id)
+                client.cancel(worker_run_id)
             except RuntimeError:
                 pass
         with control.condition:
@@ -414,7 +430,7 @@ class RunManager:
         try:
             from backend.tools.inference.client import InferClient
 
-            InferClient.instance().shutdown()
+            InferClient.shutdown_all()
         except (ImportError, RuntimeError):
             pass
 
@@ -714,10 +730,12 @@ class RunManager:
         if not ran:
             # The slot is held only around the work itself: cache hits and input
             # assembly must never occupy a device other nodes are waiting for.
-            with scheduler.slot(kinds.get(node.id, LIGHT)):
+            with scheduler.slot(kinds.get(node.id, LIGHT)) as device:
                 if control.cancel.is_set():
                     raise ExecutionFailure("CANCELLED", "Run cancelled.")
-                result = self._run_node(control, node, input_values, input_artifacts, cache_key)
+                result = self._run_node(
+                    control, node, input_values, input_artifacts, cache_key, device=device
+                )
         output_ports = definition.outputs
         with values_lock:
             if isinstance(result, dict) and not isinstance(result, ArtifactRecord):
@@ -825,6 +843,7 @@ class RunManager:
         inputs: dict[str, Any],
         input_artifacts: list[ArtifactRecord],
         cache_key: str,
+        device: str = "",
     ) -> Any:
         definition = NODE_REGISTRY[node.schema_id]
         run_id = control.snapshot.run_id
@@ -856,6 +875,38 @@ class RunManager:
             )
         elif definition.adapter == "image_effects":
             result = self._apply_image_effects(
+                control,
+                node,
+                inputs,
+                input_artifacts,
+                cache_key,
+            )
+        elif definition.adapter == "controlnet":
+            # Emits a description, not an artifact: the generation node it feeds
+            # is what actually loads the ControlNet, because only there is the
+            # base model known and the pairing checkable.
+            source = inputs.get("image")
+            if not isinstance(source, ArtifactRecord):
+                raise ExecutionFailure(
+                    "MISSING_INPUT", "ControlNet needs a control map on its image input."
+                )
+            model_id = str(node.parameters.get("model") or "").strip()
+            if not model_id:
+                raise ExecutionFailure(
+                    "MISSING_MODEL",
+                    "Choose a ControlNet. Install one from Settings -> Models -> Add model.",
+                )
+            result = {
+                "control": {
+                    "modelId": model_id,
+                    "strength": float(node.parameters.get("strength", 1.0)),
+                    "start": float(node.parameters.get("start", 0.0)),
+                    "end": float(node.parameters.get("end", 1.0)),
+                    "imagePath": source.path,
+                }
+            }
+        elif definition.adapter == "control_map":
+            result = self._build_control_map(
                 control,
                 node,
                 inputs,
@@ -1449,6 +1500,63 @@ class RunManager:
         )
         return artifact
 
+    def _build_control_map(
+        self,
+        control: _RunControl,
+        node: WorkflowNode,
+        inputs: dict[str, Any],
+        input_artifacts: list[ArtifactRecord],
+        cache_key: str,
+    ) -> ArtifactRecord:
+        """Produce a ControlNet hint image from a source image.
+
+        Runs in-process rather than on the inference worker: Canny is pure
+        OpenCV, and holding a GPU slot for it would serialise it behind model
+        work for no reason.
+        """
+        from backend.ai import preprocessors
+
+        source = inputs.get("image")
+        if not isinstance(source, ArtifactRecord):
+            raise ExecutionFailure("MISSING_INPUT", "Control Map needs a source image.")
+        kind = str(node.parameters.get("kind") or "canny")
+        try:
+            from PIL import Image
+
+            with Image.open(source.path) as opened:
+                control_map = preprocessors.run(
+                    kind,
+                    opened.convert("RGB"),
+                    **(
+                        {
+                            "low": int(node.parameters.get("low", 100)),
+                            "high": int(node.parameters.get("high", 200)),
+                        }
+                        if kind == "canny"
+                        else {}
+                    ),
+                )
+            fd, output_raw = tempfile.mkstemp(prefix="lluna-control-", suffix=".png")
+            os.close(fd)
+            control_map.save(output_raw, format="PNG")
+        except preprocessors.PreprocessorError as exc:
+            raise ExecutionFailure("CONTROL_MAP_FAILED", str(exc)) from exc
+        except (OSError, TypeError, ValueError) as exc:
+            raise ExecutionFailure(
+                "CONTROL_MAP_FAILED", f"Could not build the control map: {exc}"
+            ) from exc
+        artifact = self._artifacts.commit(
+            output_raw,
+            run_id=control.snapshot.run_id,
+            node_id=node.id,
+            schema_id=node.schema_id,
+            inputs=input_artifacts,
+            parameters_hash=cache_key,
+        )
+        Path(output_raw).unlink(missing_ok=True)
+        self._node_state(control, node.id, "RUNNING", 100, f"Built a {kind} control map")
+        return artifact
+
     def _apply_image_effects(
         self,
         control: _RunControl,
@@ -1765,6 +1873,15 @@ class RunManager:
                 payload["negative_prompt"] = str(params["negativePrompt"]).strip()
             if capabilities.get("seed") is True and int(params.get("seed", -1)) >= 0:
                 payload["seed"] = int(params["seed"])
+            selected_loras = params.get("loras")
+            if selected_loras:
+                payload["loras"] = selected_loras
+            control_inputs = inputs.get("control")
+            if control_inputs:
+                controls = (
+                    control_inputs if isinstance(control_inputs, (list, tuple)) else [control_inputs]
+                )
+                payload["controlnets"] = [item for item in controls if isinstance(item, dict)]
         elif adapter == "lama_retouch":
             from backend.models.paths import SubtitleModelPaths, prepare_bundled_subtitle_models
 
@@ -1919,7 +2036,8 @@ class RunManager:
                 "node.preview", run_id=run_id, node_id=node.id, payload={"image": image}
             )
 
-        worker_id = InferClient.instance().start_job(
+        client = InferClient.for_device(device)
+        worker_id = client.start_job(
             job_type,
             payload,
             on_progress=progress,
@@ -1933,12 +2051,16 @@ class RunManager:
         if worker_id < 0:
             raise ExecutionFailure("BUSY", "Another GPU-heavy job is running.", retryable=True)
         with control.lock:
-            control.worker_run_id = worker_id
-        while not done.wait(0.2):
-            if control.cancel.is_set():
-                InferClient.instance().cancel(worker_id)
-        with control.lock:
-            control.worker_run_id = None
+            control.worker_jobs.add((client, worker_id))
+        try:
+            while not done.wait(0.2):
+                if control.cancel.is_set():
+                    client.cancel(worker_id)
+        finally:
+            # Always deregister: leaving a finished job registered would make a
+            # later Stop cancel whatever job inherited that id on this client.
+            with control.lock:
+                control.worker_jobs.discard((client, worker_id))
         if error:
             code = {
                 "__cancelled__": "CANCELLED",

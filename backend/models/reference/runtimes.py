@@ -221,10 +221,20 @@ def compatible_backend(manifest: ModelManifest) -> tuple[str, tuple[str, ...], t
         warnings.append("This model requests remote Python code and requires explicit approval.")
     if manifest.security.allow_pickle:
         warnings.append("This model permits pickle weights; only install it from a trusted author.")
-    if manifest.adapter == "diffusers" and manifest.variant.kind in {"lora", "controlnet"}:
-        reasons.append(
-            f"The generic Diffusers runtime cannot compose a {manifest.variant.kind} with its base model yet."
+    if manifest.adapter == "diffusers" and manifest.variant.kind == "controlnet":
+        # Like a LoRA, a ControlNet is selected inside a generation node and
+        # composed onto that node's base model (backend/models/controlnet.py).
+        # It needs a control image, which a Control Map node produces.
+        warnings.append(
+            "Select this ControlNet inside a generation node and give it a control image."
         )
+    if manifest.adapter == "diffusers" and manifest.variant.kind == "lora":
+        # A LoRA is never run on its own: it is selected inside a generation node
+        # and composed onto that node's base model (see backend/models/lora.py).
+        # It stays "compatible" so it can be installed and enabled; whether a
+        # given pairing is valid is decided when the node runs, against the base
+        # the user actually chose.
+        warnings.append("Select this LoRA inside a generation node; it does not run on its own.")
     return backend, tuple(reasons), tuple(warnings)
 
 

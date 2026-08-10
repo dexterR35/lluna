@@ -23,6 +23,10 @@ class PortType(str, Enum):
     COLOR = "COLOR"
     SEED = "SEED"
     MODEL = "MODEL"
+    # A configured ControlNet plus the control image it reads: produced by a
+    # ControlNet node, consumed by a generation node. Deliberately not IMAGE -
+    # a control map on its own says nothing about which ControlNet interprets it.
+    CONTROL = "CONTROL"
 
 
 PORT_LABELS = {port: port.value.title() for port in PortType}

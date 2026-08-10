@@ -572,7 +572,7 @@ test("switching a node's model resets capability-gated parameters to the new mod
 test("refreshing definitions updates already-placed nodes instead of leaving them stale", () => {
   addNode();
   const before = required(useEditorStore.getState().nodes[0]);
-  expect(before.data.definition.parameters).toHaveLength(1);
+  expect(required(before.data.definition).parameters).toHaveLength(1);
 
   const refreshed = {
     ...definition,
@@ -586,7 +586,7 @@ test("refreshing definitions updates already-placed nodes instead of leaving the
   const after = required(useEditorStore.getState().nodes[0]);
   expect(after.id).toBe(before.id);
   expect(after.data.parameters).toBe(before.data.parameters);
-  expect(after.data.definition.parameters).toHaveLength(2);
+  expect(required(after.data.definition).parameters).toHaveLength(2);
 });
 test("primitive value nodes stay out of the creation catalog", () => {
   expect(isVisibleCatalogNode({ schemaId: "lluna.input.boolean" })).toBe(

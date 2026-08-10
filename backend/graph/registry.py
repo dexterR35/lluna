@@ -341,7 +341,10 @@ _NODES = [
         "Image/Generate",
         "Generates an image locally with an installed Diffusers model.",
         icon="sparkles",
-        inputs=[port("prompt", "Prompt", PortType.PROMPT, required=True)],
+        inputs=[
+            port("prompt", "Prompt", PortType.PROMPT, required=True),
+            port("control", "Control", PortType.CONTROL, required=False, multiple=True),
+        ],
         outputs=[port("image", "Image", PortType.IMAGE)],
         parameters=[
             parameter("model", "Model", "model", "FLUX.2-klein-base-4B", options=GENERATE_MODELS),
@@ -382,6 +385,17 @@ _NODES = [
                 description="Lower precision uses less VRAM; FP32 is slower but most exact.",
                 capability="dtype",
             ),
+            parameter(
+                "loras",
+                "LoRAs",
+                "lora-list",
+                [],
+                description=(
+                    "Optional adapters composed onto the model above, each with its own "
+                    "weight. Import LoRAs from Settings -> Models -> Add model."
+                ),
+                capability="lora",
+            ),
         ],
         capabilities=["diffusers"],
         required_models=["flux"],
@@ -397,6 +411,7 @@ _NODES = [
         inputs=[
             port("image", "Reference image", PortType.IMAGE, required=True),
             port("prompt", "Prompt", PortType.PROMPT, required=True),
+            port("control", "Control", PortType.CONTROL, required=False, multiple=True),
         ],
         outputs=[port("image", "Image", PortType.IMAGE)],
         parameters=[
@@ -416,6 +431,17 @@ _NODES = [
                 options=GENERATE_DTYPE_OPTIONS,
                 description="Lower precision uses less VRAM; FP32 is slower but most exact.",
                 capability="dtype",
+            ),
+            parameter(
+                "loras",
+                "LoRAs",
+                "lora-list",
+                [],
+                description=(
+                    "Optional adapters composed onto the model above, each with its own "
+                    "weight. Import LoRAs from Settings -> Models -> Add model."
+                ),
+                capability="lora",
             ),
         ],
         capabilities=["diffusers", "image-to-image"],
@@ -924,6 +950,114 @@ _NODES = [
         adapter="composite",
     ),
     node(
+        "lluna.image.control_map",
+        "Control Map",
+        "Image/Compose",
+        "Turns an image into a structural hint (edges, depth, pose) for ControlNet.",
+        icon="git-branch",
+        inputs=[port("image", "Source image", PortType.IMAGE, required=True)],
+        outputs=[port("image", "Control map", PortType.IMAGE)],
+        parameters=[
+            parameter(
+                "kind",
+                "Control type",
+                "select",
+                "canny",
+                options=[
+                    {
+                        "value": "canny",
+                        "label": "Canny edges",
+                        "description": "Built in, no download. Preserves composition.",
+                    },
+                    {
+                        "value": "depth",
+                        "label": "Depth map",
+                        "description": "Preserves 3D layout. Needs the depth model installed.",
+                    },
+                    {
+                        "value": "pose",
+                        "label": "Human pose",
+                        "description": "Preserves posture. Needs the pose model installed.",
+                    },
+                ],
+            ),
+            parameter(
+                "low",
+                "Edge low threshold",
+                "integer",
+                100,
+                minimum=0,
+                maximum=500,
+                description="Canny only. Lower keeps fainter edges.",
+            ),
+            parameter(
+                "high",
+                "Edge high threshold",
+                "integer",
+                200,
+                minimum=1,
+                maximum=1000,
+                description="Canny only. Must be above the low threshold.",
+            ),
+        ],
+        supports_preview=True,
+        adapter="control_map",
+    ),
+    node(
+        "lluna.image.controlnet",
+        "ControlNet",
+        "Image/Generate",
+        "Steers a generation model with a control map, without changing the prompt.",
+        icon="git-branch",
+        inputs=[port("image", "Control map", PortType.IMAGE, required=True)],
+        outputs=[port("control", "Control", PortType.CONTROL)],
+        parameters=[
+            parameter(
+                "model",
+                "ControlNet",
+                "model",
+                "",
+                options=[],
+                description="Install ControlNets from Settings -> Models -> Add model.",
+            ),
+            parameter(
+                "strength",
+                "Strength",
+                "number",
+                1.0,
+                minimum=0,
+                maximum=2,
+                step=0.05,
+                description="How strongly the control map constrains the result.",
+                capability="controlStrength",
+            ),
+            parameter(
+                "start",
+                "Start",
+                "number",
+                0.0,
+                minimum=0,
+                maximum=1,
+                step=0.05,
+                description="Fraction of the run where guidance begins.",
+                capability="controlStart",
+            ),
+            parameter(
+                "end",
+                "End",
+                "number",
+                1.0,
+                minimum=0,
+                maximum=1,
+                step=0.05,
+                description="Fraction of the run where guidance ends. Ending early frees the model to add detail.",
+                capability="controlEnd",
+            ),
+        ],
+        cache_policy="none",
+        adapter="controlnet",
+    ),
+    node(
         "lluna.mask.select_object",
         "Select Object",
         "Mask/Selection",
@@ -1226,6 +1360,51 @@ def _build_catalog() -> list[NodeDefinition]:
             edit = next(item for item in values if item.schema_id == "lluna.generate.image.edit")
             model_parameter = next(item for item in edit.parameters if item.id == "model")
             model_parameter.options.extend(_diffusers_option(record) for record in image_to_image_records)
+        # Attachments are offered wherever they can attach. They are listed by
+        # what they were trained for rather than filtered to the node's current
+        # model: the base can change after a LoRA is picked, and the run-time
+        # check in backend/models/lora.py is what actually enforces the pairing.
+        def _attachment_option(record) -> dict:
+            base = record.manifest.variant.base_model or "any base model"
+            model_option = option(
+                f"custom:{record.manifest.id}",
+                record.manifest.name,
+                record.manifest.id,
+                record.manifest.description or f"For {base}.",
+            )
+            model_option["baseModel"] = record.manifest.variant.base_model
+            model_option["variant"] = record.manifest.variant.to_dict()
+            return model_option
+
+        for kind, parameter_id, schema_ids in (
+            (
+                "lora",
+                "loras",
+                ("lluna.generate.image", "lluna.generate.image.edit"),
+            ),
+            ("controlnet", "model", ("lluna.image.controlnet",)),
+        ):
+            attachments = [
+                record
+                for record in configured_records
+                if record.manifest.adapter == "diffusers"
+                and record.manifest.variant.kind == kind
+            ]
+            if not attachments:
+                continue
+            attachment_options = [_attachment_option(record) for record in attachments]
+            for schema_id in schema_ids:
+                definition = next(
+                    (item for item in values if item.schema_id == schema_id), None
+                )
+                if definition is None:
+                    continue
+                target = next(
+                    (item for item in definition.parameters if item.id == parameter_id), None
+                )
+                if target is not None:
+                    target.options.extend(attachment_options)
+
         birefnet_records = [
             record
             for record in configured_records

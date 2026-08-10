@@ -125,6 +125,22 @@ class InferClient:
         return devices or ("cuda:0",)
 
     @classmethod
+    def all_clients(cls) -> tuple:
+        """Every worker that has been started, default one first."""
+        with cls._lock:
+            extra = tuple(cls._by_device.values())
+        return ((cls._instance,) if cls._instance is not None else ()) + extra
+
+    @classmethod
+    def shutdown_all(cls) -> None:
+        """Stop every worker; used when the whole app is going down."""
+        for client in cls.all_clients():
+            try:
+                client.shutdown()
+            except (RuntimeError, OSError):
+                pass
+
+    @classmethod
     def for_device(cls, device: str) -> "InferClient":
         """The worker pinned to ``device``; the default worker for the first one."""
         if device in {"", "cpu"} or device == cls.available_devices()[0]:

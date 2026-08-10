@@ -579,6 +579,48 @@ def _job_generate(run_id, payload, cancel_event, on_progress, heartbeat_log, evt
         _emit(evt_queue, error(run_id, str(e)))
         return
 
+    # Resolved once, before either path: a bad selection should fail with a clear
+    # reason instead of after a model has been loaded into VRAM.
+    try:
+        from backend.models.lora import LoraError, parse_selections, resolve_selections
+
+        lora_selections = parse_selections(payload.get("loras"))
+        resolved_loras = resolve_selections(lora_selections, base_model_id=str(mode_value))
+    except LoraError as exc:
+        _emit(evt_queue, error(run_id, str(exc)))
+        return
+    if resolved_loras:
+        heartbeat_log(run_id, f"Applying {len(resolved_loras)} LoRA(s)")
+
+    try:
+        from backend.models.controlnet import ControlNetError
+        from backend.models.controlnet import parse_selections as parse_controls
+        from backend.models.controlnet import resolve_selections as resolve_controls
+
+        raw_controls = []
+        for item in payload.get("controlnets") or []:
+            entry = dict(item)
+            # The executor hands over a path; the image itself is opened here, in
+            # the process that will use it, rather than pickled across the queue.
+            image_path = entry.pop("imagePath", None)
+            if image_path:
+                from PIL import Image as PILImage
+
+                with PILImage.open(image_path) as opened:
+                    entry["image"] = opened.convert("RGB")
+            raw_controls.append(entry)
+        resolved_controls = resolve_controls(
+            parse_controls(raw_controls), base_model_id=str(mode_value)
+        )
+    except ControlNetError as exc:
+        _emit(evt_queue, error(run_id, str(exc)))
+        return
+    except (OSError, ValueError) as exc:
+        _emit(evt_queue, error(run_id, f"Control image could not be read: {exc}"))
+        return
+    if resolved_controls:
+        heartbeat_log(run_id, f"Conditioning on {len(resolved_controls)} ControlNet(s)")
+
     if str(mode_value).startswith("custom:"):
         from backend.models.adapters import AdapterError, generate_with_custom_model
 
@@ -619,6 +661,8 @@ def _job_generate(run_id, payload, cancel_event, on_progress, heartbeat_log, evt
                 strength=(float(payload["strength"]) if payload.get("strength") is not None else None),
                 progress=lambda value: on_progress(run_id, max(5, min(99, int(value)))),
                 cancel_event=cancel_event,
+                loras=resolved_loras,
+                controlnets=resolved_controls,
             )
         except AdapterError as exc:
             _emit(evt_queue, error(run_id, "__cancelled__" if str(exc) == "__cancelled__" else str(exc)))
@@ -712,6 +756,8 @@ def _job_generate(run_id, payload, cancel_event, on_progress, heartbeat_log, evt
                 cancel_event=cancel_event,
                 preview=on_preview,
                 dtype=str(payload.get("dtype") or "auto"),
+                loras=resolved_loras,
+                controlnets=resolved_controls,
             )
         except GenerateCancelled:
             _emit(evt_queue, error(run_id, "__cancelled__"))

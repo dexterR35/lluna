@@ -5,12 +5,15 @@ from __future__ import annotations
 import inspect
 import threading
 import time
-from typing import Callable, Optional, Protocol
+from typing import Any, Callable, Optional, Protocol, Sequence
 
 import torch
 from PIL import Image
 
 from backend.tools.shared.constants import GenerateMode
+from backend.models.controlnet import call_kwargs as controlnet_kwargs
+from backend.models.controlnet import composed as controlnet_composed
+from backend.models.lora import applied as lora_applied
 from backend.tools.shared.cuda import empty_cuda_cache
 from backend.tools.installers.generate import (
     catalog_info,
@@ -131,6 +134,8 @@ class _BaseRunner(Protocol):
         cancel_event: CancelEvent,
         generation: int,
         preview: PreviewCb = None,
+        loras: Sequence[Any] = (),
+        controlnets: Sequence[Any] = (),
     ) -> Image.Image: ...
 
 
@@ -227,6 +232,8 @@ class _DiffusersRunner:
         cancel_event: CancelEvent,
         generation: int,
         preview: PreviewCb = None,
+        loras: Sequence[Any] = (),
+        controlnets: Sequence[Any] = (),
     ) -> Image.Image:
         assert self.pipe is not None
 
@@ -262,10 +269,15 @@ class _DiffusersRunner:
             image=image,
             strength=strength,
         )
-        out = self.pipe(
-            **kwargs,
-            callback_on_step_end=_cb,
-        )
+        # Applied around this call only: the pipeline is cached between runs, so
+        # adapters must not survive it (see backend/models/lora.py).
+        with lora_applied(self.pipe, loras):
+            with controlnet_composed(self.pipe, controlnets) as active:
+                out = active(
+                    **kwargs,
+                    **controlnet_kwargs(controlnets),
+                    callback_on_step_end=_cb,
+                )
 
         _check_cancel(cancel_event, generation)
         images = getattr(out, "images", None) or out
@@ -547,6 +559,8 @@ def generate_image(
     cancel_event: CancelEvent = None,
     preview: PreviewCb = None,
     dtype: Optional[str] = None,
+    loras: Sequence[Any] = (),
+    controlnets: Sequence[Any] = (),
 ) -> Image.Image:
     """Text-to-image. Hard-requires working CUDA. Releases other caches via worker."""
     global _busy, _last_start_monotonic
@@ -617,6 +631,8 @@ def generate_image(
                 cancel_event=cancel_event,
                 generation=generation,
                 preview=preview,
+                loras=loras,
+                controlnets=controlnets,
             )
         finally:
             _busy = False

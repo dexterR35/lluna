@@ -76,8 +76,8 @@ APEX_WHEELS = {
 # The project's own GitHub releases carry prebuilt wheels keyed by CUDA line, torch
 # minor, C++ ABI and Python tag; the entry below is the one matching this runtime's
 # torch 2.4.0+cu121 (cu122 wheels are the CUDA 12.x line, and torch's own wheels are
-# built with _GLIBCXX_USE_CXX11_ABI=0 -> abiFALSE). No wheel is published for
-# Windows; that platform falls back to the pure-torch path in the vendored source.
+# built with _GLIBCXX_USE_CXX11_ABI=0 -> abiFALSE). Upstream publishes no Windows
+# wheel, and neither does Apex, which is what keeps this runtime Linux-only.
 FLASH_ATTN_VERSION = "2.5.9.post1"
 FLASH_ATTN_WHEELS = {
     ("cp310", "linux"): {
@@ -196,16 +196,23 @@ def _platform_tag() -> str:
     return "windows" if os.name == "nt" else "linux"
 
 
-def _ensure_flash_attn_wheel(python_tag: str) -> Path | None:
-    """Download and verify the pinned flash-attn wheel, or return ``None``.
+def _ensure_flash_attn_wheel(python_tag: str) -> Path:
+    """Download and verify the pinned flash-attn wheel.
 
-    ``None`` means no prebuilt wheel is published for this platform/Python pair;
-    the caller then installs SeedVR2 without flash-attn and the vendored source
-    falls back to PyTorch's own scaled_dot_product_attention.
+    flash-attn is not optional for SeedVR2: the vendored DiT imports
+    ``flash_attn_varlen_func`` at module scope and its attention blocks are built
+    around packed variable-length sequences. Installing without it would produce
+    a runtime that imports and then fails on the first frame, so a missing wheel
+    fails the install here, where the message can be acted on.
     """
     expected = FLASH_ATTN_WHEELS.get((python_tag, _platform_tag()))
     if expected is None:
-        return None
+        raise RuntimeError(
+            "SeedVR2 needs a prebuilt flash-attn wheel, and none is published for "
+            f"{_platform_tag()} / {python_tag}. Reviewed combinations: "
+            + ", ".join(f"{tag} on {system}" for tag, system in sorted(FLASH_ATTN_WHEELS))
+            + "."
+        )
     destination = checkpoints_dir() / expected["filename"]
     if destination.is_file():
         try:
@@ -231,9 +238,9 @@ def _ensure_flash_attn_wheel(python_tag: str) -> Path | None:
         verify_pinned_artifact(
             downloaded, expected_size=expected["size"], expected_sha256=expected["sha256"]
         )
-    except (OSError, ValueError):
+    except (OSError, ValueError) as exc:
         shutil.rmtree(staging, ignore_errors=True)
-        return None
+        raise RuntimeError(f"The pinned flash-attn wheel could not be installed: {exc}") from exc
     temporary = destination.with_suffix(destination.suffix + ".part")
     downloaded.replace(temporary)
     temporary.replace(destination)
@@ -241,15 +248,20 @@ def _ensure_flash_attn_wheel(python_tag: str) -> Path | None:
     return destination
 
 
-def _ensure_apex_wheel(python_tag: str) -> Path | None:
+def _ensure_apex_wheel(python_tag: str) -> Path:
     """Download (if needed) and verify the pinned Apex wheel for ``python_tag``.
 
-    Returns ``None`` when upstream publishes no wheel for this platform (Apex is
-    Linux-only); the vendored source then uses its pure-torch normalization.
+    Required, not optional: the shipped SeedVR2 configs ask for ``fusedrms`` and
+    ``fusedln`` normalization, which resolve to apex classes. Apex publishes
+    Linux wheels only, which is what limits this runtime's platforms.
     """
     expected = APEX_WHEELS.get(python_tag) if _platform_tag() == "linux" else None
     if expected is None:
-        return None
+        raise RuntimeError(
+            "SeedVR2 needs the prebuilt Apex wheel, which upstream publishes for "
+            f"Linux only (Python tags: {', '.join(sorted(APEX_WHEELS))}); this is "
+            f"{_platform_tag()} / {python_tag}."
+        )
     destination = checkpoints_dir() / expected["filename"]
     if destination.is_file():
         try:
@@ -287,6 +299,14 @@ def _ensure_apex_wheel(python_tag: str) -> Path | None:
 def _install_runtime() -> None:
     if runtime_python().is_file() and (runtime_dir() / "runtime.json").is_file():
         return
+    if _platform_tag() != "linux":
+        # Checked before anything is downloaded or provisioned: SeedVR2's two
+        # native dependencies ship Linux wheels only, and building either from
+        # source on Windows needs a CUDA Toolkit and MSVC.
+        raise RuntimeError(
+            "SeedVR2 installs on Linux only: its required flash-attn and Apex "
+            "wheels are published for Linux exclusively."
+        )
     python = _bootstrap_python()
     version_probe = subprocess.run(  # noqa: S603 - reviewed Python executable and fixed probe
         [python, "-c", "import sys; print(f'cp{sys.version_info.major}{sys.version_info.minor}')"],
@@ -296,14 +316,13 @@ def _install_runtime() -> None:
         timeout=30,
     )
     python_tag = version_probe.stdout.strip()
-    # Apex and flash-attn are accelerators, not requirements: upstream publishes
-    # prebuilt wheels for Linux only, and the vendored source falls back to
-    # torch-native RMSNorm/LayerNorm and scaled_dot_product_attention without them.
-    # Installing them from source instead would need a CUDA Toolkit on the user's
-    # machine, so a missing wheel degrades performance rather than failing here.
+    # Both are hard dependencies of the vendored source, and both are installed
+    # from pinned, hash-verified prebuilt wheels rather than compiled here: a
+    # source build of flash-attn would demand a CUDA Toolkit and up to two hours
+    # on the user's machine. Either failing aborts the install, so a runtime is
+    # never left in a state that imports but cannot run a frame.
     apex_wheel = _ensure_apex_wheel(python_tag)
     flash_attn_wheel = _ensure_flash_attn_wheel(python_tag)
-    optional_steps = [[str(wheel)] for wheel in (flash_attn_wheel, apex_wheel) if wheel]
     create_isolated_venv(
         python_executable=python,
         target_dir=runtime_dir(),
@@ -316,15 +335,16 @@ def _install_runtime() -> None:
                 "https://download.pytorch.org/whl/cu121",
             ],
             list(SEEDVR_PACKAGES),
-            *optional_steps,
+            [str(flash_attn_wheel)],
+            [str(apex_wheel)],
         ],
         runtime_metadata={
             "profile": SEEDVR_RUNTIME_PROFILE,
             "bundledSource": SEEDVR_SOURCE_REPO,
             "sourceCommit": SEEDVR_COMMIT,
             "packages": list(SEEDVR_PACKAGES),
-            "flashAttention": bool(flash_attn_wheel),
-            "fusedNorm": bool(apex_wheel),
+            "flashAttention": flash_attn_wheel.name,
+            "fusedNorm": apex_wheel.name,
             "managedBy": "lluna",
         },
     )

@@ -61,13 +61,13 @@ def _track_overlap(monkeypatch, manager):
     state = {"current": 0, "peak": 0}
     lock = threading.Lock()
 
-    def traced(self, control, node, inputs, input_artifacts, cache_key):
+    def traced(self, control, node, inputs, input_artifacts, cache_key, device=""):
         with lock:
             state["current"] += 1
             state["peak"] = max(state["peak"], state["current"])
         try:
             time.sleep(0.05)  # widen the window so genuine overlap is observable
-            return original(self, control, node, inputs, input_artifacts, cache_key)
+            return original(self, control, node, inputs, input_artifacts, cache_key, device=device)
         finally:
             with lock:
                 state["current"] -= 1
@@ -115,10 +115,10 @@ def test_a_failing_branch_fails_the_run(monkeypatch, fan_out):
     manager, workflow = fan_out
     original = RunManager._run_node
 
-    def exploding(self, control, node, inputs, input_artifacts, cache_key):
+    def exploding(self, control, node, inputs, input_artifacts, cache_key, device=""):
         if node.id == "left":
             raise RuntimeError("branch failure")
-        return original(self, control, node, inputs, input_artifacts, cache_key)
+        return original(self, control, node, inputs, input_artifacts, cache_key, device=device)
 
     monkeypatch.setattr(RunManager, "_run_node", exploding)
 

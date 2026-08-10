@@ -5,6 +5,15 @@ import {
 } from "../src/models/modelCapabilities";
 import { capabilityIssues } from "../src/models/modelManifestCapabilities";
 
+/**
+ * @param {import("../src/types").ParameterDefinition | undefined} parameter
+ * @returns {(string | number)[]}
+ */
+function optionValues(parameter) {
+  if (!parameter?.options) throw new Error("Expected the parameter to declare options");
+  return parameter.options.map((option) => option.value);
+}
+
 const parameters = [
   { id: "width", label: "Width", type: "integer", capability: "width" },
   { id: "steps", label: "Steps", type: "integer", capability: "steps" },
@@ -52,13 +61,13 @@ describe("model capability projection", () => {
       complete: true,
       dtypes: ["bf16", "fp16"],
     });
-    expect(projected[0].options.map((opt) => opt.value)).toEqual(["auto", "bf16", "fp16"]);
+    expect(optionValues(projected[0])).toEqual(["auto", "bf16", "fp16"]);
 
     const fp8Only = parametersForCapabilities(dtypeParameters, {
       complete: true,
       dtypes: ["fp8"],
     });
-    expect(fp8Only[0].options.map((opt) => opt.value)).toEqual(["auto", "fp8"]);
+    expect(optionValues(fp8Only[0])).toEqual(["auto", "fp8"]);
   });
 
   it("hides denoise strength unless the model declares it", () => {

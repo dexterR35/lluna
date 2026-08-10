@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   LoaderCircle,
+  Plus,
   Upload,
   resolveCategoryColor,
   resolveNodeIcon,
@@ -243,6 +244,107 @@ function FileField({
   );
 }
 
+/**
+ * Repeating "which LoRA, how strongly" rows.
+ *
+ * LoRAs stack, so this is a list rather than a dropdown: a style adapter and a
+ * subject adapter are normally used together, each at its own weight. The
+ * options come from the backend, which lists every installed LoRA rather than
+ * only those matching the node's current model — the base model can be changed
+ * after a LoRA is chosen, and the pairing is verified when the graph runs.
+ *
+ * @param {{
+ *   definition: import("../types").ParameterDefinition,
+ *   value: unknown,
+ *   onChange: (next: unknown) => void,
+ * }} props
+ */
+function LoraListField({ definition, value, onChange }) {
+  const options = definition.options || [];
+  const rows = Array.isArray(value) ? value : [];
+  const used = new Set(rows.map((row) => String(row?.modelId ?? "")));
+  const unused = options.filter((option) => !used.has(String(option.value)));
+
+  /** @param {number} index @param {Record<string, unknown>} patch */
+  const update = (index, patch) =>
+    onChange(rows.map((row, at) => (at === index ? { ...row, ...patch } : row)));
+
+  if (!options.length)
+    return (
+      <div className="ui-stack-xs">
+        <span className="ui-copy-title text-[10px]">{definition.label}</span>
+        <span className="ui-help">
+          No LoRAs installed yet. Add one from Settings → Models → Add model.
+        </span>
+      </div>
+    );
+
+  return (
+    <div className="ui-stack-xs">
+      <span className="ui-copy-title text-[10px]">{definition.label}</span>
+      {definition.description && (
+        <span className="ui-help">{definition.description}</span>
+      )}
+      {rows.map((row, index) => {
+        const modelId = String(row?.modelId ?? "");
+        const weight = Number(row?.weight ?? 1);
+        const choices = options.filter(
+          (option) =>
+            String(option.value) === modelId || !used.has(String(option.value)),
+        );
+        return (
+          <div
+            key={`${modelId}-${index}`}
+            className="ui-stack-xs rounded border border-mg-border p-2"
+          >
+            {/* Explicit ids: these components derive an id from the label, and
+                every row shares the same labels, which would otherwise emit
+                duplicate DOM ids and wire each row's label to the first row. */}
+            <Select
+              id={`${definition.id}-model-${index}`}
+              label="LoRA"
+              value={modelId}
+              options={choices}
+              onChange={(event) => update(index, { modelId: event.target.value })}
+            />
+            <NumberField
+              id={`${definition.id}-weight-${index}`}
+              label="Weight"
+              value={String(weight)}
+              min={-2}
+              max={2}
+              step={0.05}
+              hint="1.0 applies the LoRA as trained. Lower blends it in; negative inverts it."
+              onChange={(event) =>
+                update(index, { weight: Number(event.target.value) })
+              }
+            />
+            <Button
+              variant="secondary"
+              className="min-h-7 px-2.5 text-[9px]"
+              onClick={() => onChange(rows.filter((_row, at) => at !== index))}
+            >
+              Remove
+            </Button>
+          </div>
+        );
+      })}
+      {unused.length > 0 && (
+        <Button
+          variant="secondary"
+          className="min-h-7 px-2.5 text-[9px]"
+          onClick={() =>
+            onChange([...rows, { modelId: String(unused[0].value), weight: 1 }])
+          }
+        >
+          <Plus className="ui-icon-sm" />
+          Add LoRA
+        </Button>
+      )}
+    </div>
+  );
+}
+
 /** @param {ParameterFieldProps} props */
 export function NodeParameterField({
   definition,
@@ -251,6 +353,14 @@ export function NodeParameterField({
   selectedName,
   onChange,
 }) {
+  if (definition.type === "lora-list")
+    return (
+      <LoraListField
+        definition={definition}
+        value={value}
+        onChange={onChange}
+      />
+    );
   const common = {
     label: definition.label,
     hint: definition.description,
