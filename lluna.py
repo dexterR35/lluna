@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
-"""Lluna Python sidecar entry point."""
+"""Lluna entry point: desktop sidecar, headless API, or one-shot workflow run.
+
+Called with no subcommand this still starts the API exactly as before, so the
+desktop app and the packaging scripts are unaffected.
+"""
 
 import multiprocessing
 
-from backend.api.app import main
+from backend.cli import main
 
 
 if __name__ == "__main__":

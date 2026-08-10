@@ -1,10 +1,11 @@
 """Workflow run lifecycle routes."""
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from backend.api.auth import require_token
 from backend.graph.executor import ExecutionFailure, RunManager
+from backend.graph.migrations import MigrationError, migrate_workflow
 from backend.graph.schema import WorkflowDocument
 
 router = APIRouter(prefix="/api", dependencies=[Depends(require_token)])
@@ -12,7 +13,10 @@ router = APIRouter(prefix="/api", dependencies=[Depends(require_token)])
 
 class StartRunRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
-    workflow: WorkflowDocument
+    # Parsed as a plain mapping so saved nodes can be migrated *before* they are
+    # validated against the current contract: pydantic would coerce or reject old
+    # shapes first, and by then the original data is gone.
+    workflow: dict
     mode: str = "all"
     selected_node_ids: list[str] = Field(default_factory=list, alias="selectedNodeIds")
     force: bool = False
@@ -26,9 +30,20 @@ def dump(snapshot) -> dict:
 @router.post("/runs")
 def start_run(request: StartRunRequest) -> dict:
     try:
+        document, _applied = migrate_workflow(request.workflow)
+        workflow = WorkflowDocument.model_validate(document)
+    except MigrationError as exc:
+        raise HTTPException(
+            status_code=422, detail={"code": "MIGRATION_FAILED", "message": str(exc)}
+        ) from exc
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=422, detail={"code": "INVALID_WORKFLOW", "message": str(exc)}
+        ) from exc
+    try:
         return dump(
             RunManager.instance().start(
-                request.workflow,
+                workflow,
                 mode=request.mode,
                 selected_node_ids=request.selected_node_ids,
                 force=request.force,

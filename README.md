@@ -25,8 +25,10 @@ Wire nodes together on a canvas and run the graph. Everything happens on your ma
 - **Clean up** — remove subtitles, watermarks, and burned-in text from images and video
 - **Restore** — upscale images and video, fix low light, one-step restoration with SUPIR or SeedVR2
 - **Cut out** — remove or replace backgrounds, select objects by click or description, matte and composite
-- **Create** — generate and edit images with FLUX.2 or Qwen-Image
+- **Create** — generate and edit images with FLUX.2 or Qwen-Image, steered by LoRAs and ControlNet
 - **Describe** — caption an image with a vision-language model you bring yourself
+
+Start from a **template** rather than an empty canvas, and run the same graphs **headless** from a script when you want them automated.
 
 <p align="center">
   <img src="example/test1.png" alt="Lluna node-based workflow editor" width="49%" />
@@ -117,10 +119,12 @@ Gated models (FLUX.2 Dev) need a Hugging Face token — accept the license upstr
 
 ## The nodes
 
+Don't start from an empty canvas — the node library opens with **templates**: complete chains for removing subtitles, cutting out a subject, upscaling, generating and more. Click one and it drops onto the canvas, ready to point at your file.
+
 | Group | Nodes |
 | --- | --- |
 | **Input** | Load Image, Load Images, Load Video, Load Mask, Prompt, Number, Integer, Boolean, LLaVA Caption, Describe Image |
-| **Image** | Generate Image, Edit Image, Upscale Image, Remove Background, Fix Low Light, Composite Background, LaMa Retouch, Remove Text from Image |
+| **Image** | Generate Image, Edit Image, Upscale Image, Remove Background, Fix Low Light, Composite Background, LaMa Retouch, Remove Text from Image, Control Map, ControlNet |
 | **Video** | Upscale Video, Remove Text from Video, Remove Background from Video |
 | **Mask** | Select Object |
 | **Output** | Save Image, Save Video |
@@ -135,6 +139,32 @@ Prompt      → Generate Image → Upscale Image → Save Image
 Load Image  → Select Object  → LaMa Retouch  → Save Image
 Load Image  → Describe Image → Generate Image → Save Image
 ```
+
+### Steering generation
+
+Two ways to push a generation model somewhere specific, both using models you bring yourself.
+
+**LoRA** — small adapters that change style or subject. Pick them directly on **Generate Image** or **Edit Image**; several stack, each with its own weight, which is how a style adapter and a subject adapter are normally combined.
+
+**ControlNet** — keeps the *structure* of a reference image while the prompt decides everything else:
+
+```text
+Load Image → Control Map → ControlNet →
+                                        Generate Image → Save Image
+                              Prompt  →
+```
+
+**Control Map** turns a photo into the structural hint ControlNet reads:
+
+| Control type | Needs | Best for |
+| --- | --- | --- |
+| **Canny edges** | nothing — built in | Preserving composition and outlines |
+| **Depth map** | a small model, installed on demand | Preserving 3D layout |
+| **Human pose** | a small model, installed on demand | Preserving a figure's posture |
+
+A control map you made elsewhere is just an image — wire it straight into ControlNet and skip the Control Map node entirely.
+
+Lluna checks that an adapter matches the model it is attached to. A ControlNet trained for SDXL used with FLUX doesn't error — it produces noise — so that pairing is refused with an explanation instead.
 
 ---
 
@@ -175,6 +205,36 @@ Open **Settings → Models**, pick a model, select **Install**, and watch **Acti
 Lluna identifies a custom model from a reviewed catalog entry, its model card and config, or safe inspection of its declarative config files — **it never imports model code or loads weights just to identify them**. A model stays *Needs configuration* until that review passes. SafeTensors is preferred; pickle-carrying formats and a repository's own `requirements.txt` are never trusted or installed automatically.
 
 See the [model platform guide](backend/models/reference/PLATFORM.md) and the [model reference](backend/models/reference/README.md).
+
+Custom models run through a **runtime**: PyTorch/Diffusers, Transformers, Paddle, or **ONNX Runtime** — the last of which needs no per-model Python implementation and is the only one that reaches AMD and Intel GPUs on Windows through DirectML.
+
+---
+
+## Running without the desktop app
+
+The same graphs run headless, for scripts and scheduled jobs. No window, no browser, everything on `127.0.0.1`.
+
+```bash
+lluna.py run graph.lluna.json --out ./results   # run one workflow, then exit
+lluna.py run --template cutout-transparent --out ./results
+lluna.py templates                              # list the built-in templates
+lluna.py serve --port 8765 --token <token>      # just the local API
+```
+
+`run` executes in-process — no server to start, no port, no token — and exits `0` on success, `1` if the run failed, `2` if the workflow is invalid, `3` on timeout. Artifacts land in `--out`.
+
+`serve` starts the same local API the desktop app uses, so anything the UI can do is reachable over HTTP.
+
+<details>
+<summary>Environment variables</summary>
+
+| Variable | Effect |
+| --- | --- |
+| `LLUNA_GRAPH_CONCURRENCY=0` | Run graph nodes strictly one at a time |
+| `LLUNA_INFER_DEVICES="cuda:0,cuda:1"` | Opt in to one inference worker per GPU (default: one worker) |
+| `LLUNA_SUPIR_PYTHON`, `LLUNA_SEEDVR_PYTHON`, `LLUNA_BIREFNET_PYTHON` | Point an isolated runtime at an existing interpreter instead of downloading one |
+| `HF_TOKEN` | Hugging Face access for gated models |
+</details>
 
 ---
 

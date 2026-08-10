@@ -930,6 +930,84 @@ const createEditorState = (set, get) => ({
         edges: [...state.edges, ...edges],
       });
     }),
+  /**
+   * Drop a ready-made workflow onto the canvas without disturbing what is there.
+   *
+   * Unlike loadWorkflow, which replaces the document, a template is *added*: its
+   * node ids are remapped to fresh ones so they cannot collide with existing
+   * nodes, and it is placed below current content rather than on top of it. The
+   * inserted nodes end up selected, so the next drag moves the template as one.
+   *
+   * @param {import("../types").WorkflowDocument} document
+   */
+  insertTemplate: (document) =>
+    set((state) => {
+      const definitions = definitionsById(state.definitions);
+      const source = (document?.nodes || []).filter(
+        (node) => definitions[node.schemaId],
+      );
+      if (!source.length) return state;
+      const ids = new Map(source.map((node) => [node.id, crypto.randomUUID()]));
+      const remap = (/** @type {string} */ id) => ids.get(id);
+      // Clear of anything already on the canvas, so a template never lands on
+      // top of the user's work.
+      const bottom = state.nodes.reduce(
+        (lowest, node) => Math.max(lowest, node.position?.y ?? 0),
+        Number.NEGATIVE_INFINITY,
+      );
+      const offsetY = state.nodes.length ? bottom + 220 : 0;
+      /** @type {EditorNode[]} */
+      const nodes = source.map((node) => ({
+        id: /** @type {string} */ (remap(node.id)),
+        type: "lluna",
+        position: {
+          x: node.position?.x ?? 0,
+          y: (node.position?.y ?? 0) + offsetY,
+        },
+        selected: true,
+        data: {
+          schemaId: node.schemaId,
+          schemaVersion: definitions[node.schemaId]?.schemaVersion,
+          label: definitions[node.schemaId]?.name || node.schemaId,
+          parameters: restoredParameters(
+            definitions[node.schemaId],
+            node.parameters,
+          ),
+          appearance: { ...DEFAULT_APPEARANCE },
+          result: null,
+          definition: definitions[node.schemaId],
+        },
+      }));
+      /** @type {EditorEdge[]} */
+      const edges = (document?.edges || [])
+        .filter((edge) => remap(edge.sourceNodeId) && remap(edge.targetNodeId))
+        .map((edge) => {
+          const sourceNode = source.find(
+            (node) => node.id === edge.sourceNodeId,
+          );
+          const sourcePort = sourceNode
+            ? definitions[sourceNode.schemaId]?.outputs.find(
+                (port) => port.id === edge.sourcePortId,
+              )
+            : undefined;
+          return {
+            id: crypto.randomUUID(),
+            source: /** @type {string} */ (remap(edge.sourceNodeId)),
+            sourceHandle: edge.sourcePortId,
+            target: /** @type {string} */ (remap(edge.targetNodeId)),
+            targetHandle: edge.targetPortId,
+            type: "lluna",
+            data: { portType: sourcePort?.type || "" },
+          };
+        });
+      return history(state, {
+        nodes: [
+          ...state.nodes.map((node) => ({ ...node, selected: false })),
+          ...nodes,
+        ],
+        edges: [...state.edges, ...edges],
+      });
+    }),
   groupSelected: () => get().createFlowFromSelected(),
   createFlowFromSelected: () => {
     const state = get();

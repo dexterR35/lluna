@@ -340,6 +340,8 @@ export interface EditorState extends EditorSnapshot {
   setProjectName(name: string): void;
   newWorkflow(document?: WorkflowDocument): void;
   loadWorkflow(document: WorkflowDocument, definitions?: NodeDefinition[]): void;
+  /** Add a ready-made workflow below existing content, with fresh node ids. */
+  insertTemplate(document: WorkflowDocument): void;
   serialize(): WorkflowDocument;
 }
 
