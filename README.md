@@ -5,7 +5,7 @@
 <h1 align="center">Lluna</h1>
 
 <p align="center">
-  A local, node-based desktop app for image and video AI workflows.
+  Local, node-based image and video AI workflows.
 </p>
 
 <p align="center">
@@ -16,257 +16,229 @@
   <img alt="Node.js" src="https://img.shields.io/badge/Node.js-22%2B-339933?logo=nodedotjs&logoColor=white" />
 </p>
 
----
+Lluna is an Electron desktop app with a local Python backend. Build a workflow by connecting nodes, choose the models you want, and run the graph on your own machine. Workflows can also run headless from the command line.
 
-## What it's for
+Use it to:
 
-Wire nodes together on a canvas and run the graph. Everything happens on your machine — an Electron app talking to a local Python backend over loopback. Your media, models, and workflows never leave your computer.
-
-- **Clean up** — remove subtitles, watermarks, and burned-in text from images and video
-- **Restore** — upscale images and video, fix low light, one-step restoration with SUPIR or SeedVR2
-- **Cut out** — remove or replace backgrounds, select objects by click or description, matte and composite
-- **Create** — generate and edit images with FLUX.2 or Qwen-Image, steered by LoRAs and ControlNet
-- **Describe** — caption an image with a vision-language model you bring yourself
-
-Start from a **template** rather than an empty canvas, and run the same graphs **headless** from a script when you want them automated.
+- remove text, subtitles, watermarks, and backgrounds;
+- upscale or restore images and videos;
+- repair low-light photos and masked regions;
+- select objects by click or text description;
+- generate and edit images with FLUX.2, Qwen-Image, LoRA, and ControlNet;
+- caption images with a compatible vision-language model.
 
 <p align="center">
-  <img src="example/test1.png" alt="Lluna node-based workflow editor" width="49%" />
-  <img src="example/test2.png" alt="Lluna local model manager" width="49%" />
+  <img src="example/test1.png" alt="Lluna workflow editor" width="49%" />
+  <img src="example/test2.png" alt="Lluna model manager" width="49%" />
 </p>
 
----
+## Quick start
 
-## Install
+Requirements:
 
-You need **Python 3.12**, **Node.js 22+**, and an internet connection. Nothing else — the installer detects your hardware and picks its own dependencies.
+- 64-bit Python 3.12
+- Node.js 22 or newer and npm 10 or newer
+- Windows, Linux, or macOS
+- an internet connection for installation and model downloads
+- a compatible NVIDIA driver when using CUDA; the full CUDA Toolkit is not required
 
 ```bash
 git clone https://github.com/dexterR35/lluna.git
 cd lluna
-./install.sh          # install.bat on Windows
+./install.sh                 # Windows: .\install.bat
 npm run dev
 ```
 
-That's it. **No CUDA Toolkit, no manual driver setup, no choosing a build.** An NVIDIA GPU gets the CUDA wheels automatically; anything else gets CPU wheels, and Apple silicon gets MPS. The CUDA wheels contain the CPU kernels too, so a GPU install covers both — there is no second install to add.
-
-No models are downloaded during install. Add `--schedule-default-models` to queue a small starter set (Real-ESRGAN x2, MIRNet, SAM2 + Grounding DINO).
-
-<details>
-<summary>Forcing a specific build</summary>
+The installer detects CUDA, CPU, or Apple MPS automatically. It does not download optional model weights unless you ask it to:
 
 ```bash
-./install.sh --mode cpu        # CPU wheels even on a GPU machine
-./install.sh --mode directml   # AMD/Intel GPUs on Windows
+./install.sh --schedule-default-models
+```
+
+That option queues the starter models after the first launch: Real-ESRGAN x2, MIRNet, and the small SAM2 + Grounding DINO pair.
+
+To force a backend:
+
+```bash
+./install.sh --mode cpu
+./install.sh --mode directml   # Windows only; useful for AMD/Intel GPUs
 ./install.sh --mode mps        # Apple silicon
 ```
-</details>
 
-### Platform support
+On Windows, pass the same options to `install.bat`.
 
-| | Acceleration | Notes |
+## Models and hardware
+
+Models are optional and installed from **Settings → Models**. Lluna checks the selected backend, system RAM, graphics memory, disk space, and current free memory before enabling or running a model.
+
+The values below are Lluna's declared compatibility floors. They are not peak-usage guarantees: larger images, video batches, ControlNet, LoRAs, and keeping other models loaded can require more free memory.
+
+### What each model is used for
+
+| Model | Used for | Supported backend | Declared minimum |
+| --- | --- | --- | --- |
+| **BiRefNet** | General image/video background removal | CPU, CUDA, MPS | 4 GB RAM |
+| **BiRefNet Dynamic** | Background removal across mixed input resolutions | CPU, CUDA, MPS | 4 GB RAM |
+| **BiRefNet HR** | High-resolution background removal | CPU, CUDA, MPS | 6 GB RAM |
+| **BiRefNet HR Matting** | High-resolution soft alpha, hair, and fine edges | CPU, CUDA, MPS | 6 GB RAM |
+| **BiRefNet Lite 2K** | Lower-memory 2K background removal | CPU, CUDA, MPS | 4 GB RAM |
+| **BiRefNet Matting** | Trimap-free soft-alpha matting | CPU, CUDA, MPS | 4 GB RAM |
+| **Real-ESRGAN x2 / x4** | Fast image and video enlargement | CPU, CUDA, DirectML, MPS | 2 GB / 4 GB RAM |
+| **LaMa** | Masked image retouching and image text removal | CPU, CUDA, DirectML, MPS | 4 GB RAM |
+| **MIRNet LOL** | Low-light photo restoration | CPU, CUDA, DirectML, MPS | 4 GB RAM |
+| **PaddleOCR Server / Mobile** | Detecting text and subtitles before inpainting | CPU, CUDA | 2 GB / 1 GB RAM |
+| **STTN Auto / Detection** | Video and subtitle inpainting | CUDA, DirectML, MPS | 4 GB graphics memory, 4 GB RAM |
+| **ProPainter** | Motion-aware video inpainting | CUDA, DirectML, MPS | 8 GB graphics memory, 8 GB RAM |
+| **SAM2 + Grounding DINO** | Selecting objects by click or text prompt | CUDA, DirectML, MPS | 4.5 GB graphics memory, 8 GB RAM |
+| **SUPIR v0** | Diffusion-based photo restoration and upscaling | CUDA | 12 GB VRAM, 32 GB RAM, about 75.2 GB disk |
+| **SeedVR2 3B** | One-step image/video restoration and upscaling | Linux + CUDA | 24 GB VRAM, 32 GB RAM, about 14.6 GB disk |
+| **SeedVR2 7B** | Higher-capacity SeedVR2 restoration | Linux + CUDA | 48 GB VRAM, 64 GB RAM, about 66.9 GB disk |
+| **FLUX.2 Klein 4B/9B and Base 4B/9B** | Local image generation and editing | CUDA | 12 GB VRAM, 16 GB RAM |
+| **FLUX.2 Klein 9B FP8** | Lower-VRAM FLUX.2 generation | CUDA | 10 GB VRAM, 32 GB RAM |
+| **FLUX.2 Dev** | Large non-commercial image generation/editing | CUDA | 12 GB VRAM, 64 GB RAM |
+| **Qwen-Image** | Apache-2.0 image generation | CUDA | 12 GB VRAM, 64 GB RAM |
+
+Real-ESRGAN weights are about 67 MB each. Disk sizes are omitted where the registry does not declare a stable total; Hugging Face repositories can also change size between revisions.
+
+### What your VRAM unlocks
+
+| Available graphics memory | Models added at this level |
+| --- | --- |
+| **No dedicated GPU** | The 6 BiRefNet variants, Real-ESRGAN x2/x4, LaMa, MIRNet, and PaddleOCR Server/Mobile run on CPU |
+| **4 GB** | STTN video inpainting |
+| **4.5 GB** | SAM2 + Grounding DINO object selection |
+| **8 GB** | ProPainter video inpainting |
+| **10 GB NVIDIA** | FLUX.2 Klein 9B FP8 |
+| **12 GB NVIDIA** | SUPIR, the other FLUX.2 variants, and Qwen-Image |
+| **24 GB NVIDIA on Linux** | SeedVR2 3B |
+| **48 GB NVIDIA on Linux** | SeedVR2 7B |
+
+System RAM still matters. In particular, a 12 GB GPU is not enough by itself for FLUX.2 Dev or Qwen-Image; Lluna declares 64 GB of system RAM for both.
+
+### Recommended starting points
+
+“Best” depends on the input and the hardware. These are the safest first choices in Lluna, not universal quality rankings.
+
+| Goal | Start with | Choose something else when… |
 | --- | --- | --- |
-| **Linux** | CUDA, CPU | Everything works here, including SUPIR and SeedVR2 |
-| **Windows** | CUDA, DirectML, CPU | All models except SeedVR2 |
-| **macOS** | MPS, CPU | Apple silicon via Metal; no CUDA-only models |
+| Enlarge an image 2× | **Real-ESRGAN x2** | Use x4 when you actually need a 4× output |
+| Restore a damaged photo | **SUPIR v0** | Use Real-ESRGAN when speed, disk use, or commercial licensing matters |
+| Restore/upscale video | **SeedVR2 3B** | Use Real-ESRGAN on non-Linux systems or GPUs below 24 GB |
+| Remove a normal background | **BiRefNet** | Use Dynamic for mixed resolutions or Lite 2K for a lighter model |
+| Preserve hair and soft edges | **BiRefNet HR Matting** | Use regular Matting when high-resolution processing is unnecessary |
+| Select an object by description | **SAM2 + Grounding DINO small pair** | Switch to the large pair when accuracy matters more than speed |
+| Remove subtitles | **PaddleOCR Server + STTN Auto** | Use Mobile for faster detection or ProPainter for difficult motion |
+| Repair a dark photo | **MIRNet LOL** | Use SUPIR when the image also needs heavy restoration and you have CUDA |
+| Generate images | **FLUX.2 Klein Base 4B** | Use Klein 4B for speed, FP8 for 10 GB VRAM, or Qwen-Image for Apache-2.0 weights |
 
-**SeedVR2 is Linux-only.** It requires flash-attn and Apex, which upstream publishes as Linux wheels only. Everything else runs on all three platforms.
+### Platform notes
 
-Some models run in their own isolated Python environment (SUPIR, SeedVR2, BiRefNet) because their pinned dependencies conflict with the app's. Lluna builds those for you and fetches the Python version they need — you never install a second Python by hand.
-
----
-
-## Which models work on your machine
-
-**No GPU?** These 12 run on CPU. Slower, but fully functional.
-
-| Model | Used for |
-| --- | --- |
-| **BiRefNet** ×6 (Standard, Dynamic, HR, HR Matting, Lite 2K, Matting) | Background removal, matting |
-| **Real-ESRGAN x2 / x4** | Image and video upscaling |
-| **LaMa** | Masked retouching |
-| **MIRNet LOL** | Low-light restoration |
-| **PaddleOCR** Server / Mobile | Text detection for subtitle removal |
-
-**Have an NVIDIA GPU?** Everything above runs faster, plus:
-
-| VRAM | Unlocks |
-| --- | --- |
-| **4.5 GB** | SAM2, Grounding DINO (object selection), STTN, ProPainter (video inpainting) |
-| **10–12 GB** | SUPIR, FLUX.2 Klein, FLUX.2 Dev, Qwen-Image |
-| **24 GB** | SeedVR2 3B |
-| **48 GB+** | SeedVR2 7B |
-
-Lluna checks this for you. A model your machine can't run is marked incompatible with the reason; a model that fits but is short on free memory right now gets a warning, not a block.
-
-### What's best
-
-| You want to… | Start with | Why |
+| Platform | Acceleration | Important limits |
 | --- | --- | --- |
-| **Upscale an image** | Real-ESRGAN x2 | Fast, runs anywhere, no download tax |
-| **Restore a damaged photo** | SUPIR v0 | Best quality by a wide margin — 75 GB disk, 12 GB VRAM, non-commercial |
-| **Upscale video** | SeedVR2 3B | One-step, temporally stable; Linux + 24 GB VRAM |
-| **Remove a background** | BiRefNet Standard | Best quality/speed balance; use HR Matting for hair and soft edges |
-| **Generate an image** | FLUX.2 Klein | Recommended default at 12 GB VRAM; Klein 9B FP8 is lighter at 10 GB |
-| **Select an object** | SAM2 + Grounding DINO (fast pair) | Click or describe what you want; swap to the large pair for quality |
-| **Remove subtitles** | PaddleOCR + STTN | Detection and inpainting run together automatically |
+| **Linux** | CUDA, CPU | The only platform supported by SeedVR2; CUDA models require NVIDIA |
+| **Windows** | CUDA, DirectML, CPU | SeedVR2 is unavailable; SUPIR and built-in generation still require CUDA |
+| **macOS** | MPS, CPU | CUDA-only models—SUPIR, SeedVR2, FLUX.2, and Qwen-Image—are unavailable |
 
-Full disk footprint if you install **every** model: roughly **157 GB**, dominated by SUPIR (75 GB) and SeedVR2 7B (67 GB). Install what you need.
+SeedVR2 is Linux-only because its reviewed runtime depends on Linux wheels for flash-attn and Apex. SUPIR, SeedVR2, and BiRefNet use isolated Python environments so their pinned dependencies do not conflict with the main application.
 
-Gated models (FLUX.2 Dev) need a Hugging Face token — accept the license upstream, then connect your account under **Settings → Models → Hugging Face**.
+Some weights have separate restrictions. SUPIR and FLUX.2 Dev are non-commercial. Gated Hugging Face models require you to accept the upstream terms and add a token under **Settings → Models → Hugging Face**.
 
----
+## Workflows
 
-## The nodes
+Start with one of the built-in templates or drag nodes onto the canvas. Ports connect from left to right, and Lluna validates types, required models, model capabilities, and hardware before a run. Independent graph branches can execute concurrently; GPU-backed nodes are scheduled through the inference worker.
 
-Don't start from an empty canvas — the node library opens with **templates**: complete chains for removing subtitles, cutting out a subject, upscaling, generating and more. Click one and it drops onto the canvas, ready to point at your file.
+Built-in templates cover:
 
-| Group | Nodes |
-| --- | --- |
-| **Input** | Load Image, Load Images, Load Video, Load Mask, Prompt, Number, Integer, Boolean, LLaVA Caption, Describe Image |
-| **Image** | Generate Image, Edit Image, Upscale Image, Remove Background, Fix Low Light, Composite Background, LaMa Retouch, Remove Text from Image, Control Map, ControlNet |
-| **Video** | Upscale Video, Remove Text from Video, Remove Background from Video |
-| **Mask** | Select Object |
-| **Output** | Save Image, Save Video |
+- removing text from an image;
+- removing subtitles from a video;
+- cutting out a transparent subject;
+- upscaling an image;
+- fixing a low-light photo;
+- generating and then upscaling;
+- describing an image and generating a new one.
 
-Ports connect left to right, and every node declares the model, capability, and hardware it needs — so bad connections and missing models are caught before anything runs. Independent branches of a graph run in parallel; model-backed nodes take turns on the GPU. Workflows save as `*.lluna.json`.
+Workflows are saved as `*.lluna.json`.
 
 ```text
-Load Image  → Remove Text from Image → Save Image
-Load Video  → Remove Text from Video → Save Video
-Load Image  → Remove Background      → Save Image
-Prompt      → Generate Image → Upscale Image → Save Image
-Load Image  → Select Object  → LaMa Retouch  → Save Image
-Load Image  → Describe Image → Generate Image → Save Image
+Load Image → Remove Background → Save Image
+Load Video → Remove Text from Video → Save Video
+Prompt → Generate Image → Upscale Image → Save Image
+Load Image → Select Object → LaMa Retouch → Save Image
 ```
 
-### Steering generation
+Generation nodes support compatible LoRAs and ControlNets. A Control Map node can create Canny, depth, or pose guidance, and Lluna rejects adapters whose declared base model does not match the generation model.
 
-Two ways to push a generation model somewhere specific, both using models you bring yourself.
+## Model management
 
-**LoRA** — small adapters that change style or subject. Pick them directly on **Generate Image** or **Edit Image**; several stack, each with its own weight, which is how a style adapter and a subject adapter are normally combined.
+Open **Settings → Models** to install, enable, disable, or remove built-in models. Downloads are queued and incomplete installs are staged separately from usable weights.
 
-**ControlNet** — keeps the *structure* of a reference image while the prompt decides everything else:
+Use **Add model** for a Hugging Face repository, local directory, or supported weight file such as `.safetensors`, `.onnx`, `.pth`, `.pt`, `.ckpt`, or `.bin`. Lluna inspects model cards and declarative configuration without importing remote model code or loading weights merely to identify them. Unknown models remain **Needs configuration** until their task, runtime, and capabilities are reviewed.
 
-```text
-Load Image → Control Map → ControlNet →
-                                        Generate Image → Save Image
-                              Prompt  →
-```
-
-**Control Map** turns a photo into the structural hint ControlNet reads:
-
-| Control type | Needs | Best for |
-| --- | --- | --- |
-| **Canny edges** | nothing — built in | Preserving composition and outlines |
-| **Depth map** | a small model, installed on demand | Preserving 3D layout |
-| **Human pose** | a small model, installed on demand | Preserving a figure's posture |
-
-A control map you made elsewhere is just an image — wire it straight into ControlNet and skip the Control Map node entirely.
-
-Lluna checks that an adapter matches the model it is attached to. A ControlNet trained for SDXL used with FLUX doesn't error — it produces noise — so that pairing is refused with an explanation instead.
-
----
+SafeTensors is preferred. Pickle-capable formats and repository `requirements.txt` files are not trusted or installed automatically. See the [model reference](backend/models/reference/README.md) and [model platform guide](backend/models/reference/PLATFORM.md).
 
 ## Results
 
 <p align="center">
-  <img src="example/birefnet_ex2.png" alt="BiRefNet foreground and mask segmentation examples" width="49%" />
-  <img src="example/birfet.png" alt="BiRefNet object mask example" width="49%" />
+  <img src="example/birefnet_ex2.png" alt="BiRefNet background removal examples" width="49%" />
+  <img src="example/images_supir.jpeg" alt="SUPIR restoration example" width="49%" />
 </p>
 
 <p align="center">
-  <img src="example/bifrent_2.png" alt="BiRefNet foreground and mask output example" width="72%" />
+  <img src="example/seed_vr2_image_upscale.png" alt="SeedVR2 image restoration example" width="49%" />
+  <img src="example/flux2.avif" alt="FLUX.2 generation examples" width="49%" />
 </p>
 
-<p align="center">
-  <img src="example/images_supir.jpeg" alt="SUPIR image restoration before and after example" width="49%" />
-  <img src="example/real_ergan.png" alt="Real-ESRGAN image upscaling before and after example" width="49%" />
-</p>
+## Headless use
 
-<p align="center">
-  <img src="example/seed_vr2_image_upscale.png" alt="SeedVR2 image upscaling example" width="49%" />
-  <img src="example/seed_vr2_video_upscale.png" alt="SeedVR2 video upscaling example" width="49%" />
-</p>
-
-<p align="center">
-  <img src="example/flux2.avif" alt="FLUX.2 generated image examples" width="49%" />
-  <img src="example/flux22.avif" alt="More FLUX.2 generated image examples" width="49%" />
-</p>
-
----
-
-## Adding models
-
-Open **Settings → Models**, pick a model, select **Install**, and watch **Activity → Downloads**. Installed models persist across app updates until you uninstall them.
-
-**Your own models** go through **Settings → Models → Add model** — a Hugging Face repo URL, a local folder, or a single weight file (`.safetensors`, `.pth`, `.pt`, `.ckpt`, `.bin`, `.onnx`).
-
-Lluna identifies a custom model from a reviewed catalog entry, its model card and config, or safe inspection of its declarative config files — **it never imports model code or loads weights just to identify them**. A model stays *Needs configuration* until that review passes. SafeTensors is preferred; pickle-carrying formats and a repository's own `requirements.txt` are never trusted or installed automatically.
-
-See the [model platform guide](backend/models/reference/PLATFORM.md) and the [model reference](backend/models/reference/README.md).
-
-Custom models run through a **runtime**: PyTorch/Diffusers, Transformers, Paddle, or **ONNX Runtime** — the last of which needs no per-model Python implementation and is the only one that reaches AMD and Intel GPUs on Windows through DirectML.
-
----
-
-## Running without the desktop app
-
-The same graphs run headless, for scripts and scheduled jobs. No window, no browser, everything on `127.0.0.1`.
+The same workflows can run without Electron:
 
 ```bash
-lluna.py run graph.lluna.json --out ./results   # run one workflow, then exit
+lluna.py run graph.lluna.json --out ./results
 lluna.py run --template cutout-transparent --out ./results
-lluna.py templates                              # list the built-in templates
-lluna.py serve --port 8765 --token <token>      # just the local API
+lluna.py templates
+lluna.py serve --port 8765 --token <token>
 ```
 
-`run` executes in-process — no server to start, no port, no token — and exits `0` on success, `1` if the run failed, `2` if the workflow is invalid, `3` on timeout. Artifacts land in `--out`.
+`run` executes a workflow in-process and exits with code `0` on success, `1` after a failed or cancelled run, `2` for an invalid workflow, and `3` on timeout. `serve` starts the loopback API used by the desktop app.
 
-`serve` starts the same local API the desktop app uses, so anything the UI can do is reachable over HTTP.
-
-<details>
-<summary>Environment variables</summary>
+Useful environment variables:
 
 | Variable | Effect |
 | --- | --- |
-| `LLUNA_GRAPH_CONCURRENCY=0` | Run graph nodes strictly one at a time |
-| `LLUNA_INFER_DEVICES="cuda:0,cuda:1"` | Opt in to one inference worker per GPU (default: one worker) |
-| `LLUNA_SUPIR_PYTHON`, `LLUNA_SEEDVR_PYTHON`, `LLUNA_BIREFNET_PYTHON` | Point an isolated runtime at an existing interpreter instead of downloading one |
-| `HF_TOKEN` | Hugging Face access for gated models |
-</details>
-
----
+| `LLUNA_GRAPH_CONCURRENCY=0` | Run graph nodes one at a time |
+| `LLUNA_INFER_DEVICES="cuda:0,cuda:1"` | Start one inference worker per listed GPU |
+| `LLUNA_SUPIR_PYTHON` | Use an existing compatible Python for the SUPIR runtime |
+| `LLUNA_SEEDVR_PYTHON` | Use an existing compatible Python for the SeedVR2 runtime |
+| `LLUNA_BIREFNET_PYTHON` | Use an existing compatible Python for the BiRefNet runtime |
+| `HF_TOKEN` | Authenticate gated Hugging Face downloads |
 
 ## Development
 
 ```bash
-npm run dev             # Run the app
-npm run build           # Build the production UI
-npm run lint            # Lint the frontend
-npm run check           # Frontend type checks and static guards
-npm test                # Frontend and backend tests
+npm run dev             # desktop app with live reload
+npm run build           # production renderer build
+npm run lint            # frontend lint
+npm run check           # type checks and static guards
+npm test                # frontend and backend tests
 ```
 
-Backend structure: [backend/ARCHITECTURE.md](backend/ARCHITECTURE.md). Packaged builds: [packaging/build.py](packaging/build.py).
+Backend structure is documented in [backend/ARCHITECTURE.md](backend/ARCHITECTURE.md). Packaging starts in [packaging/build.py](packaging/build.py).
 
-**Update:**
+To update a source checkout:
 
 ```bash
 git pull
-./install.sh
+./install.sh            # Windows: .\install.bat
 npm install --allow-git=all
 npm run dev
 ```
 
-Updating never removes your models, settings, or workflows.
+Application data, settings, workflows, and installed models are stored outside packaged application files and are not intentionally removed by an update.
 
----
+## Privacy and security
 
-## Privacy
-
-The API binds to loopback with a token generated each launch, and the Electron renderer is sandboxed. Your media stays on your computer unless you export it. Model downloads go directly to the upstream provider you chose.
+The desktop API binds to loopback and uses a token generated at launch. The Electron renderer is sandboxed. Media processing is local; network access is used when you request dependencies, model weights, or updates from an upstream provider.
 
 ## License
 
-Source code: [LICENSE](LICENSE). Model weights and third-party components carry their own licenses — read [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and each model card before use or redistribution. Several models (SUPIR, FLUX.2 Dev) are non-commercial.
+Lluna source code is licensed under [Apache License 2.0](LICENSE). Model weights and third-party components keep their own licenses. Review [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and the upstream model card before commercial use or redistribution.
