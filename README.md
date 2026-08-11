@@ -91,8 +91,8 @@ The values below are Lluna's declared compatibility floors. They are not peak-us
 | **ProPainter** | Motion-aware video inpainting | CUDA, DirectML, MPS | 8 GB graphics memory, 8 GB RAM |
 | **SAM2 + Grounding DINO** | Selecting objects by click or text prompt | CUDA, DirectML, MPS | 4.5 GB graphics memory, 8 GB RAM |
 | **SUPIR v0** | Diffusion-based photo restoration and upscaling | CUDA | 12 GB VRAM, 32 GB RAM, about 75.2 GB disk |
-| **SeedVR2 3B** | One-step image/video restoration and upscaling | Cross-platform | 24 GB VRAM, 32 GB RAM, about 14.6 GB disk |
-| **SeedVR2 7B** | Higher-capacity SeedVR2 restoration | Linux + CUDA | 48 GB VRAM, 64 GB RAM, about 66.9 GB disk |
+| **SeedVR2 3B** | One-step image/video restoration and upscaling | CUDA | 24 GB VRAM, 32 GB RAM, about 14.6 GB disk |
+| **SeedVR2 7B** | Higher-capacity SeedVR2 restoration | CUDA | 48 GB VRAM, 64 GB RAM, about 66.9 GB disk |
 | **FLUX.2 Klein 4B/9B and Base 4B/9B** | Local image generation and editing | CUDA | 12 GB VRAM, 16 GB RAM |
 | **FLUX.2 Klein 9B FP8** | Lower-VRAM FLUX.2 generation | CUDA | 10 GB VRAM, 32 GB RAM |
 | **FLUX.2 Dev** | Large non-commercial image generation/editing | CUDA | 12 GB VRAM, 64 GB RAM |
