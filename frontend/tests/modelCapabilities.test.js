@@ -3,7 +3,6 @@ import {
   applyCapabilityDefaults,
   parametersForCapabilities,
 } from "../src/models/modelCapabilities";
-import { capabilityIssues } from "../src/models/modelManifestCapabilities";
 
 /**
  * @param {import("../src/types").ParameterDefinition | undefined} parameter
@@ -97,16 +96,6 @@ describe("model capability projection", () => {
       "distilled",
     );
     expect(values).toEqual({ model: "distilled", width: 512, steps: 4, seed: -1 });
-  });
-
-  it("keeps incomplete manifests in configuration", () => {
-    expect(
-      capabilityIssues({
-        task: "text-to-image",
-        variant: { kind: "unknown" },
-        capabilities: { provenance: "huggingface-metadata", tasks: ["text-to-image"], inputs: ["prompt"], outputs: ["image"] },
-      }),
-    ).toContain("variant");
   });
 
   it("shows professional controls only for their selected model", () => {

@@ -5,7 +5,6 @@ import {
   Download,
   ExternalLink,
   Plus,
-  RefreshCw,
   Trash2,
   Upload,
   X,
@@ -23,7 +22,7 @@ import {
 import { useServerStore } from "../state/serverStore";
 import { SettingsForm } from "./SettingsForm";
 import { AddModelDialog, HuggingFaceConnection } from "./AddModelDialog";
-import { capabilityIssues } from "../models/modelManifestCapabilities";
+import { useManifestValidation } from "../models/modelManifestCapabilities";
 import { formatTransferProgress, useCancelInstall } from "../models/downloadFormat";
 import { CapabilityEditor } from "./CapabilityEditor";
 
@@ -270,7 +269,10 @@ function DynamicModelConfiguration({ model, onSaved }) {
   const [saving, setSaving] = useState(false);
   const task = manifest.task;
   const adapter = manifest.adapter;
-  const unresolved = capabilityIssues(manifest);
+  const {
+    issues: unresolved,
+    validating: validatingManifest,
+  } = useManifestValidation(manifest);
   const runtime = /** @type {Record<string, string>} */ ({
     diffusers: "diffusers-torch",
     transformers: "transformers-torch",
@@ -320,13 +322,12 @@ function DynamicModelConfiguration({ model, onSaved }) {
           onChange={(event) => setManifest({ ...manifest, adapter: event.target.value })}
           options={[
             ["diffusers", "Diffusers + PyTorch"], ["transformers", "Transformers + PyTorch"],
-            ["paddle", "Paddle"],
           ].map(([value, label]) => ({ value, label }))}
         />
       </div>
       <CapabilityEditor manifest={manifest} onChange={setManifest} />
       {unresolved.length > 0 && <p className="ui-help text-mg-warning">Still required: {unresolved.join(", ")}.</p>}
-      <CompactButton variant="secondary" disabled={saving || unresolved.length > 0} onClick={() => void save()}>
+      <CompactButton variant="secondary" disabled={saving || validatingManifest || unresolved.length > 0} onClick={() => void save()}>
         {saving ? "Saving…" : "Save reviewed manifest"}
       </CompactButton>
     </div>
@@ -344,7 +345,7 @@ function SupirSetup({ model, onChanged }) {
     if (!desktop) return;
     setImporting(kind);
     try {
-      const grant = await desktop.selectModelFile();
+      const grant = await desktop.selectReviewedCheckpointFile();
       if (!grant) return;
       await api("/api/models/supir/checkpoint", {
         method: "POST",
@@ -595,33 +596,12 @@ export function ModelsPanel() {
   );
   const [expanded, setExpanded] = useState(/** @type {string | null} */ (null));
   const [addOpen, setAddOpen] = useState(false);
-  const [rescanning, setRescanning] = useState(false);
-  const updateSettings = useServerStore((store) => store.updateSettings);
   const refreshModels = useServerStore((store) => store.refreshModels);
   const sections = useMemo(() => groupModels(models), [models]);
 
   /** @param {import("../types").DownloadJob} job */
   function cancelInstall(job) {
     return cancelDownloadJob(job.jobId);
-  }
-
-  async function rescan() {
-    setRescanning(true);
-    try {
-      const result = await api("/api/models/rescan", { method: "POST" });
-      useServerStore.setState({ models: result.models });
-      toast.push(
-        `Scanned · ${result.discovered} custom model${result.discovered === 1 ? "" : "s"}.`,
-        "success",
-      );
-    } catch (error) {
-      toast.push(
-        error instanceof Error ? error.message : String(error),
-        "error",
-      );
-    } finally {
-      setRescanning(false);
-    }
   }
 
   async function confirmState(
@@ -729,49 +709,10 @@ export function ModelsPanel() {
       <HuggingFaceConnection />
 
       <div className="ui-actions gap-1.5">
-        <CompactButton variant="secondary" onClick={() => void rescan()}>
-          <RefreshCw
-            className={`ui-icon-sm ${rescanning ? "animate-spin" : ""}`}
-          />
-          Rescan
-        </CompactButton>
         <CompactButton variant="secondary" onClick={() => setAddOpen(true)}>
           <Plus className="ui-icon-sm" /> Add model
         </CompactButton>
       </div>
-
-      {settings?.models && (
-        <div className="grid gap-2 sm:grid-cols-2">
-          <Switch
-            label="Watch model folder"
-            checked={Boolean(settings.models.auto_scan)}
-            onChange={(value) =>
-              void updateSettings({ models: { auto_scan: value } })
-            }
-          />
-          <Switch
-            label="Prefer SafeTensors"
-            checked={Boolean(settings.models.prefer_safetensors)}
-            onChange={(value) =>
-              void updateSettings({ models: { prefer_safetensors: value } })
-            }
-          />
-          <Switch
-            label="Allow legacy pickle weights"
-            checked={Boolean(settings.models.allow_pickle_weights)}
-            onChange={(value) =>
-              void updateSettings({ models: { allow_pickle_weights: value } })
-            }
-          />
-          <Switch
-            label="Allow trusted remote model code"
-            checked={Boolean(settings.models.allow_remote_code)}
-            onChange={(value) =>
-              void updateSettings({ models: { allow_remote_code: value } })
-            }
-          />
-        </div>
-      )}
 
       <AddModelDialog open={addOpen} onClose={() => setAddOpen(false)} />
 

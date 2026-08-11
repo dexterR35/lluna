@@ -8,11 +8,30 @@ from backend.tools.inference import worker as infer_worker
 from backend.tools.inference.client import InferClient, _JobCallbacks
 from backend.tools.inference.protocol import EvtMsg, JobType, cancel, result, shutdown, start_job
 from backend.tools.shared.hardware import HardwareAccelerator
+from backend.tools.shared.jobs import apply_hardware_from_payload
 
 
 class FakeHardware:
     def set_enabled(self, enabled):
         self.enabled = bool(enabled)
+
+
+def test_subtitle_job_applies_explicit_hardware_acceleration_flag(monkeypatch) -> None:
+    hardware = FakeHardware()
+    monkeypatch.setattr(
+        HardwareAccelerator,
+        "instance",
+        classmethod(lambda cls: hardware),
+    )
+
+    apply_hardware_from_payload(
+        {
+            "hardware_acceleration": False,
+            "config": {"hardware_acceleration": True},
+        }
+    )
+
+    assert hardware.enabled is False
 
 
 def test_worker_control_loop_can_cancel_active_job(monkeypatch) -> None:

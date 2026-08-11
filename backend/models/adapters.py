@@ -9,10 +9,14 @@ from typing import Any, Callable, Sequence
 
 from PIL import Image
 
-from backend.models.dynamic_registry import DynamicModelRecord, DynamicModelRegistry
 from backend.models.controlnet import call_kwargs as controlnet_kwargs
 from backend.models.controlnet import composed as controlnet_composed
+from backend.models.dynamic_registry import DynamicModelRecord, DynamicModelRegistry
 from backend.models.lora import applied as lora_applied
+from backend.models.reference.manifest import (
+    ManifestError,
+    validate_custom_model_security,
+)
 
 Progress = Callable[[int], None] | None
 CancelEvent = threading.Event | None
@@ -415,7 +419,7 @@ class OnnxAdapter(RuntimeAdapter):
             )
         outputs = loaded.run(None, feed)
         names = [item.name for item in loaded.get_outputs()]
-        return dict(zip(names, outputs))
+        return dict(zip(names, outputs, strict=True))
 
     def unload(self, loaded: Any) -> None:
         # ORT frees device memory when the session is collected; drop the handle.
@@ -464,6 +468,10 @@ class DynamicRuntimeManager:
         cancel_event: CancelEvent = None,
     ) -> Any:
         record = DynamicModelRegistry.instance().get(model_id)
+        try:
+            validate_custom_model_security(record.manifest, record.path)
+        except ManifestError as exc:
+            raise AdapterError(str(exc)) from exc
         if not record.installed or not record.enabled:
             raise AdapterError("The custom model is not installed and enabled.")
         if not record.manifest.is_configured():

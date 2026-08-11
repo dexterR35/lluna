@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Callable
 
@@ -17,6 +17,7 @@ from backend.models.reference.manifest import (
     ModelManifest,
     inferred_manifest,
     model_files,
+    validate_custom_model_security,
 )
 from backend.models.reference.runtimes import runtime_status
 
@@ -109,10 +110,8 @@ class DynamicModelRegistry:
         self._lock = threading.RLock()
         self._listeners: set[RegistryListener] = set()
         self._records: dict[str, DynamicModelRecord] = {}
-        self._watcher: threading.Thread | None = None
-        self._stop_watcher = threading.Event()
         self.ensure_layout()
-        self.scan()
+        self._load_startup()
 
     @classmethod
     def instance(cls) -> "DynamicModelRegistry":
@@ -140,21 +139,32 @@ class DynamicModelRegistry:
 
     def set_enabled(self, model_id: str, enabled: bool) -> None:
         with self._lock:
-            if model_id not in self._records:
+            record = self._records.get(model_id)
+            if record is None:
                 raise KeyError(model_id)
             values = self._enabled_state()
             values[model_id] = bool(enabled)
             atomic_write_json(self.state_path, {"schema": 1, "enabled": values})
-            self.scan()
+            self._records[model_id] = replace(record, enabled=bool(enabled))
+            listeners = tuple(self._listeners)
+        self._notify(listeners)
 
-    def scan(self) -> list[DynamicModelRecord]:
+    def _load_startup(self) -> None:
         self.ensure_layout()
         enabled = self._enabled_state()
         found: dict[str, DynamicModelRecord] = {}
         for item in sorted(self.root.iterdir(), key=lambda value: value.name.lower()):
             if item.name.startswith("."):
                 continue
-            record = self._scan_item(item, enabled)
+            try:
+                record = self._scan_item(item, enabled)
+            except ManifestError as exc:
+                logger.warning(
+                    "Skipping unsupported custom model %s: %s",
+                    item.name,
+                    exc,
+                )
+                continue
             identifier = record.manifest.id
             if identifier in found:
                 duplicate = DynamicModelRecord(
@@ -169,15 +179,36 @@ class DynamicModelRegistry:
             else:
                 found[identifier] = record
         with self._lock:
-            changed = _fingerprint(self._records) != _fingerprint(found)
             self._records = found
-            listeners = tuple(self._listeners) if changed else ()
+
+    @staticmethod
+    def _notify(listeners: tuple[RegistryListener, ...]) -> None:
         for listener in listeners:
             try:
                 listener()
             except Exception:
                 logger.exception("Dynamic model registry listener failed")
-        return list(found.values())
+
+    def record_path(self, path: Path) -> DynamicModelRecord:
+        """Update one path after a Lluna-owned filesystem mutation."""
+        record = self._scan_item(path, self._enabled_state())
+        with self._lock:
+            self._records = {
+                key: value
+                for key, value in self._records.items()
+                if value.path != path and key != record.manifest.id
+            }
+            self._records[record.manifest.id] = record
+            listeners = tuple(self._listeners)
+        self._notify(listeners)
+        return record
+
+    def remove(self, model_id: str) -> None:
+        with self._lock:
+            if self._records.pop(model_id, None) is None:
+                raise KeyError(model_id)
+            listeners = tuple(self._listeners)
+        self._notify(listeners)
 
     def _scan_item(self, item: Path, enabled: dict[str, bool]) -> DynamicModelRecord:
         manifest_path = item / MANIFEST_FILENAME if item.is_dir() else None
@@ -192,6 +223,10 @@ class DynamicModelRegistry:
         except ManifestError as exc:
             manifest = inferred_manifest(item)
             error = str(exc)
+        try:
+            validate_custom_model_security(manifest, item)
+        except ManifestError as exc:
+            error = error or str(exc)
         installed = _is_installed(item, manifest)
         return DynamicModelRecord(
             manifest,
@@ -202,18 +237,16 @@ class DynamicModelRegistry:
             discovered,
         )
 
-    def records(self, *, refresh: bool = True) -> list[DynamicModelRecord]:
-        return self.scan() if refresh else list(self._records.values())
+    def records(self) -> list[DynamicModelRecord]:
+        return list(self._records.values())
 
-    def get(self, model_id: str, *, refresh: bool = True) -> DynamicModelRecord:
-        if refresh:
-            self.scan()
+    def get(self, model_id: str) -> DynamicModelRecord:
         try:
             return self._records[model_id]
         except KeyError as exc:
             raise KeyError(model_id) from exc
 
-    def revision_stamp(self, model_id: str, *, refresh: bool = False) -> str:
+    def revision_stamp(self, model_id: str) -> str:
         """Fingerprint of a custom model's on-disk files.
 
         Changes whenever the model's watched files are replaced (re-import,
@@ -222,7 +255,7 @@ class DynamicModelRegistry:
         stale cached artifact apart from a genuinely-unchanged model.
         """
         try:
-            record = self.get(model_id, refresh=refresh)
+            record = self.get(model_id)
         except KeyError:
             return ""
         mtime_ns, size = _path_stamp(record.path, record.manifest.expected_files)
@@ -236,7 +269,7 @@ class DynamicModelRegistry:
         target = self.root / manifest.id
         target.mkdir(parents=True, exist_ok=True)
         atomic_write_json(target / MANIFEST_FILENAME, manifest.to_dict())
-        self.scan()
+        self.record_path(target)
         return target
 
     def configure(self, current_id: str, manifest: ModelManifest) -> Path:
@@ -246,7 +279,7 @@ class DynamicModelRegistry:
         if not record.path.is_dir():
             raise ManifestError("Import standalone model files with Add model before configuring them.")
         atomic_write_json(record.path / MANIFEST_FILENAME, manifest.to_dict())
-        self.scan()
+        self.record_path(record.path)
         return record.path
 
     def subscribe(self, listener: RegistryListener) -> Callable[[], None]:
@@ -259,35 +292,6 @@ class DynamicModelRegistry:
 
         return unsubscribe
 
-    def start_watcher(self, *, interval_seconds: float = 2.0) -> None:
-        """Poll the user model folder without adding a native watcher dependency."""
-        with self._lock:
-            if self._watcher is not None and self._watcher.is_alive():
-                return
-            self._stop_watcher.clear()
-
-            def watch() -> None:
-                while not self._stop_watcher.wait(max(0.5, interval_seconds)):
-                    try:
-                        self.scan()
-                    except OSError:
-                        logger.exception("Could not rescan the custom model folder")
-
-            self._watcher = threading.Thread(
-                target=watch, name="lluna-model-watcher", daemon=True
-            )
-            self._watcher.start()
-
-    def stop_watcher(self) -> None:
-        self._stop_watcher.set()
-        watcher = self._watcher
-        if watcher is not None and watcher is not threading.current_thread():
-            watcher.join(timeout=3.0)
-        with self._lock:
-            if self._watcher is watcher:
-                self._watcher = None
-
-
 def _is_installed(path: Path, manifest: ModelManifest) -> bool:
     if path.is_file():
         return path.stat().st_size > 0
@@ -296,22 +300,6 @@ def _is_installed(path: Path, manifest: ModelManifest) -> bool:
     if manifest.expected_files:
         return all((path / relative).is_file() for relative in manifest.expected_files)
     return bool(model_files(path)) and manifest.source.type == "local"
-
-
-def _fingerprint(records: dict[str, DynamicModelRecord]) -> tuple:
-    return tuple(
-        sorted(
-            (
-                key,
-                str(record.path),
-                record.installed,
-                record.enabled,
-                record.error,
-                _path_stamp(record.path, record.manifest.expected_files),
-            )
-            for key, record in records.items()
-        )
-    )
 
 
 def _path_stamp(path: Path, expected_files: tuple[str, ...]) -> tuple[int, int]:

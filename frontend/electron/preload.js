@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld("llunaDesktop", Object.freeze({
   selectVideoFiles: () => ipcRenderer.invoke("files:videos"),
   selectMaskFile: () => ipcRenderer.invoke("files:mask"),
   selectModelFile: () => ipcRenderer.invoke("models:file"),
+  selectReviewedCheckpointFile: () => ipcRenderer.invoke("models:reviewed-checkpoint-file"),
   selectModelFolder: () => ipcRenderer.invoke("models:folder"),
   selectDirectory: () => ipcRenderer.invoke("files:directory"),
   selectSaveFile: (/** @type {"image" | "video"} */ kind) => ipcRenderer.invoke("files:save", kind),

@@ -22,6 +22,7 @@ from backend.models.reference.manifest import (
     inferred_manifest,
     model_files,
     normalize_model_id,
+    validate_custom_model_security,
 )
 from backend.models.reference.runtimes import runtime_status
 
@@ -184,8 +185,8 @@ def analyze_local(path: Path) -> dict:
     source = path.expanduser().resolve()
     if not source.exists():
         raise FileNotFoundError(source)
-    if source.is_file() and not model_files(source):
-        raise ValueError("Choose a supported model file (.safetensors, .pth, .pt, .ckpt, or .bin).")
+    if source.is_file() and source.suffix.lower() != ".safetensors":
+        raise ValueError("Choose a SafeTensors model file.")
     manifest_path = source / MANIFEST_FILENAME if source.is_dir() else None
     manifest = (
         ModelManifest.from_file(manifest_path)
@@ -203,6 +204,7 @@ def analyze_local(path: Path) -> dict:
             variant=variant,
             capabilities=capabilities,
         )
+    validate_custom_model_security(manifest, source)
     total = sum(item.stat().st_size for item in model_files(source))
     manifest = replace(
         manifest,
@@ -234,13 +236,7 @@ def _analysis(manifest: ModelManifest, **extra: Any) -> dict:
 
 def configure_manifest(raw: Mapping[str, Any]) -> ModelManifest:
     manifest = ModelManifest.from_mapping(raw)
-    from backend.configuration.service import get_settings
-
-    policy = get_settings().models
-    if manifest.security.trust_remote_code and not policy.allow_remote_code:
-        raise ManifestError("Remote repository code is disabled in Model platform settings.")
-    if manifest.security.allow_pickle and not policy.allow_pickle_weights:
-        raise ManifestError("Pickle-capable model weights are disabled in Model platform settings.")
+    validate_custom_model_security(manifest)
     issues = manifest.configuration_issues()
     if issues:
         raise ManifestError(
@@ -285,6 +281,7 @@ def import_local(source: Path, raw: Mapping[str, Any]) -> ModelManifest:
 
     source = source.expanduser().resolve()
     manifest = configure_manifest(raw)
+    validate_custom_model_security(manifest, source)
     registry = DynamicModelRegistry.instance()
     target = registry.root / manifest.id
     staging = registry.staging_root / f"{manifest.id}-{os.getpid()}"
@@ -338,7 +335,7 @@ def import_local(source: Path, raw: Mapping[str, Any]) -> ModelManifest:
         atomic_write_json(staging / MANIFEST_FILENAME, local_manifest.to_dict())
         (staging / ".lluna-installed").write_text("local\n", encoding="utf-8")
         _promote(staging, target)
-        registry.scan()
+        registry.record_path(target)
         from backend.configuration.service import get_settings
         if get_settings().models.auto_enable_imports:
             registry.set_enabled(local_manifest.id, True)
@@ -389,6 +386,7 @@ def install_huggingface(manifest: ModelManifest) -> Path:
             f"{manifest.source.repo}@{manifest.source.revision}\n", encoding="utf-8"
         )
         _promote(staging, target)
+        registry.record_path(target)
         registry.set_enabled(manifest.id, True)
         return target
     except Exception:
@@ -421,4 +419,4 @@ def uninstall_dynamic(model_id: str) -> None:
         shutil.rmtree(target)
     elif target.is_file():
         target.unlink()
-    registry.scan()
+    registry.remove(model_id)

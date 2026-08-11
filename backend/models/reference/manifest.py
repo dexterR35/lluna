@@ -378,10 +378,6 @@ class ModelCapabilities:
         )
 
     def unresolved(self, primary_task: str) -> tuple[str, ...]:
-        # Mirrored for responsive client-side validation in
-        # frontend/src/models/modelManifestCapabilities.js's capabilityIssues(); this method
-        # (plus ModelManifest.configuration_issues() below) is the authoritative check. Keep
-        # the JS copy in sync when changing these rules.
         missing: list[str] = []
         if self.provenance == "unknown":
             missing.append("provenance")
@@ -396,6 +392,8 @@ class ModelCapabilities:
                 missing.append("steps")
             if self.guidance is None:
                 missing.append("guidance")
+            elif self.guidance and self.guidance_scale is None:
+                missing.append("guidanceScale")
             if self.negative_prompt is None:
                 missing.append("negativePrompt")
             if self.seed is None:
@@ -587,12 +585,48 @@ def model_files(path: Path) -> tuple[Path, ...]:
         return ()
 
 
+def validate_custom_model_security(
+    manifest: ModelManifest,
+    path: Path | None = None,
+) -> None:
+    """Enforce the non-negotiable policy for user-supplied model weights."""
+    if manifest.security.trust_remote_code:
+        raise ManifestError("Remote model code is permanently disabled for custom models.")
+    if manifest.security.allow_pickle:
+        raise ManifestError("Pickle-capable model weights are not supported by Lluna.")
+    if not manifest.security.prefer_safetensors:
+        raise ManifestError("Custom models must use SafeTensors weights.")
+
+    declared_weights = tuple(
+        Path(name).suffix.lower()
+        for name in manifest.expected_files
+        if Path(name).suffix.lower() in MODEL_FILE_EXTENSIONS
+    )
+    if ".safetensors" not in declared_weights or any(
+        suffix != ".safetensors" for suffix in declared_weights
+    ):
+        raise ManifestError("Custom models must contain only SafeTensors weights.")
+
+    if path is None:
+        return
+    actual_weights = model_files(path)
+    if actual_weights and (
+        not any(item.suffix.lower() == ".safetensors" for item in actual_weights)
+        or any(item.suffix.lower() != ".safetensors" for item in actual_weights)
+    ):
+        raise ManifestError("Custom model folders must contain only SafeTensors weights.")
+    if manifest.source.type == "local" and not actual_weights:
+        raise ManifestError("Custom models must contain SafeTensors weights.")
+
+
 def infer_adapter(path: Path) -> tuple[str, str, str]:
     files = model_files(path)
     suffixes = {item.suffix.lower() for item in files}
     if (path / "model_index.json").is_file() if path.is_dir() else False:
         return "diffusers", "diffusers-torch", "text-to-image"
     if (path / "config.json").is_file() if path.is_dir() else False:
+        return "transformers", "transformers-torch", "custom"
+    if ".safetensors" in suffixes:
         return "transformers", "transformers-torch", "custom"
     if suffixes & {".pdmodel", ".pdiparams"}:
         return "paddle", "paddle", "custom"

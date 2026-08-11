@@ -7,8 +7,10 @@ from datetime import datetime, timezone
 from PIL import Image
 
 from backend.artifacts.store import ArtifactStore, DesktopGrantStore
+from backend.configuration.service import update_settings
 from backend.graph.executor import RunManager
 from backend.graph.schema import WorkflowDocument, WorkflowEdge, WorkflowNode
+from backend.tools.inference.protocol import JobType
 
 
 def wait_for_run(manager, run_id, timeout=3):
@@ -385,6 +387,29 @@ def test_supir_uses_settings_from_connected_llava_node(monkeypatch):
     assert captured["llava_top_p"] == 0.4
     assert captured["llava_question"] == "Describe materials and lighting."
     assert captured["load_8bit_llava"] is True
+
+
+def test_subtitle_job_carries_disabled_hardware_acceleration(monkeypatch):
+    update_settings({"runtime": {"hardware_acceleration": False}})
+    manager = object.__new__(RunManager)
+    captured = {}
+
+    def capture(*args, **_kwargs):
+        captured["job_type"] = args[2]
+        captured["payload"] = args[3]
+        return args[3]
+
+    monkeypatch.setattr(manager, "_invoke_worker", capture)
+    node = WorkflowNode(
+        id="remove-subtitles",
+        schema_id="lluna.video.remove_text",
+        parameters={"subAreas": [[100, 200, 20, 300]]},
+    )
+
+    manager._run_inference(None, node, {}, [], "cache-key")
+
+    assert captured["job_type"] is JobType.SUBTITLE
+    assert captured["payload"]["hardware_acceleration"] is False
 
 
 def test_selected_run_reuses_boundary_artifact_without_running_upstream(monkeypatch, tmp_path):

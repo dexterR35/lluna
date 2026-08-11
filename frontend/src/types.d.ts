@@ -238,6 +238,7 @@ export interface LlunaDesktopApi {
   selectVideoFiles(): Promise<DesktopGrant[]>;
   selectMaskFile(): Promise<DesktopGrant | null>;
   selectModelFile(): Promise<DesktopGrant | null>;
+  selectReviewedCheckpointFile(): Promise<DesktopGrant | null>;
   selectModelFolder(): Promise<DesktopGrant | null>;
   selectDirectory(): Promise<DesktopGrant | null>;
   selectSaveFile(kind: "image" | "video"): Promise<DesktopGrant | null>;

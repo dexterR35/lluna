@@ -84,13 +84,16 @@ Lluna never attempts to run them as ordinary checkpoints.
 Repository `requirements.txt` files are never executed automatically. Hugging
 Face installs are analyzed first, pinned to the returned commit, restricted to
 reviewed files, downloaded into `.staging`, verified, and promoted atomically.
-Remote Python code and pickle-capable weights are disabled by default.
+Custom models must use SafeTensors weights. Remote Python code and
+pickle-capable custom weights are rejected unconditionally. Reviewed built-in
+runtimes may use pinned, hash-verified legacy checkpoints inside their isolated
+execution environments.
 
-Folders placed directly under `custom/` are detected automatically. A folder
-without a manifest is shown as **Needs configuration** so the user can select a
-task, runtime, variant, and capabilities. Standalone files should be imported
-through **Add model**; this copies them into a managed folder and creates the
-manifest.
+Folders already under `custom/` are loaded once at startup and are not revisited
+during the session. New folders and standalone SafeTensors files should be
+imported through **Add model**; this copies them into a managed folder, creates
+the manifest, and updates the in-memory catalog. Direct filesystem changes
+become visible after an app restart.
 
 ## SUPIR runtime
 

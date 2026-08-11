@@ -1268,12 +1268,11 @@ _NODES = [
 NODE_REGISTRY = {definition.schema_id: definition for definition in _NODES}
 
 
-# `_build_catalog` deep-copies every node definition, recomputes each model's
-# capability contract, and (worst case) rescans the whole custom-model folder
-# on disk. That's too expensive to redo on every `get_node()` call - validation
-# and inference call it once per node (and, for batch nodes, once per item).
-# The result is cached and only rebuilt when the dynamic model registry
-# actually changes, via its existing `subscribe()` notification hook.
+# `_build_catalog` deep-copies every node definition and recomputes each model's
+# capability contract. That's too expensive to redo on every `get_node()` call -
+# validation and inference call it once per node (and, for batch nodes, once per
+# item). The result is cached and only rebuilt when the dynamic model registry
+# changes through a Lluna-owned mutation.
 _catalog_lock = threading.RLock()
 _catalog_cache: list[NodeDefinition] | None = None
 _catalog_registry_ref: object | None = None

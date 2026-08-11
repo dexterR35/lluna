@@ -9,12 +9,8 @@ import { startPythonControlPlane } from "./python-process.js";
 import { installContentSecurityPolicy, installWindowSecurity, openApprovedExternal, openApprovedHuggingFace } from "./security.js";
 import { createWindowStateStore } from "./window-state.js";
 
-// The renderer only ever loads our own bundled local files (never arbitrary remote/untrusted
-// pages), and installs aren't guaranteed to go through a root-level package manager step that
-// sets chrome-sandbox's setuid bit — so the OS sandbox has no attacker to contain and only
-// costs every user a manual `sudo chown/chmod` on first run. Disabled for dev and packaged
-// builds alike.
-app.commandLine.appendSwitch("no-sandbox");
+// Enforce Chromium process isolation for every renderer before Electron becomes ready.
+app.enableSandbox();
 
 /** @typedef {Awaited<ReturnType<typeof startPythonControlPlane>>} BackendProcess */
 /** @type {BrowserWindow | null} */
@@ -128,7 +124,10 @@ function installIpc() {
   ipcMain.handle("files:dropped", async (_event, /** @type {string[]} */ paths) => Promise.all(paths.map(async (filePath) => ({ ...(await registerPathGrant(filePath, "read")), name: path.basename(filePath) }))));
   ipcMain.handle("files:videos", () => chooseFiles("Videos", ["mp4", "mov", "mkv", "webm", "avi"]));
   ipcMain.handle("files:mask", async () => (await chooseFiles("Mask", ["png", "jpg", "jpeg", "webp"])).at(0) || null);
-  ipcMain.handle("models:file", async () => (await chooseFiles("Model", ["safetensors", "pth", "pt", "ckpt", "bin"])).at(0) || null);
+  ipcMain.handle("models:file", async () => (await chooseFiles("SafeTensors model", ["safetensors"])).at(0) || null);
+  ipcMain.handle("models:reviewed-checkpoint-file", async () => (
+    await chooseFiles("Reviewed model checkpoint", ["safetensors", "ckpt"])
+  ).at(0) || null);
   ipcMain.handle("models:folder", async () => {
     if (!mainWindow) throw new Error("Main window is unavailable");
     const result = await dialog.showOpenDialog(mainWindow, { title: "Select model folder", properties: ["openDirectory"] });

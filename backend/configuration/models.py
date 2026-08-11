@@ -159,24 +159,11 @@ class ObjectSelectionSettings:
 
 @dataclass(frozen=True)
 class ModelPlatformSettings:
-    auto_scan: bool = True
-    scan_interval_seconds: int = 2
-    prefer_safetensors: bool = True
-    allow_remote_code: bool = False
-    allow_pickle_weights: bool = False
     auto_enable_imports: bool = False
 
     def __post_init__(self) -> None:
-        for name in (
-            "auto_scan",
-            "prefer_safetensors",
-            "allow_remote_code",
-            "allow_pickle_weights",
-            "auto_enable_imports",
-        ):
-            if not isinstance(getattr(self, name), bool):
-                raise TypeError(f"models.{name} must be a boolean")
-        _bounded("models.scan_interval_seconds", self.scan_interval_seconds, 1, 60)
+        if not isinstance(self.auto_enable_imports, bool):
+            raise TypeError("models.auto_enable_imports must be a boolean")
 
 
 @dataclass(frozen=True)

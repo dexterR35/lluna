@@ -43,21 +43,6 @@ def prepare_control_plane() -> BootstrapReport:
                 "model.changed", payload={"source": "custom-folder"}
             )
         )
-        model_settings = ConfigurationService.instance().get().models
-        if model_settings.auto_scan:
-            registry.start_watcher(
-                interval_seconds=float(model_settings.scan_interval_seconds)
-            )
-
-        def apply_model_platform_settings(configuration) -> None:
-            if configuration.models.auto_scan:
-                registry.start_watcher(
-                    interval_seconds=float(configuration.models.scan_interval_seconds)
-                )
-            else:
-                registry.stop_watcher()
-
-        ConfigurationService.instance().subscribe(apply_model_platform_settings)
     except (OSError, ValueError) as exc:
         logger.warning("Custom model registry was not started: %s", exc)
     try:

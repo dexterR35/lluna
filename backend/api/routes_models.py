@@ -30,6 +30,10 @@ class ModelImportRequest(BaseModel):
     grantId: str = ""
 
 
+class ModelManifestValidationRequest(BaseModel):
+    manifest: dict[str, Any]
+
+
 class HuggingFaceConnectRequest(BaseModel):
     token: str = Field(min_length=8, max_length=4096)
 
@@ -42,14 +46,6 @@ class SupirCheckpointRequest(BaseModel):
 @router.get("/models")
 def models() -> list[dict]:
     return list_models()
-
-
-@router.post("/models/rescan")
-def rescan_models() -> dict:
-    from backend.models.dynamic_registry import DynamicModelRegistry
-
-    records = DynamicModelRegistry.instance().scan()
-    return {"models": list_models(), "discovered": len(records)}
 
 
 def _granted_path(request: ModelAnalyzeRequest | ModelImportRequest):
@@ -77,6 +73,22 @@ def analyze_model(request: ModelAnalyzeRequest) -> dict:
         # Hub errors deliberately become a concise install-analysis error; token
         # values and upstream response bodies are never returned to the renderer.
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/models/validate-manifest")
+def validate_model_manifest(request: ModelManifestValidationRequest) -> dict:
+    """Return configuration issues from the same parser used by imports."""
+    from backend.models.reference.manifest import ManifestError, ModelManifest
+
+    try:
+        manifest = ModelManifest.from_mapping(request.manifest)
+    except (ManifestError, TypeError, ValueError) as exc:
+        return {"valid": False, "issues": [str(exc)]}
+    issues = list(manifest.configuration_issues())
+    return {
+        "valid": not issues,
+        "issues": issues,
+    }
 
 
 @router.post("/models/import", status_code=202)

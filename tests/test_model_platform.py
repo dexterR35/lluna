@@ -14,13 +14,23 @@ import httpx
 import pytest
 
 from backend.api.app import create_app
+from backend.api.routes_models import (
+    ModelManifestValidationRequest,
+    validate_model_manifest,
+)
 from backend.artifacts.store import DesktopGrantStore
+from backend.configuration.models import ApplicationConfiguration
 from backend.core.paths import AppPaths
 from backend.graph.registry import list_nodes
 from backend.graph.schema import WorkflowDocument, WorkflowNode
 from backend.graph.validation import validate_workflow
 from backend.models.dynamic_registry import DynamicModelRegistry
-from backend.models.importer import analyze_huggingface, configure_manifest, import_local
+from backend.models.importer import (
+    analyze_huggingface,
+    analyze_local,
+    configure_manifest,
+    import_local,
+)
 from backend.models.reference.capabilities import reviewed_huggingface_contract
 from backend.models.reference.manifest import MANIFEST_FILENAME, ManifestError, ModelManifest
 from backend.tools.installers import _shared
@@ -96,14 +106,113 @@ def test_manifest_rejects_traversal_and_remote_code_policy() -> None:
         configure_manifest(raw)
 
 
-def test_scanner_surfaces_unconfigured_folder_then_accepts_manifest(tmp_path) -> None:
-    registry = DynamicModelRegistry(paths(tmp_path))
-    folder = registry.root / "restorer"
+def test_custom_model_policy_requires_only_safetensors(tmp_path) -> None:
+    raw = safetensors_manifest()
+    raw["security"]["allowPickle"] = True
+    with pytest.raises(ManifestError, match="Pickle-capable"):
+        configure_manifest(raw)
+
+    raw = safetensors_manifest()
+    raw["security"]["preferSafetensors"] = False
+    with pytest.raises(ManifestError, match="SafeTensors"):
+        configure_manifest(raw)
+
+    raw = safetensors_manifest()
+    raw["expectedFiles"] = ["pytorch_model.bin"]
+    with pytest.raises(ManifestError, match="only SafeTensors"):
+        configure_manifest(raw)
+
+    source = tmp_path / "mixed-weights"
+    source.mkdir()
+    (source / "config.json").write_text("{}", encoding="utf-8")
+    (source / "model.safetensors").write_bytes(b"safe")
+    (source / "pytorch_model.bin").write_bytes(b"pickle-capable")
+    with pytest.raises(ManifestError, match="Pickle-capable"):
+        analyze_local(source)
+
+
+def test_removed_model_policy_settings_are_ignored_on_migration() -> None:
+    configuration = ApplicationConfiguration.from_mapping(
+        {
+            "models": {
+                "auto_scan": True,
+                "scan_interval_seconds": 2,
+                "prefer_safetensors": False,
+                "allow_remote_code": True,
+                "allow_pickle_weights": True,
+                "auto_enable_imports": True,
+            }
+        }
+    )
+
+    assert configuration.to_dict()["models"] == {"auto_enable_imports": True}
+
+
+def test_registry_reads_are_cached_until_restart(tmp_path) -> None:
+    model_paths = paths(tmp_path)
+    registry = DynamicModelRegistry(model_paths)
+    folder = registry.root / "new-model"
     folder.mkdir()
     (folder / "model.safetensors").write_bytes(b"weights")
     (folder / "config.json").write_text("{}", encoding="utf-8")
 
-    record = registry.scan()[0]
+    assert registry.records() == []
+    restarted = DynamicModelRegistry(model_paths)
+    assert [record.manifest.id for record in restarted.records()] == [
+        "new-model"
+    ]
+
+
+def test_startup_load_skips_legacy_standalone_weights(tmp_path) -> None:
+    model_paths = paths(tmp_path)
+    custom_root = model_paths.models_dir / "custom"
+    custom_root.mkdir(parents=True)
+    (custom_root / "unsafe.ckpt").write_bytes(b"pickle-capable")
+
+    assert DynamicModelRegistry(model_paths).records() == []
+
+
+def test_manifest_validation_api_uses_backend_capability_rules() -> None:
+    raw = safetensors_manifest()
+    raw["task"] = "text-to-image"
+    raw["variant"] = {"kind": "base"}
+    raw["capabilities"] = {
+        "provenance": "reviewed-manifest",
+        "tasks": ["text-to-image"],
+        "inputs": ["prompt"],
+        "outputs": ["image"],
+        "steps": {"default": 20, "minimum": 1, "maximum": 50},
+        "guidance": True,
+        "negativePrompt": False,
+        "seed": True,
+        "supportedWidths": [512],
+        "supportedHeights": [512],
+        "dtypes": ["fp32"],
+    }
+
+    incomplete = validate_model_manifest(
+        ModelManifestValidationRequest(manifest=raw)
+    )
+    assert incomplete == {"valid": False, "issues": ["guidanceScale"]}
+
+    raw["capabilities"]["guidanceScale"] = {
+        "default": 7.5,
+        "minimum": 0,
+        "maximum": 20,
+    }
+    complete = validate_model_manifest(ModelManifestValidationRequest(manifest=raw))
+    assert complete == {"valid": True, "issues": []}
+
+
+def test_scanner_surfaces_unconfigured_folder_then_accepts_manifest(tmp_path) -> None:
+    model_paths = paths(tmp_path)
+    folder = model_paths.models_dir / "custom" / "restorer"
+    folder.mkdir(parents=True)
+    (folder / "model.safetensors").write_bytes(b"weights")
+    (folder / "config.json").write_text("{}", encoding="utf-8")
+
+    registry = DynamicModelRegistry(model_paths)
+    record = registry.records()[0]
     assert record.manifest.id == "restorer"
     assert record.manifest.needs_configuration
     assert record.installed
@@ -196,7 +305,7 @@ def test_enabled_custom_diffusers_model_is_added_to_generate_node(
         "expectedFiles": ["model_index.json", "model.safetensors"],
     }
     (folder / MANIFEST_FILENAME).write_text(__import__("json").dumps(raw), encoding="utf-8")
-    registry.scan()
+    registry.record_path(folder)
     registry.set_enabled("custom-image", True)
 
     generate = next(node for node in list_nodes() if node.schema_id == "lluna.generate.image")
@@ -237,7 +346,7 @@ def test_enabled_custom_vision_language_model_is_added_to_describe_image_node(
         "expectedFiles": ["config.json", "model.safetensors"],
     }
     (folder / MANIFEST_FILENAME).write_text(json.dumps(raw), encoding="utf-8")
-    registry.scan()
+    registry.record_path(folder)
     registry.set_enabled("custom-captioner", True)
 
     describe = next(node for node in list_nodes() if node.schema_id == "lluna.input.describe_image")

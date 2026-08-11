@@ -65,8 +65,16 @@ def _install_fake_diffusers(monkeypatch: pytest.MonkeyPatch, calls: list[dict[st
     monkeypatch.setitem(sys.modules, "diffusers", module)
 
 
-def _record(manifest: ModelManifest) -> DynamicModelRecord:
-    return DynamicModelRecord(manifest=manifest, path=Path("/fake/custom-image"), installed=True, enabled=True)
+def _record(
+    manifest: ModelManifest,
+    path: Path = Path("/fake/custom-image"),
+) -> DynamicModelRecord:
+    return DynamicModelRecord(
+        manifest=manifest,
+        path=path,
+        installed=True,
+        enabled=True,
+    )
 
 
 def test_explicit_dtype_is_loaded_when_declared_supported(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -300,12 +308,19 @@ def _transformers_manifest() -> ModelManifest:
                 "outputs": ["image"],
                 "dtypes": ["fp32"],
             },
+            "expectedFiles": ["model.safetensors"],
         }
     )
 
 
-def test_runtime_manager_cache_key_is_dtype_aware(monkeypatch: pytest.MonkeyPatch) -> None:
-    record = _record(_transformers_manifest())
+def test_runtime_manager_cache_key_is_dtype_aware(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    model_path = tmp_path / "custom-restore"
+    model_path.mkdir()
+    (model_path / "model.safetensors").write_bytes(b"weights")
+    record = _record(_transformers_manifest(), model_path)
     monkeypatch.setattr(DynamicModelRegistry, "_instance", _StubRegistry(record))
     monkeypatch.setattr(
         "backend.models.reference.runtimes.runtime_status",

@@ -21,7 +21,7 @@ import {
   useToast,
 } from "../components";
 import { useServerStore } from "../state/serverStore";
-import { capabilityIssues } from "../models/modelManifestCapabilities";
+import { useManifestValidation } from "../models/modelManifestCapabilities";
 import { CapabilityEditor } from "./CapabilityEditor";
 
 const TASKS = [
@@ -41,8 +41,6 @@ const TASKS = [
 const ADAPTERS = [
   ["diffusers", "diffusers-torch", "Diffusers + PyTorch"],
   ["transformers", "transformers-torch", "Transformers + PyTorch"],
-  ["birefnet", "birefnet-torch", "BiRefNet + PyTorch"],
-  ["paddle", "paddle", "Paddle"],
 ];
 
 /** @param {number | null | undefined} bytes */
@@ -70,6 +68,7 @@ export function AddModelDialog({ open, onClose }) {
   const [manifest, setManifest] = useState(/** @type {Record<string, any> | null} */ (null));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const manifestValidation = useManifestValidation(manifest);
 
   useEffect(() => {
     if (!open) {
@@ -143,8 +142,9 @@ export function AddModelDialog({ open, onClose }) {
         profile: selected[1],
       },
       security: {
-        ...(current?.security || {}),
-        trustRemoteCode: selected[0] === "birefnet",
+        trustRemoteCode: false,
+        preferSafetensors: true,
+        allowPickle: false,
       },
       needsConfiguration: true,
     }));
@@ -179,7 +179,6 @@ export function AddModelDialog({ open, onClose }) {
   }
 
   const review = Boolean(analysis && manifest);
-  const unresolvedCapabilities = manifest ? capabilityIssues(manifest) : [];
   return (
     <Dialog
       open={open}
@@ -197,7 +196,15 @@ export function AddModelDialog({ open, onClose }) {
             <Button variant="ghost" onClick={() => { setAnalysis(null); setManifest(null); }}>
               Back
             </Button>
-            <Button loading={busy} disabled={Boolean(analysis?.blockingReasons?.length || unresolvedCapabilities.length)} onClick={() => void install()}>
+            <Button
+              loading={busy}
+              disabled={Boolean(
+                analysis?.blockingReasons?.length ||
+                manifestValidation.validating ||
+                manifestValidation.issues.length
+              )}
+              onClick={() => void install()}
+            >
               {sourceType === "huggingface" ? "Install model" : "Import model"}
             </Button>
           </>
@@ -242,8 +249,11 @@ export function AddModelDialog({ open, onClose }) {
           <Card className="flex gap-3">
             <ShieldCheck className="ui-icon-lg shrink-0 text-mg-success" />
             <div>
-              <p className="ui-copy-title">Safe by default</p>
-              <p className="ui-copy-body mt-1">Remote Python code and pickle weights remain blocked. Dependencies use reviewed runtime profiles.</p>
+              <p className="ui-copy-title">SafeTensors required</p>
+              <p className="ui-copy-body mt-1">
+                Custom models cannot contain pickle weights or remote Python code.
+                Reviewed built-in runtimes handle explicitly verified legacy checkpoints.
+              </p>
             </div>
           </Card>
           {error && <p role="alert" className="ui-help text-mg-error">{error}</p>}
@@ -257,8 +267,8 @@ export function AddModelDialog({ open, onClose }) {
             <Select label="Runtime adapter" value={manifest.adapter} options={ADAPTERS.map(([id, , label]) => ({ value: id, label }))} onChange={(event) => changeAdapter(event.target.value)} />
           </div>
           <CapabilityEditor manifest={manifest} onChange={setManifest} />
-          {unresolvedCapabilities.length > 0 && (
-            <p role="alert" className="ui-help text-mg-warning">Needs configuration: {unresolvedCapabilities.join(", ")}.</p>
+          {manifestValidation.issues.length > 0 && (
+            <p role="alert" className="ui-help text-mg-warning">Needs configuration: {manifestValidation.issues.join(", ")}.</p>
           )}
           <div className="grid gap-3 md:grid-cols-3">
             <Card><p className="ui-kicker-plain">Download</p><p className="ui-copy-title mt-1">{size(analysis.downloadBytes)}</p></Card>
