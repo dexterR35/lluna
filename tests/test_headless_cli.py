@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import pytest
 from PIL import Image
@@ -22,7 +21,6 @@ from backend.graph.migrations import (
 from backend.graph.schema import WorkflowDocument
 from backend.graph.templates import all_templates, get_template
 from backend.graph.validation import validate_workflow
-
 
 # --- templates ---------------------------------------------------------------
 

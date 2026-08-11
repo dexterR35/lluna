@@ -26,7 +26,6 @@ from backend.configuration.service import get_settings
 from backend.graph.cache import build_cache_key
 from backend.graph.compiler import compile_workflow
 from backend.graph.registry import NODE_REGISTRY, get_node
-from backend.graph.schema import WorkflowDocument, WorkflowNode
 from backend.graph.scheduler import (
     LIGHT,
     DeviceScheduler,
@@ -35,6 +34,7 @@ from backend.graph.scheduler import (
     node_kind,
     plan_concurrency,
 )
+from backend.graph.schema import WorkflowDocument, WorkflowNode
 from backend.tools.inference.protocol import JobType
 
 
@@ -864,7 +864,7 @@ class RunManager:
         elif definition.adapter == "save":
             result = self._save_output(control, node, next(iter(inputs.values())))
         elif any(isinstance(value, (list, tuple)) for value in inputs.values()):
-            result = self._run_batch_node(control, node, inputs)
+            result = self._run_batch_node(control, node, inputs, device=device)
         elif definition.adapter == "composite":
             result = self._composite_images(
                 control,
@@ -914,7 +914,9 @@ class RunManager:
                 cache_key,
             )
         else:
-            result = self._run_inference(control, node, inputs, input_artifacts, cache_key)
+            result = self._run_inference(
+                control, node, inputs, input_artifacts, cache_key, device=device
+            )
         if node.schema_id == "lluna.mask.select_object" and isinstance(
             result, ArtifactRecord
         ):
@@ -938,6 +940,8 @@ class RunManager:
         control: _RunControl,
         node: WorkflowNode,
         inputs: dict[str, Any],
+        *,
+        device: str = "",
     ) -> Any:
         """Map a batch-capable node over ordered inputs using ZIP semantics."""
         lists = {
@@ -1026,6 +1030,7 @@ class RunManager:
                         progress_span=progress_span,
                         item_index=index,
                         item_count=count,
+                        device=device,
                     )
                 if definition.cache_policy == "content-addressed":
                     with self._cache_lock:
@@ -1673,6 +1678,7 @@ class RunManager:
         progress_span: float = 100,
         item_index: int = 0,
         item_count: int = 1,
+        device: str = "",
     ) -> Any:
         # Keep direct payload-construction tests able to exercise this method
         # with a stubbed worker even when CI enables the fake worker globally.
@@ -1969,6 +1975,7 @@ class RunManager:
             progress_span=progress_span,
             item_index=item_index,
             item_count=item_count,
+            device=device,
         )
 
     def _invoke_worker(
@@ -1985,6 +1992,7 @@ class RunManager:
         progress_span: float = 100,
         item_index: int = 0,
         item_count: int = 1,
+        device: str = "",
     ) -> Any:
         from backend.tools.inference.client import InferClient
 

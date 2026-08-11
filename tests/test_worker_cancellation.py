@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import threading
-
 import pytest
 
-from backend.graph.executor import RunManager, _RunControl
-from backend.graph.schema import WorkflowDocument
+from backend.graph.executor import ExecutionFailure, RunManager, _RunControl
+from backend.graph.schema import WorkflowDocument, WorkflowNode
 from backend.tools.inference.client import InferClient
+from backend.tools.inference.protocol import JobType
 
 
 class _FakeClient:
@@ -85,6 +84,41 @@ def test_finished_jobs_are_deregistered(control):
         control.worker_jobs.discard((client, 5))
 
     assert control.worker_jobs == set()
+
+
+def test_a_job_runs_on_the_device_its_node_leased(control, monkeypatch):
+    """The slot a node holds has to reach the worker that runs its job.
+
+    Without the device travelling down from _run_step, every job lands on the
+    default worker and the second GPU stays idle behind a busy first one.
+    """
+    manager = RunManager.instance()
+    routed: list[str] = []
+
+    class _Busy(_FakeClient):
+        def start_job(self, *args, **kwargs) -> int:
+            return -1
+
+    def _for_device(device: str) -> _FakeClient:
+        routed.append(device)
+        return _Busy(device)
+
+    monkeypatch.setattr(InferClient, "for_device", _for_device)
+    node = WorkflowNode(id="n-1", schema_id="lluna.generate.image")
+
+    with pytest.raises(ExecutionFailure):
+        manager._invoke_worker(
+            control,
+            node,
+            JobType.GENERATE,
+            {},
+            "out.png",
+            [],
+            "cache-key",
+            device="cuda:1",
+        )
+
+    assert routed == ["cuda:1"]
 
 
 def test_default_device_maps_to_the_shared_worker():

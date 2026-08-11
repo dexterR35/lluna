@@ -16,13 +16,13 @@ from backend.api.app import create_app
 from backend.artifacts.store import DesktopGrantStore
 from backend.core.paths import AppPaths
 from backend.graph.registry import list_nodes
-from backend.tools.installers import _shared
 from backend.graph.schema import WorkflowDocument, WorkflowNode
 from backend.graph.validation import validate_workflow
 from backend.models.dynamic_registry import DynamicModelRegistry
 from backend.models.importer import analyze_huggingface, configure_manifest, import_local
 from backend.models.reference.capabilities import reviewed_huggingface_contract
 from backend.models.reference.manifest import MANIFEST_FILENAME, ManifestError, ModelManifest
+from backend.tools.installers import _shared
 
 
 def paths(root: Path) -> AppPaths:
@@ -38,6 +38,24 @@ def paths(root: Path) -> AppPaths:
         models_dir=root / "models",
         runtime_file=config / "lluna_runtime.json",
     )
+
+
+@pytest.fixture
+def installed_runtimes(monkeypatch):
+    """Report every model's runtime as present, whatever this machine has.
+
+    The node catalog only offers a custom model whose runtime is runnable, so
+    tests about what the catalog exposes would otherwise be testing whether
+    diffusers and transformers happen to be installed. CI installs neither.
+    """
+    from backend.models.reference import runtimes
+
+    real_status = runtimes.runtime_status
+
+    def status(manifest) -> dict:
+        return {**real_status(manifest), "installed": True, "runnable": True, "reasons": []}
+
+    monkeypatch.setattr(runtimes, "runtime_status", status)
 
 
 def safetensors_manifest(identifier: str = "local-transformers") -> dict:
@@ -141,7 +159,9 @@ def test_huggingface_analysis_pins_revision_and_filters_executable_files(monkeyp
     assert result["manifest"]["capabilities"]["provenance"] == "huggingface-metadata"
 
 
-def test_enabled_custom_diffusers_model_is_added_to_generate_node(tmp_path, monkeypatch) -> None:
+def test_enabled_custom_diffusers_model_is_added_to_generate_node(
+    tmp_path, monkeypatch, installed_runtimes
+) -> None:
     registry = DynamicModelRegistry(paths(tmp_path))
     monkeypatch.setattr(DynamicModelRegistry, "_instance", registry)
     folder = registry.root / "custom-image"
@@ -183,7 +203,9 @@ def test_enabled_custom_diffusers_model_is_added_to_generate_node(tmp_path, monk
     assert any(option["value"] == "custom:custom-image" for option in model.options)
 
 
-def test_enabled_custom_vision_language_model_is_added_to_describe_image_node(tmp_path, monkeypatch) -> None:
+def test_enabled_custom_vision_language_model_is_added_to_describe_image_node(
+    tmp_path, monkeypatch, installed_runtimes
+) -> None:
     registry = DynamicModelRegistry(paths(tmp_path))
     monkeypatch.setattr(DynamicModelRegistry, "_instance", registry)
     folder = registry.root / "custom-captioner"

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import torch
 from PIL import Image
-from types import SimpleNamespace
 
 from backend.ai.runtimes.diffusion import _DiffusersRunner
 from backend.tools.inference.worker import _encode_preview_frame

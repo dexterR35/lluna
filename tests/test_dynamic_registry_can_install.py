@@ -15,7 +15,8 @@ def _record(source_type: str, *, installed: bool = False) -> DynamicModelRecord:
         source=ModelSource(type=source_type, repo="org/example" if source_type == "huggingface" else "", url="https://example.com/model.safetensors" if source_type == "url" else ""),
         runtime=RuntimeRequirement(profile="diffusers-torch"),
     )
-    return DynamicModelRecord(manifest=manifest, path=Path("/tmp/does-not-matter"), installed=installed, enabled=False)
+    # Nothing here touches the filesystem; only to_inventory() is inspected.
+    return DynamicModelRecord(manifest=manifest, path=Path("models/example"), installed=installed, enabled=False)
 
 
 def test_can_install_is_true_only_for_huggingface_sourced_models() -> None:
