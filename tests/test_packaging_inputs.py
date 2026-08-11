@@ -36,3 +36,5 @@ def test_python_process_uses_hidden_packaged_sidecar():
     source = Path("frontend/electron/python-process.js").read_text(encoding="utf-8")
     assert "windowsHide: true" in source
     assert 'path.join(process.resourcesPath, "backend-sidecar", executable)' in source
+    assert "process.env.LLUNA_MODELS_DIR" in source
+    assert 'path.join(resolved.cwd || process.resourcesPath, "backend", "models")' in source

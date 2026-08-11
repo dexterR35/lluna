@@ -14,6 +14,7 @@ from backend.api.routes_artifacts import (
 from backend.artifacts.store import ArtifactStore, DesktopGrantStore
 from backend.graph.executor import RunManager
 from backend.graph.schema import WorkflowDocument, WorkflowNode
+from backend.hardware.profile import FrameworkCapabilities, GpuInfo, HardwareProfile
 
 
 def test_health_ready_and_authenticated_catalog(monkeypatch, tmp_path):
@@ -31,6 +32,49 @@ def test_health_ready_and_authenticated_catalog(monkeypatch, tmp_path):
                 response = await client.get("/api/nodes", headers={"X-Lluna-Token": token})
                 assert response.status_code == 200
                 assert any(item["schemaId"] == "lluna.generate.image" for item in response.json())
+
+    asyncio.run(scenario())
+
+
+def test_capabilities_uses_gpu_profile_contract_and_allows_dev_origin(monkeypatch):
+    from backend.hardware import detector
+
+    profile = HardwareProfile(
+        os_name="Windows",
+        os_version="test",
+        architecture="AMD64",
+        python_architecture="64-bit",
+        gpus=(
+            GpuInfo(
+                vendor="NVIDIA",
+                model="Test GPU",
+                total_vram_mb=12288,
+                compute_capability="8.9",
+            ),
+        ),
+        capabilities=FrameworkCapabilities(torch_cuda=True),
+    )
+    monkeypatch.setattr(detector, "get_hardware_profile", lambda: profile)
+    token = "capabilities-token-that-is-at-least-thirty-two-characters"  # noqa: S105
+    app = create_app(token)
+
+    async def scenario():
+        origin = "http://localhost:5173"
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            response = await client.get(
+                "/api/capabilities",
+                headers={"Origin": origin, "X-Lluna-Token": token},
+            )
+        assert response.status_code == 200
+        assert response.headers["access-control-allow-origin"] == origin
+        assert response.json()["backends"] == ["cpu", "cuda"]
+        assert response.json()["gpu"] == {
+            "name": "Test GPU",
+            "vramMb": 12288,
+            "computeCapability": "8.9",
+        }
 
     asyncio.run(scenario())
 

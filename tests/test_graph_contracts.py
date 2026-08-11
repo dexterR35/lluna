@@ -1,4 +1,5 @@
 from backend.graph.compiler import compile_workflow
+from backend.graph.executor import _subtitle_options
 from backend.graph.registry import list_nodes
 from backend.graph.schema import Position, WorkflowDocument, WorkflowEdge, WorkflowNode
 from backend.graph.validation import validate_workflow
@@ -101,6 +102,18 @@ def test_only_media_nodes_publish_preview_support():
         assert catalog[schema_id].supports_preview is True
     assert catalog["lluna.output.save_image"].supports_preview is False
     assert catalog["lluna.output.save_video"].supports_preview is False
+
+
+def test_video_text_removal_publishes_and_translates_rectangle_areas():
+    definition = {item.schema_id: item for item in list_nodes()}[
+        "lluna.video.remove_text"
+    ]
+    areas = [[720, 980, 120, 1800]]
+    parameter = next(item for item in definition.parameters if item.id == "subAreas")
+    assert definition.schema_version == 2
+    assert parameter.type == "regions"
+    assert parameter.default == []
+    assert _subtitle_options({"subAreas": areas}) == {"sub_areas": areas}
 
 
 def test_select_object_requires_a_name_or_preview_point():

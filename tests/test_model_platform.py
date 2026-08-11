@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 import os
+import subprocess
 import sys
 import threading
 from pathlib import Path
@@ -487,6 +488,41 @@ def test_looking_up_an_interpreter_never_downloads_one(monkeypatch) -> None:
         )
 
     assert called is False
+
+
+def test_bootstrap_skips_application_control_blocked_python_shim(
+    tmp_path, monkeypatch
+) -> None:
+    """WinError 4551 from one PATH shim must not hide a usable interpreter."""
+    blocked = tmp_path / "blocked-python.exe"
+    allowed = tmp_path / "allowed-python.exe"
+    blocked.write_bytes(b"shim")
+    allowed.write_bytes(b"python")
+
+    monkeypatch.setattr(_shared.sys, "frozen", True, raising=False)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local"))
+    monkeypatch.setenv("APPDATA", str(tmp_path / "roaming"))
+    monkeypatch.delenv("LLUNA_TEST_PYTHON", raising=False)
+    monkeypatch.setattr(
+        _shared.shutil,
+        "which",
+        lambda name: str(blocked) if name == "python3.11" else str(allowed),
+    )
+
+    def fake_run(args, **_kwargs):
+        if Path(args[0]) == blocked:
+            raise OSError(4551, "An Application Control policy has blocked this file")
+        return subprocess.CompletedProcess(args, 0, stdout="3.12\n", stderr="")
+
+    monkeypatch.setattr(_shared.subprocess, "run", fake_run)
+
+    selected = _shared.bootstrap_reviewed_python(
+        env_var="LLUNA_TEST_PYTHON",
+        versions=("3.11", "3.12"),
+        error_message="no interpreter",
+    )
+    assert selected == str(allowed.resolve())
 
 
 def test_supir_run_throws_clear_error_without_cuda(monkeypatch) -> None:

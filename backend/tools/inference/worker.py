@@ -46,6 +46,39 @@ def _encode_preview_frame(image, *, max_edge: int = 384, quality: int = 70) -> s
     return f"data:image/jpeg;base64,{encoded}"
 
 
+def _encode_subtitle_preview(
+    original, processed, *, max_edge: int = 768, quality: int = 70
+) -> str:
+    """Encode original and processed OpenCV frames as one side-by-side JPEG."""
+    import base64
+
+    import cv2
+    import numpy as np
+
+    left = np.asarray(original)
+    right = np.asarray(processed)
+    if left.ndim != 3 or right.ndim != 3:
+        raise ValueError("Subtitle preview frames must be color images")
+    if left.shape[0] != right.shape[0]:
+        right_width = max(1, round(right.shape[1] * left.shape[0] / right.shape[0]))
+        right = cv2.resize(right, (right_width, left.shape[0]))
+    combined = np.hstack((left[:, :, :3], right[:, :, :3]))
+    height, width = combined.shape[:2]
+    scale = min(1.0, max_edge / max(width, height)) if max(width, height) else 1.0
+    if scale < 1.0:
+        combined = cv2.resize(
+            combined,
+            (max(1, round(width * scale)), max(1, round(height * scale))),
+            interpolation=cv2.INTER_AREA,
+        )
+    encoded_ok, encoded = cv2.imencode(
+        ".jpg", combined, [int(cv2.IMWRITE_JPEG_QUALITY), quality]
+    )
+    if not encoded_ok:
+        raise ValueError("Could not encode subtitle preview frame")
+    return "data:image/jpeg;base64," + base64.b64encode(encoded.tobytes()).decode("ascii")
+
+
 class _DeferredTerminalQueue:
     """Forward live events, but hold RESULT/ERROR until worker cleanup finishes."""
 
@@ -1200,8 +1233,12 @@ def _job_subtitle(run_id, payload, cancel_event, on_progress, heartbeat_log, evt
                 run_id, event.overall_progress
             ),
             on_log=lambda message: heartbeat_log(run_id, message),
-            on_preview=lambda *args: _emit(
-                evt_queue, preview(run_id, args=args)
+            on_preview=lambda original, processed: _emit(
+                evt_queue,
+                preview(
+                    run_id,
+                    image=_encode_subtitle_preview(original, processed),
+                ),
             ),
         )
     except CancellationError:

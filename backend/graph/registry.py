@@ -1122,9 +1122,19 @@ _NODES = [
         "Remove Text from Video",
         "Video/Remove",
         "Removes subtitles or text while preserving source timing and audio.",
+        schema_version=2,
         icon="captions-off",
         inputs=[port("video", "Video", PortType.VIDEO, required=True)],
         outputs=[port("video", "Video", PortType.VIDEO)],
+        parameters=[
+            parameter(
+                "subAreas",
+                "Removal areas",
+                "regions",
+                [],
+                description="Rectangles selected on the source video, stored as pixel coordinates.",
+            )
+        ],
         required_models=["paddleocr-server", "sttn-auto"],
         supports_preview=True,
         adapter="subtitle",

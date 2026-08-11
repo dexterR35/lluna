@@ -46,14 +46,19 @@ def capabilities() -> dict:
         from backend.hardware.detector import get_hardware_profile
 
         profile = get_hardware_profile()
-        payload["backends"] = (
-            list(profile.available_backends) if hasattr(profile, "available_backends") else ["cpu"]
+        payload["backends"] = list(
+            dict.fromkeys(
+                device["backend"]
+                for device in profile.devices()
+                if device["backend"] != "unavailable"
+            )
         )
         if profile.primary_gpu is not None:
+            gpu = profile.primary_gpu
             payload["gpu"] = {
-                "name": profile.primary_gpu.name,
-                "vramMb": profile.primary_gpu.total_vram_mb,
-                "computeCapability": profile.primary_gpu.compute_capability,
+                "name": gpu.model or f"{gpu.vendor} GPU".strip() or "GPU",
+                "vramMb": gpu.total_vram_mb,
+                "computeCapability": gpu.compute_capability,
             }
     except (ImportError, OSError, RuntimeError):
         pass

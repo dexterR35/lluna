@@ -106,17 +106,25 @@ def bootstrap_reviewed_python(
     """
     configured = os.environ.get(env_var, "").strip()
     candidates: list[str | Path] = [configured] if configured else []
+    # In development Lluna already runs under a reviewed Python environment.
+    # Prefer its real interpreter before PATH shims: managed Windows devices can
+    # block unsigned uv shims with WinError 4551 even though the underlying
+    # signed/allowed CPython executable is usable.
+    if not getattr(sys, "frozen", False):
+        candidates.append(sys.executable)
     candidates.extend(f"python{version}" for version in versions)
     home = Path.home()
     if os.name == "nt":
         local = Path(os.environ.get("LOCALAPPDATA", home / "AppData" / "Local"))
-        for version in versions:
-            candidates.extend(
-                sorted(
-                    (local / "uv" / "python").glob(f"cpython-{version}*-*/python.exe"),
-                    reverse=True,
+        roaming = Path(os.environ.get("APPDATA", home / "AppData" / "Roaming"))
+        for uv_python in (local / "uv" / "python", roaming / "uv" / "python"):
+            for version in versions:
+                candidates.extend(
+                    sorted(
+                        uv_python.glob(f"cpython-{version}*-*/python.exe"),
+                        reverse=True,
+                    )
                 )
-            )
     else:
         local_bin = home / ".local" / "bin"
         uv_python = (
@@ -142,17 +150,22 @@ def bootstrap_reviewed_python(
         if executable in checked:
             continue
         checked.add(executable)
-        result = subprocess.run(  # noqa: S603 - configured/detected Python executable
-            [
-                executable,
-                "-c",
-                "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=15,
-            check=False,
-        )
+        try:
+            result = subprocess.run(  # noqa: S603 - configured/detected Python executable
+                [
+                    executable,
+                    "-c",
+                    "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=15,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            # Application Control commonly blocks an unsigned PATH shim while
+            # allowing the actual interpreter found later in the candidate list.
+            continue
         if result.returncode == 0 and result.stdout.strip() in versions:
             return executable
     if provision and versions:

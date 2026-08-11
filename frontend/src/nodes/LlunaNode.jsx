@@ -180,6 +180,38 @@ function isQuantityParam(parameter) {
   return typeof max === "number" && max - min <= 16 && max <= 32;
 }
 
+/**
+ * Expand a bounded integer parameter into toolbar choices. Generation steps
+ * are commonly expressed as a range in model manifests rather than as a
+ * fixed option list, but still need to be selectable without opening the
+ * full node dialog.
+ * @param {import("../types").ParameterDefinition | undefined} parameter
+ */
+function integerParameterOptions(parameter) {
+  if (!parameter) return [];
+  if (parameter.options?.length) return parameter.options;
+  const minimum = Number(parameter.minimum);
+  const maximum = Number(parameter.maximum);
+  const step = Number(parameter.step ?? 1);
+  if (
+    parameter.type !== "integer" ||
+    !Number.isFinite(minimum) ||
+    !Number.isFinite(maximum) ||
+    !Number.isFinite(step) ||
+    step <= 0 ||
+    maximum < minimum ||
+    Math.floor((maximum - minimum) / step) + 1 > 100
+  )
+    return [];
+  return Array.from(
+    { length: Math.floor((maximum - minimum) / step) + 1 },
+    (_, index) => {
+      const value = minimum + index * step;
+      return { value, label: String(value) };
+    },
+  );
+}
+
 /** @param {{items: import("../types").SaveProgressItem[]}} props */
 function SaveProgressList({ items }) {
   return (
@@ -290,9 +322,13 @@ function LlunaNodeComponent({ id, data, selected }) {
   const isSettingsCard = SETTINGS_CARD_SCHEMAS.has(definition.schemaId);
   const isSelectObject = definition.schemaId === "lluna.mask.select_object";
   const quantityParam = visibleParameters.find(isQuantityParam);
+  const stepsParam = visibleParameters.find(
+    (parameter) => parameter.id === "steps",
+  );
   const footerParams = visibleParameters.filter((parameter) => {
     if (isSettingsCard) return false;
     if (quantityParam && parameter.id === quantityParam.id) return false;
+    if (stepsParam && parameter.id === stepsParam.id) return false;
     if (parameter.id === "model" || parameter.type === "model") return true;
     if (parameter.type === "select" || parameter.type === "enum") return true;
     return Boolean(parameter.options?.length);
@@ -373,6 +409,28 @@ function LlunaNodeComponent({ id, data, selected }) {
       quantityParam?.default ??
       1,
   );
+  const stepsValue = Number(
+    data.parameters?.[stepsParam?.id || ""] ?? stepsParam?.default,
+  );
+  const supportedStepOptions = integerParameterOptions(stepsParam);
+  const stepOptions = [
+    ...(!supportedStepOptions.some(
+      (option) => Number(option.value) === stepsValue,
+    ) && Number.isFinite(stepsValue)
+      ? [
+          {
+            value: String(stepsValue),
+            label: `${stepsValue} steps (unsupported)`,
+            disabled: true,
+          },
+        ]
+      : []),
+    ...supportedStepOptions.map((option) => ({
+      value: String(option.value),
+      label: `${option.label || option.value} steps`,
+      disabled: "disabled" in option ? option.disabled : false,
+    })),
+  ];
 
   return (
     <article
@@ -685,6 +743,17 @@ function LlunaNodeComponent({ id, data, selected }) {
               disabled={data.disabled || busy}
               onChange={(value) => setParameter(quantityParam.id, value)}
               stopPointer={stopPointer}
+            />
+          )}
+
+          {stepsParam && stepOptions.length > 0 && (
+            <PillSelect
+              label={stepsParam.label || "Steps"}
+              value={String(stepsValue)}
+              disabled={data.disabled || busy}
+              options={stepOptions}
+              stopPointer={stopPointer}
+              onChange={(next) => setParameter(stepsParam.id, Number(next))}
             />
           )}
 

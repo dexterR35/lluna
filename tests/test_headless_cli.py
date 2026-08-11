@@ -131,6 +131,19 @@ def test_migrations_chain_across_versions(migration):
     assert applied == ["test.node v1->v2", "test.node v2->v3"]
 
 
+def test_video_text_removal_v1_migration_adds_empty_regions():
+    node = {
+        "id": "remove",
+        "schemaId": "lluna.video.remove_text",
+        "schemaVersion": 1,
+        "parameters": {},
+    }
+    migrated, applied = migrate_node(node, target=2)
+    assert migrated["schemaVersion"] == 2
+    assert migrated["parameters"]["subAreas"] == []
+    assert applied == ["lluna.video.remove_text v1->v2"]
+
+
 def test_unknown_node_types_pass_through_untouched():
     """Validation reports these far better than a migration error could."""
     document = {"nodes": [{"id": "a", "schemaId": "some.plugin.node", "schemaVersion": 4}]}

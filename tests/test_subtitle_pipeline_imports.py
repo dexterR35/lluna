@@ -4,6 +4,12 @@ import ast
 from pathlib import Path
 
 
+def test_subtitle_detector_module_imports():
+    from backend.tools.media.subtitles import SubtitleDetect
+
+    assert SubtitleDetect.__name__ == "SubtitleDetect"
+
+
 def test_subtitle_pipeline_imports_is_image_file():
     pipeline_path = Path(__file__).resolve().parents[1] / "backend" / "pipelines" / "subtitle.py"
     module = ast.parse(pipeline_path.read_text(encoding="utf-8"))

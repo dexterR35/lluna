@@ -9,13 +9,17 @@ download is pinned to a reviewed commit instead of tracking ``main``.
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
+import subprocess
+import sys
 from pathlib import Path
 
 from backend.core.atomic import atomic_write_text
 from backend.core.paths import PATHS
 from backend.tools.installers._shared import bootstrap_reviewed_python, create_isolated_venv
+from backend.tools.shared.defaults import read_runtime
 
 KIND_BIREFNET = "birefnet"
 # Matches RUNTIME_PROFILES["birefnet-torch"].id in backend/models/reference/
@@ -66,6 +70,32 @@ BIREFNET_PACKAGES = (
 )
 
 
+def _torch_index_url() -> str:
+    """Select an official Torch wheel index compatible with Lluna's GPU profile."""
+    runtime = read_runtime()
+    if str(runtime.get("accel") or "").lower() != "cuda":
+        return ""
+    tag = str(runtime.get("torch_cuda_tag") or "").lower()
+    # Torch 2.5.1 publishes cu118/cu121/cu124 wheels. Newer-driver profiles
+    # remain backward-compatible with the cu124 build.
+    if tag not in {"cu118", "cu121", "cu124"}:
+        tag = "cu124"
+    return f"https://download.pytorch.org/whl/{tag}"
+
+
+def _pip_install_steps() -> list[list[str]]:
+    torch_packages = ["torch==2.5.1", "torchvision==0.20.1"]
+    index = _torch_index_url()
+    if index:
+        torch_packages.extend(["--index-url", index])
+    remaining = [
+        package
+        for package in BIREFNET_PACKAGES
+        if not package.startswith(("torch==", "torchvision=="))
+    ]
+    return [torch_packages, remaining]
+
+
 def models_root() -> Path:
     root = PATHS.models_dir / "birefnet"
     root.mkdir(parents=True, exist_ok=True)
@@ -83,6 +113,14 @@ def runtime_dir() -> Path:
 
 
 def runtime_python() -> Path:
+    metadata_path = runtime_dir() / "runtime.json"
+    try:
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        external = str(metadata.get("pythonExecutable") or "").strip()
+        if external:
+            return Path(external)
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        pass
     return runtime_dir() / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
 
 
@@ -93,7 +131,18 @@ def is_model_installed_at(path: Path) -> bool:
 
 
 def _runtime_ready() -> bool:
-    return runtime_python().is_file() and (runtime_dir() / "runtime.json").is_file()
+    metadata_path = runtime_dir() / "runtime.json"
+    if not metadata_path.is_file():
+        return False
+    try:
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return False
+    if not runtime_python().is_file():
+        return False
+    if metadata.get("runtimeMode") == "application-environment":
+        return True
+    return metadata.get("torchIndex", "") == _torch_index_url()
 
 
 def readiness(model_id: str) -> dict[str, bool]:
@@ -127,7 +176,62 @@ def _bootstrap_python() -> str:
     )
 
 
+def _application_runtime_python() -> Path | None:
+    """Reuse Lluna's trusted CUDA environment when Windows policy blocks new DLLs.
+
+    The model still executes in a separate subprocess. This development-mode
+    fallback avoids copying a second unsigned Torch DLL tree that Smart App
+    Control may reject with WinError 4551.
+    """
+    if os.name != "nt" or getattr(sys, "frozen", False):
+        return None
+    candidate = Path(sys.executable).resolve()
+    probe = (
+        "import accelerate, cv2, einops, huggingface_hub, kornia, numpy, PIL, "
+        "prettytable, scipy, skimage, timm, torch, torchvision, transformers"
+    )
+    try:
+        result = subprocess.run(
+            [str(candidate), "-c", probe],
+            capture_output=True,
+            text=True,
+            timeout=90,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return candidate if result.returncode == 0 else None
+
+
 def _install_runtime() -> None:
+    application_python = _application_runtime_python()
+    if application_python is not None:
+        metadata_path = runtime_dir() / "runtime.json"
+        try:
+            current = json.loads(metadata_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            current = {}
+        if (
+            current.get("runtimeMode") == "application-environment"
+            and Path(str(current.get("pythonExecutable") or "")) == application_python
+            and application_python.is_file()
+        ):
+            return
+        if runtime_dir().exists():
+            shutil.rmtree(runtime_dir(), ignore_errors=True)
+        runtime_dir().mkdir(parents=True, exist_ok=True)
+        from backend.core.atomic import atomic_write_json
+
+        atomic_write_json(
+            metadata_path,
+            {
+                "profile": BIREFNET_RUNTIME_PROFILE,
+                "runtimeMode": "application-environment",
+                "pythonExecutable": str(application_python),
+                "managedBy": "lluna",
+            },
+        )
+        return
     if _runtime_ready():
         return
     python = _bootstrap_python()
@@ -135,10 +239,11 @@ def _install_runtime() -> None:
         python_executable=python,
         target_dir=runtime_dir(),
         staging_name=".birefnet-python.staging",
-        pip_install_steps=[list(BIREFNET_PACKAGES)],
+        pip_install_steps=_pip_install_steps(),
         runtime_metadata={
             "profile": BIREFNET_RUNTIME_PROFILE,
             "packages": list(BIREFNET_PACKAGES),
+            "torchIndex": _torch_index_url(),
             "managedBy": "lluna",
         },
     )

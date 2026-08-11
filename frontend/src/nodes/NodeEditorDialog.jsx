@@ -60,16 +60,33 @@ export function NodeEditorDialog({ nodeId, onClose, onManageModels }) {
   const node = useEditorStore((store) =>
     store.nodes.find((item) => item.id === nodeId),
   );
+  const incomingVideoEdge = useEditorStore((store) =>
+    store.edges.find(
+      (edge) => edge.target === nodeId && edge.targetHandle === "video",
+    ),
+  );
+  const sourceVideoNode = useEditorStore((store) =>
+    store.nodes.find((item) => item.id === incomingVideoEdge?.source),
+  );
   const update = useEditorStore((store) => store.updateNode);
   const models = useServerStore((store) => store.models);
   const liveRun = useRunStore((store) =>
     nodeId ? store.nodeStates[nodeId] : null,
   );
+  const sourceVideoRun = useRunStore((store) =>
+    incomingVideoEdge?.source
+      ? store.nodeStates[incomingVideoEdge.source]
+      : null,
+  );
   if (!node) return null;
   const activeNode = node;
 
   const definition = node.data.definition;
+  const isVideoTextRemoval = node.data.schemaId === "lluna.video.remove_text";
   const parameters = definition?.parameters || [];
+  const subtitleAreasParameter = parameters.find(
+    (parameter) => parameter.id === "subAreas",
+  );
   const modelParameter = parameters.find(
     (parameter) => parameter.type === "model" || parameter.id === "model",
   );
@@ -93,6 +110,7 @@ export function NodeEditorDialog({ nodeId, onClose, onManageModels }) {
     parameters.filter(
       (parameter) =>
         parameter.id !== "model" &&
+        !(isVideoTextRemoval && parameter.id === "subAreas") &&
         !(
           definition?.schemaId === "lluna.mask.select_object" &&
           ["points", "labels"].includes(parameter.id)
@@ -106,6 +124,15 @@ export function NodeEditorDialog({ nodeId, onClose, onManageModels }) {
     ? liveRun.artifactIds
     : persistedResult?.artifactIds || [];
   const artifactId = artifactIds.at(-1);
+  const sourceVideoArtifactIds = sourceVideoRun?.artifactIds?.length
+    ? sourceVideoRun.artifactIds
+    : sourceVideoNode?.data.result?.artifactIds || [];
+  const sourceVideoArtifactId = sourceVideoArtifactIds.at(-1);
+  const subtitleAreas = Array.isArray(node.data.parameters?.subAreas)
+    ? node.data.parameters.subAreas.filter(
+        (area) => Array.isArray(area) && area.length >= 4,
+      )
+    : [];
   const status = liveRun?.status || persistedResult?.status || "IDLE";
   const supportsPreview = definition?.supportsPreview === true;
   const NodeIcon = resolveNodeIcon(definition?.icon);
@@ -343,7 +370,9 @@ export function NodeEditorDialog({ nodeId, onClose, onManageModels }) {
               </div>
             ) : (
               <p className="ui-copy-muted">
-                This node has no additional operation settings.
+                {isVideoTextRemoval
+                  ? "Choose the removal area on the source-video preview."
+                  : "This node has no additional operation settings."}
               </p>
             )}
             <Checkbox
@@ -367,12 +396,54 @@ export function NodeEditorDialog({ nodeId, onClose, onManageModels }) {
               </h3>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto">
-              <ArtifactPreview
-                artifactId={artifactId}
-                artifactIds={artifactIds}
-                schemaId={node.data.schemaId}
-                effect={String(node.data.appearance?.imageEffect || "none")}
-              />
+              {isVideoTextRemoval && liveRun?.previewImage && status === "RUNNING" && (
+                <div className="mb-3 overflow-hidden rounded-mg border border-mg-border bg-mg-app">
+                  <div className="grid grid-cols-2 border-b border-mg-border bg-mg-elevated text-center text-[9px] text-mg-muted">
+                    <span className="border-r border-mg-border py-1">Original + mask</span>
+                    <span className="py-1">Processed</span>
+                  </div>
+                  <img
+                    src={liveRun.previewImage}
+                    alt="Original and processed video frames"
+                    className="block max-h-48 w-full object-contain"
+                  />
+                </div>
+              )}
+              {isVideoTextRemoval ? (
+                sourceVideoArtifactId ? (
+                  <ArtifactPreview
+                    artifactId={sourceVideoArtifactId}
+                    schemaId={node.data.schemaId}
+                    effect={String(node.data.appearance?.imageEffect || "none")}
+                    subtitleAreas={subtitleAreas}
+                    onSubtitleAreaAdd={(area) =>
+                      setParameter(subtitleAreasParameter, [
+                        ...subtitleAreas,
+                        area,
+                      ])
+                    }
+                    onSubtitleAreasClear={() =>
+                      setParameter(subtitleAreasParameter, [])
+                    }
+                    saveable={false}
+                    statusLabel="Source video"
+                  />
+                ) : (
+                  <EmptyState
+                    icon={<Box className="ui-icon-lg" />}
+                    title="Source video unavailable"
+                    description="Connect a Load Video node and choose a video first. If the source is processed by another node, run that node once."
+                    compact
+                  />
+                )
+              ) : (
+                <ArtifactPreview
+                  artifactId={artifactId}
+                  artifactIds={artifactIds}
+                  schemaId={node.data.schemaId}
+                  effect={String(node.data.appearance?.imageEffect || "none")}
+                />
+              )}
             </div>
           </aside>
         )}

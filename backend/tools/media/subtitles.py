@@ -4,7 +4,6 @@ from functools import cached_property
 import cv2
 from tqdm import tqdm
 
-from .hardware_accelerator import HardwareAccelerator
 from .common import get_readable_path
 from .ocr import get_coordinates
 from backend.configuration.models import SubtitleSettings
@@ -12,6 +11,7 @@ from backend.models.paths import SubtitleModelPaths
 from backend.scenedetect import scene_detect
 from backend.scenedetect.detectors import ContentDetector
 from backend.tools.media.inpaint import is_frame_number_in_ab_sections
+from backend.tools.shared.hardware import HardwareAccelerator
 
 logger = logging.getLogger(__name__)
 

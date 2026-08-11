@@ -218,6 +218,91 @@ test("model selection is in the node body and reacts to enabled inventory", asyn
   expect(onModelChange).toHaveBeenCalledWith("node-1", "b");
 });
 
+test("generate image nodes expose model-supported steps in the toolbar", async () => {
+  const user = userEvent.setup();
+  const onParameterChange = vi.fn();
+  const definition = /** @type {any} */ ({
+    schemaId: "lluna.generate.image",
+    schemaVersion: 1,
+    name: "Generate Image",
+    category: "Image/Generate",
+    inputs: [{ id: "prompt", label: "Prompt", type: "PROMPT" }],
+    outputs: [{ id: "image", label: "Image", type: "IMAGE" }],
+    parameters: [
+      {
+        id: "model",
+        label: "Model",
+        type: "model",
+        default: "flux-base-4b",
+        options: [
+          {
+            value: "flux-base-4b",
+            label: "FLUX.2 Klein Base 4B",
+            modelId: "flux-base-4b",
+            capabilities: {
+              complete: true,
+              steps: { default: 50, minimum: 20, maximum: 50 },
+            },
+          },
+        ],
+      },
+      {
+        id: "steps",
+        label: "Steps",
+        type: "integer",
+        default: 4,
+        minimum: 1,
+        maximum: 250,
+        capability: "steps",
+      },
+    ],
+  });
+  render(
+    <ReactFlowProvider>
+      <NodeActionsProvider
+        value={{
+          actions: { onParameterChange },
+          modelInventory: /** @type {any} */ ([
+            { id: "flux-base-4b", installed: true, enabled: true },
+          ]),
+        }}
+      >
+        <LlunaNode
+          id="node-steps"
+          type="lluna"
+          draggable
+          dragging={false}
+          selectable
+          deletable
+          zIndex={0}
+          isConnectable
+          positionAbsoluteX={0}
+          positionAbsoluteY={0}
+          selected={false}
+          data={{
+            schemaId: definition.schemaId,
+            schemaVersion: 1,
+            label: "Generate Image",
+            definition,
+            parameters: { model: "flux-base-4b", steps: 4 },
+            appearance: { cardStyle: "visual", showPreview: false },
+          }}
+        />
+      </NodeActionsProvider>
+    </ReactFlowProvider>,
+  );
+
+  const selector = screen.getByRole("combobox", { name: "Steps" });
+  expect(
+    screen.getByRole("option", { name: "4 steps (unsupported)" }),
+  ).toBeDisabled();
+  expect(screen.getByRole("option", { name: "20 steps" })).toBeEnabled();
+  expect(screen.getByRole("option", { name: "50 steps" })).toBeEnabled();
+
+  await user.selectOptions(selector, "20");
+  expect(onParameterChange).toHaveBeenCalledWith("node-steps", "steps", 20);
+});
+
 test("library nodes use shared icons and can only be added by dragging", () => {
   useDesktopStore.setState({ libraryCollapsed: false });
   useEditorStore.setState({

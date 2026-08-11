@@ -60,6 +60,14 @@ def register(schema_id: str, from_version: int) -> Callable[[NodeMigration], Nod
     return decorate
 
 
+@register("lluna.video.remove_text", 1)
+def _video_remove_text_regions(node: dict[str, Any]) -> dict[str, Any]:
+    """Add the optional rectangle-selection parameter to existing workflows."""
+    parameters = dict(node.get("parameters") or {})
+    parameters.setdefault("subAreas", [])
+    return {**node, "parameters": parameters}
+
+
 def _target_versions() -> dict[str, int]:
     from backend.graph.registry import NODE_REGISTRY
 

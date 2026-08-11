@@ -11,6 +11,11 @@ import { api, artifactObjectUrl, artifactThumbnailUrl } from "../api/client";
 import { Badge, Button, EmptyState, LoadingState } from "../components";
 import { IMAGE_EFFECTS } from "./imageEffects";
 import { useArtifactSaver } from "./useArtifactSaver";
+import {
+  normalizeSubtitleArea,
+  subtitleAreaFromDrag,
+  subtitleAreaStyle,
+} from "./videoRegions";
 
 /** @param {string | undefined} artifactId @param {{thumbnail?: boolean, maxEdge?: number}} [options] */
 function useArtifact(artifactId, options = {}) {
@@ -230,7 +235,7 @@ export function ArtifactThumbGrid({
   );
 }
 
-/** @param {{artifactId?: string, artifactIds?: string[], schemaId?: string, effect?: string, compact?: boolean, zoomable?: boolean, points?: Array<{x: number, y: number, label?: number}>, onPointAdd?: (point: {x: number, y: number, label: number}) => void}} props */
+/** @param {{artifactId?: string, artifactIds?: string[], schemaId?: string, effect?: string, compact?: boolean, zoomable?: boolean, points?: Array<{x: number, y: number, label?: number}>, onPointAdd?: (point: {x: number, y: number, label: number}) => void, subtitleAreas?: number[][], onSubtitleAreaAdd?: (area: number[]) => void, onSubtitleAreasClear?: () => void, saveable?: boolean, statusLabel?: string}} props */
 export function ArtifactPreview({
   artifactId,
   artifactIds,
@@ -240,6 +245,11 @@ export function ArtifactPreview({
   zoomable = true,
   points = [],
   onPointAdd,
+  subtitleAreas = [],
+  onSubtitleAreaAdd,
+  onSubtitleAreasClear,
+  saveable = true,
+  statusLabel = "Stored locally",
 }) {
   const ids = artifactIds?.length ? artifactIds : artifactId ? [artifactId] : [];
   const primaryId = ids.at(-1);
@@ -249,7 +259,15 @@ export function ArtifactPreview({
   const mediaHeight = state.metadata?.height || 0;
   const isVideo = Boolean(state.metadata?.mediaType?.startsWith("video/"));
   const [zoom, setZoom] = useState(1);
-  useEffect(() => setZoom(1), [primaryId]);
+  const [selectingArea, setSelectingArea] = useState(false);
+  const [areaDrag, setAreaDrag] = useState(
+    /** @type {{start: {x: number, y: number}, current: {x: number, y: number}} | null} */ (null),
+  );
+  useEffect(() => {
+    setZoom(1);
+    setSelectingArea(false);
+    setAreaDrag(null);
+  }, [primaryId]);
   if (!primaryId)
     return (
       <EmptyState
@@ -269,6 +287,28 @@ export function ArtifactPreview({
       />
     );
   if (!state.url) return <LoadingState label="Loading preview" />;
+
+  const boundedAreas = subtitleAreas.flatMap((area) => {
+    const bounded = normalizeSubtitleArea(area, mediaWidth, mediaHeight);
+    return bounded ? [bounded] : [];
+  });
+  const draftArea = areaDrag
+    ? subtitleAreaFromDrag(
+        areaDrag.start,
+        areaDrag.current,
+        mediaWidth,
+        mediaHeight,
+      )
+    : null;
+
+  /** @param {import("react").PointerEvent<HTMLDivElement>} event */
+  function mediaPoint(event) {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    return {
+      x: ((event.clientX - bounds.left) / bounds.width) * mediaWidth,
+      y: ((event.clientY - bounds.top) / bounds.height) * mediaHeight,
+    };
+  }
 
   return (
     <div className="ui-preview">
@@ -305,6 +345,31 @@ export function ArtifactPreview({
             >
               <RotateCcw className="ui-icon-sm" />
             </Button>
+          </div>
+        )}
+        {isVideo && onSubtitleAreaAdd && (
+          <div className="ui-actions mr-auto">
+            <Button
+              variant={selectingArea ? "primary" : "secondary"}
+              className="min-h-6 px-2 text-[9px]"
+              onClick={() => {
+                setSelectingArea((value) => !value);
+                setAreaDrag(null);
+              }}
+            >
+              {selectingArea ? "Finish selecting" : "Draw removal area"}
+            </Button>
+            <Button
+              variant="ghost"
+              className="min-h-6 px-2 text-[9px]"
+              disabled={!boundedAreas.length}
+              onClick={onSubtitleAreasClear}
+            >
+              Clear areas
+            </Button>
+            <Badge tone={boundedAreas.length ? "accent" : "neutral"} size="xs">
+              {boundedAreas.length} area{boundedAreas.length === 1 ? "" : "s"}
+            </Badge>
           </div>
         )}
         <PreviewMeta metadata={state.metadata} />
@@ -351,6 +416,65 @@ export function ArtifactPreview({
             effect={effect}
             className={`${compact ? "max-h-52" : "max-h-[26rem]"} col-start-1 row-start-1 block max-w-full`}
           />
+          {isVideo && mediaWidth > 0 && mediaHeight > 0 && (
+            <div
+              aria-label="Video removal area canvas"
+              className={`absolute inset-0 col-start-1 row-start-1 ${selectingArea ? "cursor-crosshair" : "pointer-events-none"}`}
+              onPointerDown={
+                selectingArea
+                  ? (event) => {
+                      event.preventDefault();
+                      event.currentTarget.setPointerCapture(event.pointerId);
+                      const point = mediaPoint(event);
+                      setAreaDrag({ start: point, current: point });
+                    }
+                  : undefined
+              }
+              onPointerMove={
+                selectingArea && areaDrag
+                  ? (event) =>
+                      setAreaDrag((value) =>
+                        value
+                          ? { ...value, current: mediaPoint(event) }
+                          : value,
+                      )
+                  : undefined
+              }
+              onPointerUp={
+                selectingArea && areaDrag
+                  ? (event) => {
+                      const area = subtitleAreaFromDrag(
+                        areaDrag.start,
+                        mediaPoint(event),
+                        mediaWidth,
+                        mediaHeight,
+                      );
+                      setAreaDrag(null);
+                      if (area) onSubtitleAreaAdd?.(area);
+                    }
+                  : undefined
+              }
+              onPointerCancel={() => setAreaDrag(null)}
+            >
+              {boundedAreas.map((area, index) => (
+                <span
+                  key={`${area.join("-")}-${index}`}
+                  className="pointer-events-none absolute border-2 border-mg-accent bg-mg-accent/20 shadow-[0_0_0_1px_rgba(0,0,0,0.5)]"
+                  style={subtitleAreaStyle(area, mediaWidth, mediaHeight)}
+                >
+                  <span className="absolute -top-5 left-0 rounded bg-mg-accent px-1.5 py-0.5 text-[8px] font-semibold text-white">
+                    Remove {index + 1}
+                  </span>
+                </span>
+              ))}
+              {draftArea && (
+                <span
+                  className="pointer-events-none absolute border-2 border-dashed border-white bg-mg-accent/15"
+                  style={subtitleAreaStyle(draftArea, mediaWidth, mediaHeight)}
+                />
+              )}
+            </div>
+          )}
           {mediaWidth > 0 &&
             mediaHeight > 0 &&
             points.map((point, index) => (
@@ -370,16 +494,24 @@ export function ArtifactPreview({
       <div className="ui-preview-bar is-footer">
         <span className="size-1.5 rounded-full bg-mg-success" />
         <span className="ui-copy-muted min-w-0 flex-1 truncate text-[9px]">
-          Stored locally
+          {isVideo && onSubtitleAreaAdd
+            ? selectingArea
+              ? "Drag a rectangle over the text to remove"
+              : boundedAreas.length
+                ? `${boundedAreas.length} removal area${boundedAreas.length === 1 ? "" : "s"} selected`
+                : "Pause on a frame, then draw the text area"
+            : statusLabel}
         </span>
-        <Button
-          variant="secondary"
-          onClick={save}
-          className="min-h-6 px-2 text-[9px]"
-        >
-          <Download className="ui-icon-sm" />
-          {ids.length > 1 ? `Save ${ids.length}` : "Save"}
-        </Button>
+        {saveable && (
+          <Button
+            variant="secondary"
+            onClick={save}
+            className="min-h-6 px-2 text-[9px]"
+          >
+            <Download className="ui-icon-sm" />
+            {ids.length > 1 ? `Save ${ids.length}` : "Save"}
+          </Button>
+        )}
       </div>
     </div>
   );

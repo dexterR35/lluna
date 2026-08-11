@@ -89,6 +89,11 @@ async function startPythonControlPlane() {
   fs.mkdirSync(logDir, { recursive: true });
   const log = fs.createWriteStream(path.join(logDir, "backend.log"), { flags: "a" });
   const args = [...resolved.args, "--host", "127.0.0.1", "--port", String(port), "--token", token];
+  const modelsDir = process.env.LLUNA_MODELS_DIR || (
+    app.isPackaged
+      ? path.join(app.getPath("userData"), "models")
+      : path.join(resolved.cwd || process.resourcesPath, "backend", "models")
+  );
   const child = spawn(resolved.command, args, {
     cwd: resolved.cwd || process.resourcesPath,
     env: {
@@ -96,7 +101,7 @@ async function startPythonControlPlane() {
       LLUNA_SESSION_TOKEN: token,
       LLUNA_CONFIG_DIR: path.join(app.getPath("userData"), "config"),
       LLUNA_DATA_DIR: app.getPath("userData"),
-      LLUNA_MODELS_DIR: path.join(app.getPath("userData"), "models"),
+      LLUNA_MODELS_DIR: modelsDir,
       PYTHONUNBUFFERED: "1",
     },
     windowsHide: true,

@@ -116,6 +116,14 @@ def _primary_artifact_values(value: Any) -> list[ArtifactRecord]:
     return [value] if isinstance(value, ArtifactRecord) else []
 
 
+def _subtitle_options(parameters: dict[str, Any]) -> dict[str, Any]:
+    """Translate graph-facing video controls to the subtitle service contract."""
+    options = dict(parameters.get("options") or {})
+    if "subAreas" in parameters:
+        options["sub_areas"] = parameters["subAreas"]
+    return options
+
+
 def _model_revision_for_node(node: WorkflowNode) -> str:
     """Fingerprint the node's selected custom model, if any.
 
@@ -1913,7 +1921,7 @@ class RunManager:
             source = artifact_path("video") or artifact_path("image")
             payload.update(
                 video_path=source,
-                options=params.get("options") or {},
+                options=_subtitle_options(params),
                 config=settings.subtitle.to_payload(),
             )
         elif adapter == "birefnet":
