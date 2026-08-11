@@ -91,7 +91,7 @@ The values below are Lluna's declared compatibility floors. They are not peak-us
 | **ProPainter** | Motion-aware video inpainting | CUDA, DirectML, MPS | 8 GB graphics memory, 8 GB RAM |
 | **SAM2 + Grounding DINO** | Selecting objects by click or text prompt | CUDA, DirectML, MPS | 4.5 GB graphics memory, 8 GB RAM |
 | **SUPIR v0** | Diffusion-based photo restoration and upscaling | CUDA | 12 GB VRAM, 32 GB RAM, about 75.2 GB disk |
-| **SeedVR2 3B** | One-step image/video restoration and upscaling | Linux + CUDA | 24 GB VRAM, 32 GB RAM, about 14.6 GB disk |
+| **SeedVR2 3B** | One-step image/video restoration and upscaling | Cross-platform | 24 GB VRAM, 32 GB RAM, about 14.6 GB disk |
 | **SeedVR2 7B** | Higher-capacity SeedVR2 restoration | Linux + CUDA | 48 GB VRAM, 64 GB RAM, about 66.9 GB disk |
 | **FLUX.2 Klein 4B/9B and Base 4B/9B** | Local image generation and editing | CUDA | 12 GB VRAM, 16 GB RAM |
 | **FLUX.2 Klein 9B FP8** | Lower-VRAM FLUX.2 generation | CUDA | 10 GB VRAM, 32 GB RAM |
@@ -100,62 +100,11 @@ The values below are Lluna's declared compatibility floors. They are not peak-us
 
 Real-ESRGAN weights are about 67 MB each. Disk sizes are omitted where the registry does not declare a stable total; Hugging Face repositories can also change size between revisions.
 
-### What your VRAM unlocks
 
-| Available graphics memory | Models added at this level |
-| --- | --- |
-| **No dedicated GPU** | The 6 BiRefNet variants, Real-ESRGAN x2/x4, LaMa, MIRNet, and PaddleOCR Server/Mobile run on CPU |
-| **4 GB** | STTN video inpainting |
-| **4.5 GB** | SAM2 + Grounding DINO object selection |
-| **8 GB** | ProPainter video inpainting |
-| **10 GB NVIDIA** | FLUX.2 Klein 9B FP8 |
-| **12 GB NVIDIA** | SUPIR, the other FLUX.2 variants, and Qwen-Image |
-| **24 GB NVIDIA on Linux** | SeedVR2 3B |
-| **48 GB NVIDIA on Linux** | SeedVR2 7B |
-
-System RAM still matters. In particular, a 12 GB GPU is not enough by itself for FLUX.2 Dev or Qwen-Image; Lluna declares 64 GB of system RAM for both.
-
-### Recommended starting points
-
-“Best” depends on the input and the hardware. These are the safest first choices in Lluna, not universal quality rankings.
-
-| Goal | Start with | Choose something else when… |
-| --- | --- | --- |
-| Enlarge an image 2× | **Real-ESRGAN x2** | Use x4 when you actually need a 4× output |
-| Restore a damaged photo | **SUPIR v0** | Use Real-ESRGAN when speed, disk use, or commercial licensing matters |
-| Restore/upscale video | **SeedVR2 3B** | Use Real-ESRGAN on non-Linux systems or GPUs below 24 GB |
-| Remove a normal background | **BiRefNet** | Use Dynamic for mixed resolutions or Lite 2K for a lighter model |
-| Preserve hair and soft edges | **BiRefNet HR Matting** | Use regular Matting when high-resolution processing is unnecessary |
-| Select an object by description | **SAM2 + Grounding DINO small pair** | Switch to the large pair when accuracy matters more than speed |
-| Remove subtitles | **PaddleOCR Server + STTN Auto** | Use Mobile for faster detection or ProPainter for difficult motion |
-| Repair a dark photo | **MIRNet LOL** | Use SUPIR when the image also needs heavy restoration and you have CUDA |
-| Generate images | **FLUX.2 Klein Base 4B** | Use Klein 4B for speed, FP8 for 10 GB VRAM, or Qwen-Image for Apache-2.0 weights |
-
-### Platform notes
-
-| Platform | Acceleration | Important limits |
-| --- | --- | --- |
-| **Linux** | CUDA, CPU | The only platform supported by SeedVR2; CUDA models require NVIDIA |
-| **Windows** | CUDA, DirectML, CPU | SeedVR2 is unavailable; SUPIR and built-in generation still require CUDA |
-| **macOS** | MPS, CPU | CUDA-only models—SUPIR, SeedVR2, FLUX.2, and Qwen-Image—are unavailable |
-
-SeedVR2 is Linux-only because its reviewed runtime depends on Linux wheels for flash-attn and Apex. SUPIR, SeedVR2, and BiRefNet use isolated Python environments so their pinned dependencies do not conflict with the main application.
 
 Some weights have separate restrictions. SUPIR and FLUX.2 Dev are non-commercial. Gated Hugging Face models require you to accept the upstream terms and add a token under **Settings → Models → Hugging Face**.
 
 ## Workflows
-
-Start with one of the built-in templates or drag nodes onto the canvas. Ports connect from left to right, and Lluna validates types, required models, model capabilities, and hardware before a run. Independent graph branches can execute concurrently; GPU-backed nodes are scheduled through the inference worker.
-
-Built-in templates cover:
-
-- removing text from an image;
-- removing subtitles from a video;
-- cutting out a transparent subject;
-- upscaling an image;
-- fixing a low-light photo;
-- generating and then upscaling;
-- describing an image and generating a new one.
 
 Workflows are saved as `*.lluna.json`.
 
@@ -232,8 +181,6 @@ git pull
 npm install --allow-git=all
 npm run dev
 ```
-
-Application data, settings, workflows, and installed models are stored outside packaged application files and are not intentionally removed by an update.
 
 ## Privacy and security
 
