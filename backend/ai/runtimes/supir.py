@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Callable
 
 from backend.tools.installers import supir as supir_models
+from backend.tools.shared.process import ProcessManager
 
 
 class SupirCancelled(RuntimeError):
@@ -63,14 +64,12 @@ def run_supir(
             stderr=subprocess.STDOUT,
             text=True,
         )
+        # Route cancellation through ProcessManager, which also reaps the process's descendants.
+        ProcessManager.instance().add_process(process, name="supir-worker")
         try:
             while process.poll() is None:
                 if cancel_event.wait(0.2):
-                    process.terminate()
-                    try:
-                        process.wait(timeout=5)
-                    except subprocess.TimeoutExpired:
-                        process.kill()
+                    ProcessManager.instance().terminate_by_process(process, quiet=True)
                     raise SupirCancelled("__cancelled__")
             output_log.seek(0)
             output = output_log.read()
@@ -79,4 +78,5 @@ def run_supir(
             progress(100)
             return str(payload["output_path"])
         finally:
+            ProcessManager.instance().remove_process("supir-worker")
             request_path.unlink(missing_ok=True)

@@ -378,6 +378,10 @@ class ModelCapabilities:
         )
 
     def unresolved(self, primary_task: str) -> tuple[str, ...]:
+        # Mirrored for responsive client-side validation in
+        # frontend/src/models/modelManifestCapabilities.js's capabilityIssues(); this method
+        # (plus ModelManifest.configuration_issues() below) is the authoritative check. Keep
+        # the JS copy in sync when changing these rules.
         missing: list[str] = []
         if self.provenance == "unknown":
             missing.append("provenance")

@@ -201,15 +201,15 @@ test("flow boxes and node appearance are saved with the workflow", () => {
     .updateNode(first, {
       appearance: {
         cardStyle: "visual",
-        imageEffect: "vivid",
+        imageFit: "contain",
         showPreview: true,
       },
     });
   const groupId = useEditorStore.getState().createFlowFromSelected();
   const document = useEditorStore.getState().serialize();
   expect(
-    required(document.nodes.find((node) => node.id === first)).appearance?.imageEffect,
-  ).toBe("vivid");
+    required(document.nodes.find((node) => node.id === first)).appearance?.imageFit,
+  ).toBe("contain");
   expect(required(document.groups.find((group) => group.id === groupId)).nodeIds).toEqual(
     [first, second],
   );

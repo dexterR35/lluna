@@ -60,14 +60,6 @@ def cancel_enhance() -> None:
         _cancel_generation += 1
 
 
-def is_enhance_busy() -> bool:
-    return _busy
-
-
-def cached_model_count() -> int:
-    return len(_session_cache)
-
-
 def release_enhance_models(blocking: bool = True, timeout: float = 8.0) -> bool:
     """
     Drop cached Real-ESRGAN weights and free GPU/CPU memory.
@@ -103,11 +95,9 @@ def _max_long_edge() -> int:
 
 def _device() -> torch.device:
     from backend.configuration.service import get_settings
-    from backend.tools.shared.hardware import HardwareAccelerator
+    from backend.tools.shared.hardware import resolve_device
 
-    hw = HardwareAccelerator.instance()
-    hw.set_enabled(bool(get_settings().subtitle.hardware_acceleration))
-    return hw.device
+    return resolve_device(get_settings().runtime.hardware_acceleration)
 
 
 def _check_cancel(cancel_event: CancelEvent, generation: int) -> None:

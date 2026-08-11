@@ -19,7 +19,7 @@ from backend.diagnostics.errors import ConfigurationError
 
 _ENVIRONMENT_KEYS: dict[str, tuple[str, str, type]] = {
     "LLUNA_HARDWARE_ACCELERATION": (
-        "subtitle",
+        "runtime",
         "hardware_acceleration",
         bool,
     ),

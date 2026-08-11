@@ -406,7 +406,7 @@ def cuda_ready_for_generate() -> tuple[bool, str]:
     from backend.tools.shared.hardware import HardwareAccelerator
 
     hw = HardwareAccelerator.instance()
-    hw.set_enabled(bool(get_settings().subtitle.hardware_acceleration))
+    hw.set_enabled(bool(get_settings().runtime.hardware_acceleration))
     if not hw.has_cuda():
         return False, (
             "Hardware acceleration is off or CUDA is unavailable. "

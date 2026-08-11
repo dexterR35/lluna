@@ -82,7 +82,6 @@ const restoredParameters = (definition, saved = {}) => {
 };
 export const DEFAULT_APPEARANCE = {
   cardStyle: "visual",
-  imageEffect: "none",
   imageFit: "cover",
   imageRatio: "wide",
   showPreview: true,
@@ -247,25 +246,10 @@ function projectFromDocument(document) {
   };
 }
 
-/** @param {string[]} seedIds @param {Array<{source: string, target: string}>} edges */
-export function downstreamNodeIds(seedIds, edges) {
+/** @param {string[]} seedIds @param {EditorEdge[]} edges @param {"upstream" | "downstream"} direction */
+function traverseNodeIds(seedIds, edges, direction) {
   const included = new Set(seedIds);
   const pending = [...seedIds];
-  while (pending.length) {
-    const source = pending.shift();
-    for (const edge of edges) {
-      if (edge.source !== source || included.has(edge.target)) continue;
-      included.add(edge.target);
-      pending.push(edge.target);
-    }
-  }
-  return [...included];
-}
-
-/** @param {string} seedId @param {EditorEdge[]} edges @param {"upstream" | "downstream"} direction */
-function linkedNodeIds(seedId, edges, direction) {
-  const included = new Set([seedId]);
-  const pending = [seedId];
   while (pending.length) {
     const current = pending.shift();
     for (const edge of edges) {
@@ -281,6 +265,16 @@ function linkedNodeIds(seedId, edges, direction) {
     }
   }
   return included;
+}
+
+/** @param {string[]} seedIds @param {Array<{source: string, target: string}>} edges */
+export function downstreamNodeIds(seedIds, edges) {
+  return [...traverseNodeIds(seedIds, edges, "downstream")];
+}
+
+/** @param {string} seedId @param {EditorEdge[]} edges @param {"upstream" | "downstream"} direction */
+function linkedNodeIds(seedId, edges, direction) {
+  return traverseNodeIds([seedId], edges, direction);
 }
 
 /** @param {string} nodeId @param {EditorNode[]} nodes @param {EditorEdge[]} edges @param {NodeDefinition[]} definitions */
@@ -1045,7 +1039,6 @@ const createEditorState = (set, get) => ({
       startNodeIds: seeds,
       ...bounds,
       color: "teal",
-      appearance: { imageEffect: "none" },
     };
     set((current) => ({
       ...history(current, {

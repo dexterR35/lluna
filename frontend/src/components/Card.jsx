@@ -5,36 +5,13 @@ import { cn } from "./utils";
  * @param {{
  *   children?: import("react").ReactNode,
  *   className?: string,
- *   as?: "article"|"div"|"section"|"li"|"button",
- *   type?: "button"|"submit"|"reset",
  *   padded?: boolean,
- *   interactive?: boolean,
- *   selected?: boolean,
- * } & import("react").HTMLAttributes<HTMLElement>} props
+ * } & import("react").HTMLAttributes<HTMLDivElement>} props
  */
-export function Card({
-  children,
-  className = "",
-  as: Tag = "div",
-  padded = true,
-  interactive = false,
-  selected = false,
-  ...props
-}) {
+export function Card({ children, className = "", padded = true, ...props }) {
   return (
-    <Tag
-      className={cn(
-        "ui-card",
-        selected && "border-mg-accent bg-mg-accent/10",
-        padded && "p-3.5",
-        interactive &&
-          !selected &&
-          "transition hover:border-mg-secondary/40 hover:bg-mg-selected",
-        className,
-      )}
-      {...props}
-    >
+    <div className={cn("ui-card", padded && "p-3.5", className)} {...props}>
       {children}
-    </Tag>
+    </div>
   );
 }

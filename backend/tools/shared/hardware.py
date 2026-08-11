@@ -123,3 +123,14 @@ class HardwareAccelerator:
             if self.__mps:
                 return torch.device("mps")
         return torch.device("cpu")
+
+
+def resolve_device(enabled: bool) -> torch.device:
+    """Resolve the torch device for a runtime, honoring the accelerator toggle and
+    guarding against a CUDA device that was detected at startup but is no longer available."""
+    hw = HardwareAccelerator.instance()
+    hw.set_enabled(bool(enabled))
+    device = hw.device
+    if device.type == "cuda" and not torch.cuda.is_available():
+        return torch.device("cpu")
+    return device

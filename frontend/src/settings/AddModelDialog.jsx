@@ -34,6 +34,7 @@ const TASKS = [
   "inpainting",
   "text-recognition",
   "text-generation",
+  "image-to-text",
   "automatic-speech-recognition",
   "custom",
 ];

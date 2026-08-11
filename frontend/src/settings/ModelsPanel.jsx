@@ -69,7 +69,6 @@ function optionsForModel(modelId) {
         "sttn_max_load_num",
         "propainter_max_load_num",
         "mask_expansion_px",
-        "hardware_acceleration",
       ],
     };
   }

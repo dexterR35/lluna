@@ -22,10 +22,18 @@ def is_legacy_mapping(raw: Mapping[str, Any]) -> bool:
 
 
 def migrate_mapping(raw: Mapping[str, Any]) -> dict[str, Any]:
-    """Return schema v2 without mutating the supplied mapping."""
+    """Return the current schema version without mutating the supplied mapping."""
     if not is_legacy_mapping(raw):
         migrated = dict(raw)
         migrated["schema_version"] = SCHEMA_VERSION
+        runtime = dict(migrated.get("runtime", {}))
+        subtitle = dict(migrated.get("subtitle", {}))
+        if "hardware_acceleration" not in runtime and "hardware_acceleration" in subtitle:
+            # v3 -> v4: hardware_acceleration moved from subtitle (it silently governed
+            # every AI runtime, not just subtitle removal) to a single runtime-wide toggle.
+            runtime["hardware_acceleration"] = subtitle.pop("hardware_acceleration")
+            migrated["runtime"] = runtime
+            migrated["subtitle"] = subtitle
         return migrated
 
     main = dict(raw.get("Main", {}))
@@ -43,12 +51,12 @@ def migrate_mapping(raw: Mapping[str, Any]) -> dict[str, Any]:
             "idle_release_seconds": infer.get("IdleReleaseSec", 60),
             "check_updates_on_startup": main.get("CheckUpdateOnStartup", True),
             "soft_defaults_applied": infer.get("SoftDefaultsApplied", False),
+            "hardware_acceleration": main.get("HardwareAcceleration", True),
         },
         "subtitle": {
             "selection_areas": main.get("SubtitleSelectionAreas", "0.88,0.99,0.15,0.85"),
             "inpaint_mode": main.get("InpaintMode", "sttn-auto"),
             "subtitle_detect_mode": main.get("SubtitleDetectMode", "PP_OCRv5_SERVER"),
-            "hardware_acceleration": main.get("HardwareAcceleration", True),
             "sttn_neighbor_stride": sttn.get("NeighborStride", 5),
             "sttn_reference_length": sttn.get("ReferenceLength", 10),
             "sttn_max_load_num": sttn.get("MaxLoadNum", 50),

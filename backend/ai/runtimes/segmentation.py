@@ -25,17 +25,10 @@ _loaded_dino_id: Optional[SelectObjectModelId] = None
 
 
 def _device():
-    import torch
-
     from backend.configuration.service import get_settings
-    from backend.tools.shared.hardware import HardwareAccelerator
+    from backend.tools.shared.hardware import resolve_device
 
-    hw = HardwareAccelerator.instance()
-    hw.set_enabled(bool(get_settings().subtitle.hardware_acceleration))
-    dev = hw.device
-    if dev.type == "cuda" and not torch.cuda.is_available():
-        return torch.device("cpu")
-    return dev
+    return resolve_device(get_settings().runtime.hardware_acceleration)
 
 
 def release_select_object_models(blocking: bool = True, timeout: float = 8.0) -> bool:

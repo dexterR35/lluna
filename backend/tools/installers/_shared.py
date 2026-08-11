@@ -8,7 +8,6 @@ duplicating it.
 
 from __future__ import annotations
 
-import hashlib
 import importlib
 import os
 import shutil
@@ -17,6 +16,7 @@ import sys
 from pathlib import Path
 from typing import Sequence
 
+from backend.artifacts.hashing import hash_file
 from backend.core.atomic import atomic_write_json
 
 
@@ -214,11 +214,7 @@ def create_isolated_venv(
 
 
 def sha256_of_file(path: Path, *, chunk_size: int = 8 * 1024 * 1024) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(chunk_size), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+    return hash_file(path, chunk_size=chunk_size)
 
 
 def verify_pinned_artifact(

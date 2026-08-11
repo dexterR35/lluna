@@ -63,14 +63,6 @@ def cancel_generate() -> None:
         _cancel_generation += 1
 
 
-def is_generate_busy() -> bool:
-    return _busy
-
-
-def cached_model_count() -> int:
-    return len(_session_cache)
-
-
 def release_generate_models(blocking: bool = True, timeout: float = 8.0) -> bool:
     got = _infer_lock.acquire(blocking=blocking, timeout=timeout if blocking else 0)
     if not got:

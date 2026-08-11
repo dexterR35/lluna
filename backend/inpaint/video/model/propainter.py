@@ -10,7 +10,7 @@ from einops import rearrange
 
 from backend.inpaint.video.model.modules.base_module import BaseNetwork
 from backend.inpaint.video.model.modules.sparse_transformer import TemporalSparseTransformerBlock, SoftSplit, SoftComp
-from backend.inpaint.video.model.modules.spectral_norm import spectral_norm as _spectral_norm
+from backend.inpaint.utils.spectral_norm import spectral_norm as _spectral_norm
 from backend.inpaint.video.model.modules.flow_loss_utils import flow_warp
 from backend.inpaint.video.model.modules.deformconv import ModulatedDeformConv2d
 

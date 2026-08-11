@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 
+from backend.artifacts.hashing import hash_file
 from backend.models.reference.metadata import ExpectedFile
 
 
@@ -28,11 +28,7 @@ def verify_file(root: str | Path, expected: ExpectedFile) -> VerificationResult:
         return VerificationResult(False, path, "File size does not match manifest")
     digest = ""
     if expected.sha256:
-        hasher = hashlib.sha256()
-        with path.open("rb") as stream:
-            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-                hasher.update(chunk)
-        digest = hasher.hexdigest()
+        digest = hash_file(path)
         if digest.lower() != expected.sha256.lower():
             return VerificationResult(False, path, "SHA-256 does not match", digest)
     return VerificationResult(True, path, sha256=digest)

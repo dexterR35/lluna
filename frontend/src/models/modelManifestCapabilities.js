@@ -1,4 +1,9 @@
-/** @param {Record<string, any>} manifest */
+/**
+ * Mirrors backend/models/reference/manifest.py's ModelCapabilities.unresolved() and
+ * ModelManifest.configuration_issues() for responsive client-side validation. Keep in sync —
+ * the backend is the authoritative check at import time.
+ * @param {Record<string, any>} manifest
+ */
 export function capabilityIssues(manifest) {
   const caps = manifest?.capabilities || {};
   const variant = manifest?.variant || {};

@@ -23,7 +23,7 @@ from backend.api.events import EventBroker
 from backend.artifacts.models import ArtifactRecord
 from backend.artifacts.store import ArtifactStore, DesktopGrantStore
 from backend.configuration.service import get_settings
-from backend.graph.cache import build_cache_key
+from backend.graph.cache import build_cache_key, stable_hash
 from backend.graph.compiler import compile_workflow
 from backend.graph.registry import NODE_REGISTRY, get_node
 from backend.graph.scheduler import (
@@ -157,13 +157,6 @@ def _model_revision_for_node(node: WorkflowNode) -> str:
     except (ImportError, OSError, ValueError):
         return ""
     return "|".join(parts)
-
-
-def _stable_value_hash(value: Any) -> str:
-    encoded = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode(
-        "utf-8"
-    )
-    return hashlib.sha256(encoded).hexdigest()
 
 
 class _Progress:
@@ -701,7 +694,7 @@ class RunManager:
         input_artifacts = _artifact_values(input_values)
         input_hashes = [item.content_hash for item in input_artifacts]
         if "llava" in input_values:
-            input_hashes.append(f"llava:{_stable_value_hash(input_values['llava'])}")
+            input_hashes.append(f"llava:{stable_hash(input_values['llava'])}")
         cache_key = build_cache_key(
             node,
             input_hashes,
@@ -983,7 +976,7 @@ class RunManager:
             ]
             if "llava" in scalar_inputs:
                 input_signatures.append(
-                    f"llava:{_stable_value_hash(scalar_inputs['llava'])}"
+                    f"llava:{stable_hash(scalar_inputs['llava'])}"
                 )
             item_cache_key = build_cache_key(
                 node, input_signatures, model_revision=model_revision
@@ -1735,7 +1728,7 @@ class RunManager:
 
         params = node.parameters
         payload: dict[str, Any] = {
-            "hardware_acceleration": settings.subtitle.hardware_acceleration,
+            "hardware_acceleration": settings.runtime.hardware_acceleration,
             "output_path": output_raw,
         }
         if adapter == "enhance":

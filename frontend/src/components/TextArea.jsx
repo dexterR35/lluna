@@ -1,32 +1,15 @@
 import { forwardRef } from "react";
 import { cn } from "./utils";
 
-/** @typedef {import("react").TextareaHTMLAttributes<HTMLTextAreaElement> & {label?: import("react").ReactNode, error?: import("react").ReactNode, hint?: import("react").ReactNode}} TextAreaProps */
+/** @typedef {import("react").TextareaHTMLAttributes<HTMLTextAreaElement> & {label?: import("react").ReactNode, hint?: import("react").ReactNode}} TextAreaProps */
 
 /** @param {TextAreaProps} props @param {import("react").ForwardedRef<HTMLTextAreaElement>} ref */
-function TextAreaComponent(
-  { label, error, hint, className = "", ...props },
-  ref,
-) {
+function TextAreaComponent({ label, hint, className = "", ...props }, ref) {
   return (
     <label className="ui-field-label">
       {label && <span>{label}</span>}
-      <textarea
-        ref={ref}
-        aria-invalid={Boolean(error)}
-        className={cn(
-          "ui-input is-area",
-          Boolean(error) && "is-error",
-          className,
-        )}
-        {...props}
-      />
-      {error && (
-        <span role="alert" className="ui-help text-mg-error">
-          {error}
-        </span>
-      )}
-      {!error && hint && <span className="ui-help">{hint}</span>}
+      <textarea ref={ref} className={cn("ui-input is-area", className)} {...props} />
+      {hint && <span className="ui-help">{hint}</span>}
     </label>
   );
 }

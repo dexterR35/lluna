@@ -6,7 +6,6 @@ import { cn } from "./utils";
  * @typedef {import("react").SelectHTMLAttributes<HTMLSelectElement> & {
  *   label?: import("react").ReactNode,
  *   options?: SelectOption[],
- *   error?: import("react").ReactNode,
  *   hint?: import("react").ReactNode,
  *   bare?: boolean,
  * }} SelectProps
@@ -14,15 +13,7 @@ import { cn } from "./utils";
 
 /** @param {SelectProps} props @param {import("react").ForwardedRef<HTMLSelectElement>} ref */
 function SelectComponent(
-  {
-    label,
-    options = [],
-    error,
-    hint,
-    bare = false,
-    className = "",
-    ...props
-  },
+  { label, options = [], hint, bare = false, className = "", ...props },
   ref,
 ) {
   const id =
@@ -36,13 +27,7 @@ function SelectComponent(
     <select
       ref={ref}
       id={id}
-      aria-invalid={Boolean(error)}
-      className={cn(
-        "ui-input",
-        bare && "is-bare",
-        Boolean(error) && "is-error",
-        className,
-      )}
+      className={cn("ui-input", bare && "is-bare", className)}
       {...props}
     >
       {options.map((option) => (
@@ -61,12 +46,7 @@ function SelectComponent(
     <label className="ui-field-label" htmlFor={id}>
       {label && <span>{label}</span>}
       {control}
-      {error && (
-        <span role="alert" className="ui-help text-mg-error">
-          {error}
-        </span>
-      )}
-      {!error && hint && <span className="ui-help">{hint}</span>}
+      {hint && <span className="ui-help">{hint}</span>}
     </label>
   );
 }

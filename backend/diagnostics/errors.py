@@ -42,16 +42,6 @@ class DependencyError(LlunaError):
     title = "A required component is unavailable"
 
 
-class HardwareError(LlunaError):
-    code = "HARDWARE_ERROR"
-    title = "Hardware acceleration is unavailable"
-
-
-class ModelError(LlunaError):
-    code = "MODEL_ERROR"
-    title = "The selected model is unavailable"
-
-
 class InferenceError(LlunaError):
     code = "INFERENCE_ERROR"
     title = "Processing failed"
@@ -81,12 +71,3 @@ class OutputWriteError(LlunaError):
     actions = ("Choose another output folder.", "Check available disk space.")
 
 
-class DownloadError(LlunaError):
-    code = "DOWNLOAD_ERROR"
-    title = "The model could not be downloaded"
-    retryable = True
-
-
-class UpdateError(LlunaError):
-    code = "UPDATE_ERROR"
-    title = "The update check could not be completed"

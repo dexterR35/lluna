@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import urllib.request
@@ -10,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Set
 
+from backend.artifacts.hashing import hash_file
 from backend.tools.shared.constants import LowLightMode
 from backend.tools.shared.enabled_modes import EnabledModesCatalog
 from backend.tools.shared import enabled_modes as _enabled_modes
@@ -126,13 +126,9 @@ def _record_integrity(mode: LowLightMode, path: Path) -> None:
     """
     from backend.core.atomic import atomic_write_json
 
-    hasher = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            hasher.update(chunk)
     atomic_write_json(
         _integrity_sidecar_path(mode),
-        {"size_bytes": path.stat().st_size, "sha256": hasher.hexdigest()},
+        {"size_bytes": path.stat().st_size, "sha256": hash_file(path)},
     )
 
 

@@ -414,7 +414,6 @@ export function NodeEditorDialog({ nodeId, onClose, onManageModels }) {
                   <ArtifactPreview
                     artifactId={sourceVideoArtifactId}
                     schemaId={node.data.schemaId}
-                    effect={String(node.data.appearance?.imageEffect || "none")}
                     subtitleAreas={subtitleAreas}
                     onSubtitleAreaAdd={(area) =>
                       setParameter(subtitleAreasParameter, [
@@ -441,7 +440,6 @@ export function NodeEditorDialog({ nodeId, onClose, onManageModels }) {
                   artifactId={artifactId}
                   artifactIds={artifactIds}
                   schemaId={node.data.schemaId}
-                  effect={String(node.data.appearance?.imageEffect || "none")}
                 />
               )}
             </div>

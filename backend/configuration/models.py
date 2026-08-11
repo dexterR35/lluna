@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any, Mapping
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 _INPAINT_MODES = {"sttn-auto", "sttn-det", "lama", "propainter", "opencv"}
 _DETECT_MODES = {"PP_OCRv5_MOBILE", "PP_OCRv5_SERVER"}
 _DENOISE_STRENGTHS = {"safe", "medium"}
@@ -36,6 +36,7 @@ class RuntimeSettings:
     run_history_limit: int = 100
     check_updates_on_startup: bool = True
     soft_defaults_applied: bool = False
+    hardware_acceleration: bool = True
 
     def __post_init__(self) -> None:
         if not 5 <= float(self.job_watchdog_seconds) <= 3600:
@@ -49,6 +50,8 @@ class RuntimeSettings:
             raise TypeError("check_updates_on_startup must be a boolean")
         if not isinstance(self.soft_defaults_applied, bool):
             raise TypeError("soft_defaults_applied must be a boolean")
+        if not isinstance(self.hardware_acceleration, bool):
+            raise TypeError("hardware_acceleration must be a boolean")
 
 
 @dataclass(frozen=True)
@@ -56,7 +59,6 @@ class SubtitleSettings:
     selection_areas: str = "0.88,0.99,0.15,0.85"
     inpaint_mode: str = "sttn-auto"
     subtitle_detect_mode: str = "PP_OCRv5_SERVER"
-    hardware_acceleration: bool = True
     sttn_neighbor_stride: int = 5
     sttn_reference_length: int = 10
     sttn_max_load_num: int = 50
@@ -75,8 +77,6 @@ class SubtitleSettings:
             raise ValueError(f"Unsupported inpaint_mode: {self.inpaint_mode}")
         if self.subtitle_detect_mode not in _DETECT_MODES:
             raise ValueError(f"Unsupported subtitle_detect_mode: {self.subtitle_detect_mode}")
-        if not isinstance(self.hardware_acceleration, bool):
-            raise TypeError("hardware_acceleration must be a boolean")
         _bounded("sttn_neighbor_stride", self.sttn_neighbor_stride, 1, 100)
         _bounded("sttn_reference_length", self.sttn_reference_length, 1, 100)
         _bounded("sttn_max_load_num", self.sttn_max_load_num, 1, 300)

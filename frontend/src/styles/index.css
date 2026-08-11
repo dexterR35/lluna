@@ -118,9 +118,6 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   .ui-input.is-area {
     @apply min-h-20 resize-y py-2;
   }
-  .ui-input.is-error {
-    @apply border-mg-error;
-  }
   .ui-search {
     @apply flex h-9 w-full items-center gap-2 rounded-mg border border-mg-border bg-mg-app px-2 text-xs text-mg-primary transition hover:border-mg-secondary/50 focus-within:border-mg-focus focus-within:ring-2 focus-within:ring-mg-focus/20;
   }

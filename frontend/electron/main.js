@@ -2,7 +2,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { app, BrowserWindow, dialog, ipcMain, powerSaveBlocker, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, powerSaveBlocker } from "electron";
 
 import { installNativeMenu } from "./native-menu.js";
 import { startPythonControlPlane } from "./python-process.js";
@@ -177,15 +177,8 @@ function installIpc() {
     }
     return Promise.all(destinations.map(destination => registerPathGrant(destination, "write")));
   });
-  ipcMain.handle("native:reveal", async (_event, grantId) => {
-    const filePath = grants.get(grantId);
-    if (!filePath) throw new Error("Unknown path grant");
-    shell.showItemInFolder(filePath);
-    return true;
-  });
   ipcMain.handle("native:external", (_event, id) => openApprovedExternal(id));
   ipcMain.handle("native:huggingface", (_event, url) => openApprovedHuggingFace(String(url)));
-  ipcMain.handle("native:platform", () => ({ platform: process.platform, arch: process.arch, version: app.getVersion(), packaged: app.isPackaged }));
   ipcMain.on("run:progress", (_event, progress) => {
     const value = Number(progress);
     if (mainWindow && Number.isFinite(value)) mainWindow.setProgressBar(value < 0 ? -1 : Math.max(0, Math.min(1, value)));

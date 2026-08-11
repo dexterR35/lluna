@@ -4,9 +4,17 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Iterable
+from typing import Any, Iterable
 
 from backend.graph.schema import WorkflowNode
+
+
+def stable_hash(value: Any) -> str:
+    """Hash a JSON-serializable value the same way regardless of key order."""
+    encoded = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode(
+        "utf-8"
+    )
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def build_cache_key(
@@ -24,7 +32,4 @@ def build_cache_key(
         "modelRevision": model_revision,
         "implementationRevision": implementation_revision,
     }
-    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode(
-        "utf-8"
-    )
-    return hashlib.sha256(encoded).hexdigest()
+    return stable_hash(payload)

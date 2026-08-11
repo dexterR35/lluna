@@ -690,7 +690,6 @@ function LlunaNodeComponent({ id, data, selected }) {
               <ArtifactThumbGrid
                 artifactIds={artifactIds}
                 schemaId={data.schemaId}
-                effect={String(appearance.imageEffect || "none")}
                 fit={String(appearance.imageFit || "cover")}
                 label={`${nodeLabel} output`}
               />
@@ -698,7 +697,6 @@ function LlunaNodeComponent({ id, data, selected }) {
               <ArtifactThumbnail
                 artifactId={previewArtifactId}
                 schemaId={data.schemaId}
-                effect={String(appearance.imageEffect || "none")}
                 fit={String(appearance.imageFit || "cover")}
                 ratio="square"
                 label={

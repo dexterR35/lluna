@@ -15,7 +15,7 @@ def snapshot_hardware() -> Dict[str, Any]:
     from backend.configuration.service import get_settings
 
     return {
-        "hardware_acceleration": bool(get_settings().subtitle.hardware_acceleration),
+        "hardware_acceleration": bool(get_settings().runtime.hardware_acceleration),
     }
 
 

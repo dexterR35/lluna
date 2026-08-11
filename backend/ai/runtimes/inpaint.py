@@ -58,7 +58,7 @@ def get_retouch_lama(model_path: Optional[str] = None):
     from backend.tools.shared.hardware import HardwareAccelerator
 
     hw = HardwareAccelerator.instance()
-    hw.set_enabled(bool(get_settings().subtitle.hardware_acceleration))
+    hw.set_enabled(bool(get_settings().runtime.hardware_acceleration))
     device = hw.device
     path = model_path
     if not path:

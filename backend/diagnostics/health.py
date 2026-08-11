@@ -72,7 +72,7 @@ def _report_hardware() -> None:
         from backend.configuration.service import get_settings
 
         diag.model(
-            f"{'hardwareAcceleration':<28}  {bool(get_settings().subtitle.hardware_acceleration)}"
+            f"{'hardwareAcceleration':<28}  {bool(get_settings().runtime.hardware_acceleration)}"
         )
     except Exception:
         pass

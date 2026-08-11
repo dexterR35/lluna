@@ -10,7 +10,6 @@ import {
 } from "../icons";
 import { api, artifactObjectUrl, artifactThumbnailUrl } from "../api/client";
 import { Badge, Button, EmptyState, LoadingState } from "../components";
-import { IMAGE_EFFECTS } from "./imageEffects";
 import { useArtifactSaver } from "./useArtifactSaver";
 import {
   normalizeSubtitleArea,
@@ -63,16 +62,14 @@ function useArtifact(artifactId, options = {}) {
   return state;
 }
 
-/** @param {{state: import("../types").ArtifactPreviewState, alt: string, effect?: string, fit?: string, className?: string, controls?: boolean}} props */
+/** @param {{state: import("../types").ArtifactPreviewState, alt: string, fit?: string, className?: string, controls?: boolean}} props */
 function ArtifactMedia({
   state,
   alt,
-  effect = "none",
   fit = "contain",
   className = "",
   controls = true,
 }) {
-  const style = { filter: IMAGE_EFFECTS[effect] || IMAGE_EFFECTS.none };
   const url = state.url || undefined;
   if (state.metadata?.mediaType?.startsWith("video/"))
     return (
@@ -82,7 +79,6 @@ function ArtifactMedia({
         controls={controls}
         muted={!controls}
         className={`${fit === "cover" ? "object-cover" : "object-contain"} ${className}`}
-        style={style}
       />
     );
   return (
@@ -90,7 +86,6 @@ function ArtifactMedia({
       src={url}
       alt={alt}
       className={`${fit === "cover" ? "object-cover" : "object-contain"} ${className}`}
-      style={style}
     />
   );
 }
@@ -131,11 +126,10 @@ function PreviewMeta({ metadata }) {
   );
 }
 
-/** @param {{artifactId?: string, schemaId?: string, effect?: string, fit?: string, ratio?: string, label?: string, size?: "sm"|"md", useOriginal?: boolean}} props */
+/** @param {{artifactId?: string, schemaId?: string, fit?: string, ratio?: string, label?: string, size?: "sm"|"md", useOriginal?: boolean}} props */
 export function ArtifactThumbnail({
   artifactId,
   schemaId,
-  effect = "none",
   fit = "cover",
   ratio = "wide",
   label = "Node output",
@@ -179,7 +173,6 @@ export function ArtifactThumbnail({
       <ArtifactMedia
         state={state}
         alt={label}
-        effect={effect}
         fit={fit}
         controls={false}
         className="size-full"
@@ -206,11 +199,10 @@ export function ArtifactThumbnail({
 }
 
 /** Compact multi-image thumb grid for node bodies (thumbnails only). */
-/** @param {{artifactIds: string[], schemaId?: string, effect?: string, fit?: string, label?: string}} props */
+/** @param {{artifactIds: string[], schemaId?: string, fit?: string, label?: string}} props */
 export function ArtifactThumbGrid({
   artifactIds,
   schemaId,
-  effect = "none",
   fit = "cover",
   label = "Node output",
 }) {
@@ -226,7 +218,6 @@ export function ArtifactThumbGrid({
           <ArtifactThumbnail
             artifactId={id}
             schemaId={schemaId}
-            effect={effect}
             fit={fit}
             size="sm"
             label={`${label} ${index + 1}`}
@@ -237,12 +228,11 @@ export function ArtifactThumbGrid({
   );
 }
 
-/** @param {{artifactId?: string, artifactIds?: string[], schemaId?: string, effect?: string, compact?: boolean, zoomable?: boolean, points?: Array<{x: number, y: number, label?: number}>, onPointAdd?: (point: {x: number, y: number, label: number}) => void, subtitleAreas?: number[][], onSubtitleAreaAdd?: (area: number[]) => void, onSubtitleAreasClear?: () => void, saveable?: boolean, statusLabel?: string}} props */
+/** @param {{artifactId?: string, artifactIds?: string[], schemaId?: string, compact?: boolean, zoomable?: boolean, points?: Array<{x: number, y: number, label?: number}>, onPointAdd?: (point: {x: number, y: number, label: number}) => void, subtitleAreas?: number[][], onSubtitleAreaAdd?: (area: number[]) => void, onSubtitleAreasClear?: () => void, saveable?: boolean, statusLabel?: string}} props */
 export function ArtifactPreview({
   artifactId,
   artifactIds,
   schemaId,
-  effect = "none",
   compact = false,
   zoomable = true,
   points = [],
@@ -481,7 +471,6 @@ export function ArtifactPreview({
           <ArtifactMedia
             state={state}
             alt="Completed output preview"
-            effect={effect}
             className={`${compact ? "max-h-52" : "max-h-[26rem]"} col-start-1 row-start-1 block max-w-full`}
           />
           {isVideo && mediaWidth > 0 && mediaHeight > 0 && (

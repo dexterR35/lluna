@@ -37,7 +37,7 @@ from backend.scenedetect.video_stream import VideoStream, VideoOpenFailure
 from backend.scenedetect.scene_detector import SceneDetector
 from backend.scenedetect.backends import AVAILABLE_BACKENDS, VideoCaptureAdapter, VideoStreamCv2
 from backend.scenedetect.stats_manager import StatsManager, StatsFileCorrupt
-from backend.scenedetect.scene_manager import SceneManager, save_images
+from backend.scenedetect.scene_manager import SceneManager
 
 # Used for module identification and when printing version & about info
 # (e.g. calling `scenedetect version` or `scenedetect about`).

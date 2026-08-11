@@ -52,10 +52,6 @@ export const FIELD_META = {
     label: "Selection areas",
     description: "Normalized regions scanned for subtitles (y0,y1,x0,x1).",
   },
-  "subtitle.hardware_acceleration": {
-    label: "Hardware acceleration",
-    description: "Use GPU acceleration when available.",
-  },
   "subtitle.sttn_neighbor_stride": { label: "STTN neighbor stride" },
   "subtitle.sttn_reference_length": { label: "STTN reference length" },
   "subtitle.sttn_max_load_num": { label: "STTN max frames" },
@@ -114,7 +110,10 @@ export const FIELD_META = {
     choices: ["PP_OCRv5_MOBILE", "PP_OCRv5_SERVER"],
   },
   selection_areas: { label: "Selection areas" },
-  hardware_acceleration: { label: "Hardware acceleration" },
+  hardware_acceleration: {
+    label: "Hardware acceleration",
+    description: "Use GPU acceleration when available, across all processing.",
+  },
   sttn_neighbor_stride: { label: "STTN neighbor stride" },
   sttn_reference_length: { label: "STTN reference length" },
   sttn_max_load_num: { label: "STTN max frames" },

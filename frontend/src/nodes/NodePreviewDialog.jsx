@@ -203,7 +203,6 @@ export function NodePreviewDialog({
         <ArtifactPreview
           artifactId={selectedArtifactId || artifactId}
           schemaId={schemaId}
-          effect={String(node.data.appearance?.imageEffect || "none")}
           points={isSelectObject ? points : []}
           onPointAdd={
             isSelectObject

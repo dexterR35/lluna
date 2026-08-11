@@ -203,7 +203,7 @@ class InferClient:
         try:
             from backend.configuration.service import get_settings
 
-            return bool(get_settings().subtitle.hardware_acceleration)
+            return bool(get_settings().runtime.hardware_acceleration)
         except Exception:
             return True
 
