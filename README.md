@@ -98,11 +98,7 @@ The values below are Lluna's declared compatibility floors. They are not peak-us
 | **FLUX.2 Dev** | Large non-commercial image generation/editing | CUDA | 12 GB VRAM, 64 GB RAM |
 | **Qwen-Image** | Apache-2.0 image generation | CUDA | 12 GB VRAM, 64 GB RAM |
 
-Real-ESRGAN weights are about 67 MB each. Disk sizes are omitted where the registry does not declare a stable total; Hugging Face repositories can also change size between revisions.
 
-
-
-Some weights have separate restrictions. SUPIR and FLUX.2 Dev are non-commercial. Gated Hugging Face models require you to accept the upstream terms and add a token under **Settings → Models → Hugging Face**.
 
 ## Workflows
 
