@@ -23,6 +23,7 @@ export {
   Film,
   FolderOpen,
   Hash,
+  Hand,
   History,
   Image,
   Image as ImageIcon,

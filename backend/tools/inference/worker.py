@@ -572,6 +572,7 @@ def _job_low_light(run_id, payload, cancel_event, on_progress, heartbeat_log, ev
 def _job_generate(run_id, payload, cancel_event, on_progress, heartbeat_log, evt_queue) -> None:
     from backend.tools.shared.constants import GenerateMode
     from backend.tools.installers.generate import (
+        catalog_info,
         cuda_ready_for_generate,
         ensure_model_installed,
     )
@@ -602,15 +603,36 @@ def _job_generate(run_id, payload, cancel_event, on_progress, heartbeat_log, evt
 
     from backend.tools.shared.memory import VramBudgetError, preflight_minimum
 
+    offload_supported = False
+    if not str(mode_value).startswith("custom:"):
+        try:
+            model_info = catalog_info(GenerateMode(mode_value))
+            offload_supported = bool(
+                model_info and model_info.sequential_cpu_offload
+            )
+        except (TypeError, ValueError):
+            offload_supported = False
+
     try:
-        preflight_minimum(
+        budget = preflight_minimum(
             str(mode_value),
             float(payload.get("minimum_vram_mb") or 0),
             hint="Try a smaller or quantized model, or free up GPU memory.",
+            allow_cpu_offload=offload_supported,
         )
     except VramBudgetError as e:
         _emit(evt_queue, error(run_id, str(e)))
         return
+    if (
+        offload_supported
+        and budget.estimated_mb > 0
+        and budget.free_mb < budget.estimated_mb
+    ):
+        heartbeat_log(
+            run_id,
+            "VRAM is below the model estimate; using sequential CPU offload. "
+            "Generation will be slower.",
+        )
 
     # Resolved once, before either path: a bad selection should fail with a clear
     # reason instead of after a model has been loaded into VRAM.

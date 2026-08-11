@@ -20,21 +20,24 @@ export function NodePreviewDialog({
   const node = useEditorStore((store) =>
     store.nodes.find((item) => item.id === nodeId),
   );
-  const incomingImageEdge = useEditorStore((store) =>
+  const isVideoTextRemoval = node?.data.schemaId === "lluna.video.remove_text";
+  const incomingSourceEdge = useEditorStore((store) =>
     store.edges.find(
-      (edge) => edge.target === nodeId && edge.targetHandle === "image",
+      (edge) =>
+        edge.target === nodeId &&
+        edge.targetHandle === (isVideoTextRemoval ? "video" : "image"),
     ),
   );
   const sourceNode = useEditorStore((store) =>
-    store.nodes.find((item) => item.id === incomingImageEdge?.source),
+    store.nodes.find((item) => item.id === incomingSourceEdge?.source),
   );
   const updateNode = useEditorStore((store) => store.updateNode);
   const liveRun = useRunStore((store) =>
     nodeId ? store.nodeStates[nodeId] : null,
   );
   const sourceLiveRun = useRunStore((store) =>
-    incomingImageEdge?.source
-      ? store.nodeStates[incomingImageEdge.source]
+    incomingSourceEdge?.source
+      ? store.nodeStates[incomingSourceEdge.source]
       : null,
   );
   const isSelectObject = node?.data.schemaId === "lluna.mask.select_object";
@@ -48,7 +51,8 @@ export function NodePreviewDialog({
   const sourceArtifactIds = sourceLiveRun?.artifactIds?.length
     ? sourceLiveRun.artifactIds
     : sourceNode?.data.result?.artifactIds || [];
-  const artifactIds = isSelectObject ? sourceArtifactIds : nodeArtifactIds;
+  const artifactIds =
+    isSelectObject || isVideoTextRemoval ? sourceArtifactIds : nodeArtifactIds;
   const artifactId = artifactIds.at(-1);
   const schemaId = node?.data.schemaId || "";
   const label = node?.data.label || node?.data.definition?.name || "Node";
@@ -69,6 +73,11 @@ export function NodePreviewDialog({
         ]
       : [],
   );
+  const subtitleAreas = Array.isArray(node?.data.parameters?.subAreas)
+    ? node.data.parameters.subAreas.filter(
+        (area) => Array.isArray(area) && area.length >= 4,
+      )
+    : [];
   const [selectedArtifactId, setSelectedArtifactId] = useState(
     artifactId || "",
   );
@@ -109,6 +118,8 @@ export function NodePreviewDialog({
       description={
         isSelectObject
           ? "Enter an object name or click the source image. Shift-click adds an exclusion point."
+          : isVideoTextRemoval
+            ? "Pause the original video, zoom or move the preview, then draw the rectangle to remove."
           : isPreviewOutput && schemaId === "lluna.output.preview_image"
             ? "Inspect the finished image here. Transparent pixels appear over the checkerboard."
           : "Latest locally stored image or video output."
@@ -117,7 +128,11 @@ export function NodePreviewDialog({
     >
       <div className="ui-inline mb-2 text-[9px] text-mg-muted">
         <ImageIcon className="ui-icon" />
-        {isSelectObject ? "Source image selection" : "Completed output"}
+        {isSelectObject
+          ? "Source image selection"
+          : isVideoTextRemoval
+            ? "Original source video"
+            : "Completed output"}
         {artifactIds.length > 1 && (
           <Badge tone="accent">{artifactIds.length} ordered items</Badge>
         )}
@@ -198,6 +213,22 @@ export function NodePreviewDialog({
                     labels: [...savedLabels, point.label],
                   })
               : undefined
+          }
+          subtitleAreas={isVideoTextRemoval ? subtitleAreas : []}
+          onSubtitleAreaAdd={
+            isVideoTextRemoval
+              ? (area) =>
+                  updateParameters({ subAreas: [...subtitleAreas, area] })
+              : undefined
+          }
+          onSubtitleAreasClear={
+            isVideoTextRemoval
+              ? () => updateParameters({ subAreas: [] })
+              : undefined
+          }
+          saveable={!isVideoTextRemoval}
+          statusLabel={
+            isVideoTextRemoval ? "Original source video" : undefined
           }
         />
       )}

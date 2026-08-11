@@ -30,6 +30,18 @@ def test_preflight_minimum_passes_when_enough_free():
     assert budget.estimated_mb == 8000
 
 
+def test_preflight_minimum_allows_declared_cpu_offload_when_vram_is_low():
+    with _with_free_mb(6000.0):
+        budget = memory.preflight_minimum(
+            "Qwen-Image",
+            12000,
+            allow_cpu_offload=True,
+        )
+
+    assert budget.estimated_mb == 12000
+    assert budget.free_mb == 6000
+
+
 def test_preflight_birefnet_is_a_noop_without_cuda():
     with patch.object(memory, "_free_total_mb", return_value=(0.0, 0.0)):
         budget = memory.preflight_birefnet(2304, precision="fp32")

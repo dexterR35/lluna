@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
   Download,
+  Hand,
   Image as ImageIcon,
   RotateCcw,
   ZoomIn,
@@ -130,7 +131,7 @@ function PreviewMeta({ metadata }) {
   );
 }
 
-/** @param {{artifactId?: string, schemaId?: string, effect?: string, fit?: string, ratio?: string, label?: string, size?: "sm"|"md"}} props */
+/** @param {{artifactId?: string, schemaId?: string, effect?: string, fit?: string, ratio?: string, label?: string, size?: "sm"|"md", useOriginal?: boolean}} props */
 export function ArtifactThumbnail({
   artifactId,
   schemaId,
@@ -139,9 +140,10 @@ export function ArtifactThumbnail({
   ratio = "wide",
   label = "Node output",
   size = "md",
+  useOriginal = false,
 }) {
   const state = useArtifact(artifactId, {
-    thumbnail: true,
+    thumbnail: !useOriginal,
     maxEdge: size === "sm" ? 128 : 256,
   });
   const save = useArtifactSaver(artifactId, state, schemaId);
@@ -259,12 +261,21 @@ export function ArtifactPreview({
   const mediaHeight = state.metadata?.height || 0;
   const isVideo = Boolean(state.metadata?.mediaType?.startsWith("video/"));
   const [zoom, setZoom] = useState(1);
+  const [panMode, setPanMode] = useState(false);
+  const [panning, setPanning] = useState(false);
+  const stageRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+  const panStart = useRef(
+    /** @type {{x: number, y: number, left: number, top: number} | null} */ (null),
+  );
   const [selectingArea, setSelectingArea] = useState(false);
   const [areaDrag, setAreaDrag] = useState(
     /** @type {{start: {x: number, y: number}, current: {x: number, y: number}} | null} */ (null),
   );
   useEffect(() => {
     setZoom(1);
+    setPanMode(false);
+    setPanning(false);
+    panStart.current = null;
     setSelectingArea(false);
     setAreaDrag(null);
   }, [primaryId]);
@@ -341,9 +352,28 @@ export function ArtifactPreview({
               className="min-h-6 px-1.5"
               aria-label="Reset zoom"
               disabled={zoom === 1}
-              onClick={() => setZoom(1)}
+              onClick={() => {
+                setZoom(1);
+                if (stageRef.current) {
+                  stageRef.current.scrollLeft = 0;
+                  stageRef.current.scrollTop = 0;
+                }
+              }}
             >
               <RotateCcw className="ui-icon-sm" />
+            </Button>
+            <Button
+              variant={panMode ? "primary" : "ghost"}
+              className="min-h-6 px-1.5"
+              aria-label="Move preview"
+              aria-pressed={panMode}
+              onClick={() => {
+                setPanMode((value) => !value);
+                setSelectingArea(false);
+                setAreaDrag(null);
+              }}
+            >
+              <Hand className="ui-icon-sm" />
             </Button>
           </div>
         )}
@@ -354,6 +384,7 @@ export function ArtifactPreview({
               className="min-h-6 px-2 text-[9px]"
               onClick={() => {
                 setSelectingArea((value) => !value);
+                setPanMode(false);
                 setAreaDrag(null);
               }}
             >
@@ -375,11 +406,48 @@ export function ArtifactPreview({
         <PreviewMeta metadata={state.metadata} />
       </div>
       <div
-        className={`ui-preview-stage checkerboard overflow-auto ${compact ? "min-h-28 max-h-52" : "min-h-44 max-h-[26rem]"}`}
+        ref={stageRef}
+        className={`ui-preview-stage checkerboard overflow-auto ${panMode ? (panning ? "cursor-grabbing" : "cursor-grab") : ""} ${compact ? "min-h-28 max-h-52" : "min-h-44 max-h-[26rem]"}`}
+        onPointerDown={
+          panMode
+            ? (event) => {
+                if (event.button !== 0) return;
+                event.preventDefault();
+                event.currentTarget.setPointerCapture(event.pointerId);
+                panStart.current = {
+                  x: event.clientX,
+                  y: event.clientY,
+                  left: event.currentTarget.scrollLeft,
+                  top: event.currentTarget.scrollTop,
+                };
+                setPanning(true);
+              }
+            : undefined
+        }
+        onPointerMove={
+          panMode
+            ? (event) => {
+                const start = panStart.current;
+                if (!start) return;
+                event.currentTarget.scrollLeft =
+                  start.left - (event.clientX - start.x);
+                event.currentTarget.scrollTop =
+                  start.top - (event.clientY - start.y);
+              }
+            : undefined
+        }
+        onPointerUp={() => {
+          panStart.current = null;
+          setPanning(false);
+        }}
+        onPointerCancel={() => {
+          panStart.current = null;
+          setPanning(false);
+        }}
       >
         <div
-          className={`relative inline-grid place-items-center transition-transform ${onPointAdd ? "cursor-crosshair" : ""}`}
-          style={{ transform: `scale(${zoom})`, transformOrigin: "center" }}
+          className={`relative inline-grid place-items-center ${onPointAdd ? "cursor-crosshair" : ""}`}
+          style={{ zoom }}
           onClick={
             onPointAdd &&
             mediaWidth &&

@@ -49,8 +49,12 @@ def get_readable_path(path):
     if sys.platform != 'win32':
         return path
     buf = ctypes.create_unicode_buffer(4096)
-    ctypes.windll.kernel32.GetShortPathNameW(path, buf, 4096)
-    return buf.value
+    # GetShortPathNameW returns zero when the target does not exist yet. That
+    # is expected for encoder output files, but returning the empty buffer
+    # makes FFmpeg interpret the output path as an invalid argument and exit
+    # before the first frame is written.
+    length = ctypes.windll.kernel32.GetShortPathNameW(str(path), buf, 4096)
+    return buf.value if 0 < length < len(buf) and buf.value else str(path)
 
 def read_image(path):
     if os.path.getsize(path) > 100*1024*1024: # 100MB

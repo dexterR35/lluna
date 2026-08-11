@@ -4,6 +4,8 @@ import threading
 
 import numpy as np
 
+from backend.diagnostics.errors import OutputWriteError
+
 from .ffmpeg import FFmpegCLI
 
 
@@ -56,6 +58,8 @@ class FFmpegVideoWriter:
     """
 
     def __init__(self, output_path, fps, size):
+        if not output_path:
+            raise ValueError("FFmpeg output path cannot be empty")
         w, h = size
         cmd = [
             FFmpegCLI.instance().ffmpeg_path,
@@ -77,26 +81,51 @@ class FFmpegVideoWriter:
             cmd,
             stdin=subprocess.PIPE,
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
         )
+        self._released = False
+
+    def _failure(self):
+        detail = ""
+        if self._process.stderr is not None:
+            try:
+                detail = self._process.stderr.read().decode(
+                    "utf-8", errors="replace"
+                ).strip()
+            except (OSError, ValueError):
+                detail = ""
+        suffix = detail.splitlines()[-1] if detail else "encoder process stopped"
+        return OutputWriteError(f"FFmpeg could not write the video: {suffix}")
 
     def write(self, frame):
         """Write one frame (numpy BGR array)."""
+        if self._released or self._process.poll() is not None:
+            raise self._failure()
         if frame.dtype != np.uint8:
             frame = np.clip(frame, 0, 255).astype(np.uint8)
         try:
             self._process.stdin.write(frame.tobytes())
-        except BrokenPipeError:
-            pass
+        except (BrokenPipeError, OSError, ValueError) as exc:
+            try:
+                self._process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self._process.terminate()
+                self._process.wait(timeout=5)
+            raise self._failure() from exc
 
     def release(self):
         """Close the pipe and wait for encoding to finish."""
+        if self._released:
+            return
+        self._released = True
         try:
             self._process.stdin.close()
-        except BrokenPipeError:
+        except (BrokenPipeError, OSError, ValueError):
             pass
         try:
             self._process.wait(timeout=600)
         except subprocess.TimeoutExpired:
             self._process.terminate()
             self._process.wait(timeout=5)
+        if self._process.returncode not in {None, 0}:
+            raise self._failure()

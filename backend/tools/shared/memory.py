@@ -206,7 +206,13 @@ def preflight_select_subject(h: int, w: int, *, complex_pair: bool = False) -> G
     return GenericBudget(estimated_mb=est, free_mb=free)
 
 
-def preflight_minimum(tag: str, minimum_mb: float, *, hint: str = "") -> GenericBudget:
+def preflight_minimum(
+    tag: str,
+    minimum_mb: float,
+    *,
+    hint: str = "",
+    allow_cpu_offload: bool = False,
+) -> GenericBudget:
     """Flat "is there at least this much VRAM free" check, for jobs whose
     memory use is dominated by fixed model weights rather than input size -
     and for any model (built-in or custom) that only declares a single
@@ -217,7 +223,7 @@ def preflight_minimum(tag: str, minimum_mb: float, *, hint: str = "") -> Generic
     if minimum_mb <= 0 or not _has_cuda_budget():
         return GenericBudget(estimated_mb=0.0, free_mb=0.0)
     free, _ = _free_total_mb()
-    if minimum_mb > free:
+    if minimum_mb > free and not allow_cpu_offload:
         raise VramBudgetError(
             f"Not enough GPU memory for {tag} "
             f"(need ~{minimum_mb:.0f} MB free, have {free:.0f} MB)."

@@ -15,6 +15,7 @@ import {
   resolveStatusIcon,
 } from "../icons";
 import { ArtifactThumbGrid, ArtifactThumbnail } from "../preview/ArtifactPreview";
+import { useEditorStore } from "../state/editorStore";
 import { useRunStore } from "../state/runStore";
 import { useNodeActionsContext } from "./NodeActionsContext";
 import {
@@ -254,7 +255,25 @@ function SaveProgressList({ items }) {
 
 /** @param {import("@xyflow/react").NodeProps<import("../types").EditorNode>} props */
 function LlunaNodeComponent({ id, data, selected }) {
+  const isVideoTextRemoval = data.schemaId === "lluna.video.remove_text";
+  const sourceVideoNodeId = useEditorStore((store) =>
+    isVideoTextRemoval
+      ? store.edges.find(
+          (edge) => edge.target === id && edge.targetHandle === "video",
+        )?.source
+      : undefined,
+  );
+  const sourceVideoArtifactId = useEditorStore((store) =>
+    sourceVideoNodeId
+      ? store.nodes
+          .find((node) => node.id === sourceVideoNodeId)
+          ?.data.result?.artifactIds?.at(-1)
+      : undefined,
+  );
   const state = useRunStore((store) => store.nodeStates[id]);
+  const sourceVideoState = useRunStore((store) =>
+    sourceVideoNodeId ? store.nodeStates[sourceVideoNodeId] : null,
+  );
   const { actions, modelInventory } = useNodeActionsContext();
   const [hovered, setHovered] = useState(false);
   /** @type {import("../types").NodeDefinition} */
@@ -278,6 +297,10 @@ function LlunaNodeComponent({ id, data, selected }) {
     ? state.artifactIds
     : persistedResult?.artifactIds || [];
   const artifactId = artifactIds.at(-1);
+  const originalVideoArtifactId =
+    sourceVideoState?.artifactIds?.at(-1) || sourceVideoArtifactId;
+  const previewArtifactId =
+    artifactId || (isVideoTextRemoval ? originalVideoArtifactId : undefined);
   const StatusIcon = resolveStatusIcon(status);
   const HeaderIcon = resolveNodeIcon(definition.icon);
   const accent = resolveCategoryColor(definition.category);
@@ -387,7 +410,7 @@ function LlunaNodeComponent({ id, data, selected }) {
     !isSettingsCard &&
     supportsPreview &&
     appearance.showPreview !== false &&
-    (Boolean(artifactId) || artifactIds.length > 1 || !showPromptField);
+    (Boolean(previewArtifactId) || artifactIds.length > 1 || !showPromptField);
   const showNodeBody =
     isSettingsCard || showPreview || showPromptField || saveItems.length > 0;
   const promptFirst = showPromptField && !isSettingsCard;
@@ -655,7 +678,7 @@ function LlunaNodeComponent({ id, data, selected }) {
           </div>
         ) : (
           <>
-            {showPreview && busy && previewImage ? (
+            {showPreview && busy && previewImage && !isVideoTextRemoval ? (
               // Live mid-generation frame takes priority over any stale
               // completed-result thumbnail from a previous run of this node.
               <img
@@ -671,14 +694,19 @@ function LlunaNodeComponent({ id, data, selected }) {
                 fit={String(appearance.imageFit || "cover")}
                 label={`${nodeLabel} output`}
               />
-            ) : showPreview && artifactId ? (
+            ) : showPreview && previewArtifactId ? (
               <ArtifactThumbnail
-                artifactId={artifactId}
+                artifactId={previewArtifactId}
                 schemaId={data.schemaId}
                 effect={String(appearance.imageEffect || "none")}
                 fit={String(appearance.imageFit || "cover")}
                 ratio="square"
-                label={`${nodeLabel} output`}
+                label={
+                  isVideoTextRemoval && !artifactId
+                    ? `${nodeLabel} original video`
+                    : `${nodeLabel} output`
+                }
+                useOriginal={isVideoTextRemoval}
               />
             ) : showPreview ? (
               <div className="lluna-node-stage" aria-hidden>
@@ -859,8 +887,8 @@ function LlunaNodeComponent({ id, data, selected }) {
             <button
               type="button"
               className="nodrag nowheel lluna-node-icon-btn"
-              aria-label={`Preview ${nodeLabel} image`}
-              title="Preview image"
+              aria-label={`Preview ${nodeLabel}`}
+              title="Preview"
               onPointerDown={stopPointer}
               onClick={(event) => {
                 event.stopPropagation();
