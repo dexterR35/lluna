@@ -41,7 +41,7 @@ export const FIELD_META = {
   "subtitle.inpaint_mode": {
     label: "Inpaint mode",
     description: "Algorithm used to repair subtitle regions.",
-    choices: ["sttn-auto", "sttn-det", "lama", "propainter", "opencv"],
+    choices: ["sttn-auto", "sttn-det", "lama", "propainter"],
   },
   "subtitle.subtitle_detect_mode": {
     label: "Detection mode",
@@ -103,7 +103,7 @@ export const FIELD_META = {
   // Flat aliases used by model option panels
   inpaint_mode: {
     label: "Inpaint mode",
-    choices: ["sttn-auto", "sttn-det", "lama", "propainter", "opencv"],
+    choices: ["sttn-auto", "sttn-det", "lama", "propainter"],
   },
   subtitle_detect_mode: {
     label: "Detection mode",

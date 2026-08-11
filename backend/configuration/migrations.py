@@ -33,7 +33,11 @@ def migrate_mapping(raw: Mapping[str, Any]) -> dict[str, Any]:
             # every AI runtime, not just subtitle removal) to a single runtime-wide toggle.
             runtime["hardware_acceleration"] = subtitle.pop("hardware_acceleration")
             migrated["runtime"] = runtime
-            migrated["subtitle"] = subtitle
+        if subtitle.get("inpaint_mode") == "opencv":
+            # v4 -> v5: the OpenCV inpaint mode was removed (STTN/LAMA/ProPainter already
+            # fall back to CPU on their own); remap existing selections to the default.
+            subtitle["inpaint_mode"] = "sttn-auto"
+        migrated["subtitle"] = subtitle
         return migrated
 
     main = dict(raw.get("Main", {}))
@@ -44,6 +48,9 @@ def migrate_mapping(raw: Mapping[str, Any]) -> dict[str, Any]:
     low_light = dict(raw.get("LowLight", {}))
     generation = dict(raw.get("Generate", {}))
     object_selection = dict(raw.get("SelectObject", {}))
+    legacy_inpaint_mode = main.get("InpaintMode", "sttn-auto")
+    if legacy_inpaint_mode == "opencv":
+        legacy_inpaint_mode = "sttn-auto"
     return {
         "schema_version": SCHEMA_VERSION,
         "runtime": {
@@ -55,7 +62,7 @@ def migrate_mapping(raw: Mapping[str, Any]) -> dict[str, Any]:
         },
         "subtitle": {
             "selection_areas": main.get("SubtitleSelectionAreas", "0.88,0.99,0.15,0.85"),
-            "inpaint_mode": main.get("InpaintMode", "sttn-auto"),
+            "inpaint_mode": legacy_inpaint_mode,
             "subtitle_detect_mode": main.get("SubtitleDetectMode", "PP_OCRv5_SERVER"),
             "sttn_neighbor_stride": sttn.get("NeighborStride", 5),
             "sttn_reference_length": sttn.get("ReferenceLength", 10),

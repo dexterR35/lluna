@@ -17,7 +17,9 @@ import tempfile
 from pathlib import Path
 
 
-def _device(torch):
+def _device(torch, hardware_acceleration: bool = True):
+    if not hardware_acceleration:
+        return torch.device("cpu")
     if torch.cuda.is_available():
         return torch.device("cuda")
     mps = getattr(torch.backends, "mps", None)
@@ -26,11 +28,11 @@ def _device(torch):
     return torch.device("cpu")
 
 
-def _load(root: Path, precision: str):
+def _load(root: Path, precision: str, hardware_acceleration: bool = True):
     import torch
     from transformers import AutoModelForImageSegmentation
 
-    device = _device(torch)
+    device = _device(torch, hardware_acceleration)
     requested = str(precision or "auto").lower()
     use_fp16 = device.type == "cuda" and requested in {"auto", "fp16"}
     dtype = torch.float16 if use_fp16 else torch.float32
@@ -239,7 +241,9 @@ def main() -> int:
     args = parser.parse_args()
     request = json.loads(Path(args.request).read_text(encoding="utf-8"))
     root = Path(request["model_root"]).resolve()
-    model, device, dtype = _load(root, request.get("precision", "auto"))
+    model, device, dtype = _load(
+        root, request.get("precision", "auto"), request.get("hardware_acceleration", True)
+    )
     if request["job"] == "video":
         _process_video(request, model, device, dtype)
     else:

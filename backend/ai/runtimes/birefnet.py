@@ -92,6 +92,7 @@ def process_image(
     precision: str = "auto",
     mask_output_path: str | None = None,
     alpha_output_path: str | None = None,
+    hardware_acceleration: bool = True,
 ) -> None:
     root = _resolve_model_root(model_id, model_path)
     request = {
@@ -107,6 +108,7 @@ def process_image(
         "precision": precision,
         "mask_output_path": mask_output_path,
         "alpha_output_path": alpha_output_path,
+        "hardware_acceleration": bool(hardware_acceleration),
     }
     _run(request)
 
@@ -125,6 +127,7 @@ def process_video(
     precision: str = "auto",
     progress: Callable[[int], None] | None = None,
     cancel_event=None,
+    hardware_acceleration: bool = True,
 ) -> None:
     from backend.tools.media.ffmpeg import FFmpegCLI
 
@@ -141,5 +144,6 @@ def process_video(
         "background_color": background_color,
         "precision": precision,
         "ffmpeg_path": FFmpegCLI.instance().ffmpeg_path,
+        "hardware_acceleration": bool(hardware_acceleration),
     }
     _run(request, cancel_event=cancel_event, progress=progress)

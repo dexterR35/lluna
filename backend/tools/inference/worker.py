@@ -1077,6 +1077,7 @@ def _job_birefnet(run_id, payload, cancel_event, on_progress, heartbeat_log, evt
         "output_mode": str(payload.get("output_mode") or "transparent"),
         "background_color": str(payload.get("background_color") or "#ffffff"),
         "model_path": payload.get("model_path"),
+        "hardware_acceleration": bool(payload.get("hardware_acceleration", True)),
     }
     if not input_path:
         _emit(evt_queue, error(run_id, "BiRefNet input is missing."))
@@ -1160,7 +1161,7 @@ def _job_subtitle(run_id, payload, cancel_event, on_progress, heartbeat_log, evt
     import cv2
     from dataclasses import replace
 
-    from backend.tools.shared.jobs import apply_subtitle_job_config
+    from backend.tools.shared.jobs import apply_hardware_from_payload, apply_subtitle_job_config
     from backend.tools.shared.memory import VramBudgetError
     from backend.configuration.models import SubtitleSettings
     from backend.diagnostics.errors import CancellationError
@@ -1170,6 +1171,7 @@ def _job_subtitle(run_id, payload, cancel_event, on_progress, heartbeat_log, evt
         SubtitleRemovalService,
     )
 
+    apply_hardware_from_payload(payload)
     settings = apply_subtitle_job_config(payload)
     request = SubtitleRemovalRequest.from_payload(payload, settings)
     heartbeat_log(

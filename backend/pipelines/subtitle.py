@@ -19,7 +19,6 @@ from backend.tools.media.common import get_readable_path, is_image_file, read_im
 from backend.inpaint.sttn_auto_inpaint import STTNAutoInpaint
 from backend.inpaint.sttn_det_inpaint import STTNDetInpaint
 from backend.inpaint.lama_inpaint import LamaInpaint
-from backend.inpaint.opencv_inpaint import OpenCVInpaint
 from backend.inpaint.propainter_inpaint import PropainterInpaint
 from backend.tools.media.inpaint import (
     create_mask,
@@ -50,7 +49,6 @@ INPAINT_MODE_NAMES = {
     InpaintMode.STTN_DET: "STTN Subtitle Detection",
     InpaintMode.LAMA: "LAMA",
     InpaintMode.PROPAINTER: "ProPainter",
-    InpaintMode.OPENCV: "OpenCV",
 }
 SUBTITLE_DETECT_MODE_NAMES = {
     SubtitleDetectMode.PP_OCRv5_MOBILE: "Fast (Mobile)",
@@ -67,9 +65,9 @@ class SubtitleRemover:
         settings: SubtitleSettings | None = None,
         cancellation_token: CancellationToken | None = None,
     ):
-        if settings is None:
-            from backend.configuration.service import get_settings
+        from backend.configuration.service import get_settings
 
+        if settings is None:
             settings = get_settings().subtitle
         self.settings = settings
         self.cancellation_token = cancellation_token or CancellationToken()
@@ -80,8 +78,8 @@ class SubtitleRemover:
         # Interactive runs suppress tqdm and emit preview frames to the client.
         self.interactive = interactive
         self.hardware_accelerator = HardwareAccelerator.instance()
-        # Whether to use hardware acceleration
-        self.hardware_accelerator.set_enabled(settings.hardware_acceleration)
+        # Whether to use hardware acceleration (a runtime-wide toggle, not subtitle-specific)
+        self.hardware_accelerator.set_enabled(get_settings().runtime.hardware_acceleration)
         self.model_paths = SubtitleModelPaths.resolve(settings)
         prepare_bundled_subtitle_models(self.model_paths)
         # Whether the input is an image
@@ -568,8 +566,6 @@ class SubtitleRemover:
                 self.video_inpaint(tbar, self.sttn_det_inpaint)
             elif mode == InpaintMode.LAMA:
                 self.video_inpaint(tbar, self.lama_inpaint)
-            elif mode == InpaintMode.OPENCV:
-                self.video_inpaint(tbar, OpenCVInpaint())
             else:
                 raise InferenceError(
                     f"Inpaint mode is not implemented: {self.settings.inpaint_mode}"
@@ -595,7 +591,7 @@ class SubtitleRemover:
         mode = InpaintMode(self.settings.inpaint_mode)
         model_friendly_name = INPAINT_MODE_NAMES[mode]
         model_device = "CPU"
-        if mode != InpaintMode.OPENCV and self.hardware_accelerator.has_accelerator():
+        if self.hardware_accelerator.has_accelerator():
             accelerator_name = self.hardware_accelerator.accelerator_name
             if accelerator_name == "DirectML" and mode in {
                 InpaintMode.STTN_AUTO,

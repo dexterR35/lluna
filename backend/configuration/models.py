@@ -9,8 +9,8 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any, Mapping
 
-SCHEMA_VERSION = 4
-_INPAINT_MODES = {"sttn-auto", "sttn-det", "lama", "propainter", "opencv"}
+SCHEMA_VERSION = 5
+_INPAINT_MODES = {"sttn-auto", "sttn-det", "lama", "propainter"}
 _DETECT_MODES = {"PP_OCRv5_MOBILE", "PP_OCRv5_SERVER"}
 _DENOISE_STRENGTHS = {"safe", "medium"}
 

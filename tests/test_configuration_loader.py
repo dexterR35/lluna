@@ -65,7 +65,7 @@ def test_corrupt_user_configuration_is_backed_up(tmp_path) -> None:
 def test_configuration_save_is_atomic_and_round_trips(tmp_path) -> None:
     path = tmp_path / "runtime.json"
     loader = ConfigurationLoader()
-    expected = ApplicationConfiguration(subtitle=SubtitleSettings(inpaint_mode="opencv"))
+    expected = ApplicationConfiguration(subtitle=SubtitleSettings(inpaint_mode="lama"))
 
     loader.save(expected, path=path)
     loaded = loader.load(

@@ -41,12 +41,10 @@ def apply_hardware_from_payload(payload: Dict[str, Any]) -> None:
 
 
 def apply_subtitle_job_config(payload: Dict[str, Any]) -> SubtitleSettings:
-    """Validate a subtitle payload and return an immutable settings snapshot."""
-    raw = payload.get("config") or {}
-    if "hardware_acceleration" not in raw and "hardware_acceleration" in payload:
-        raw = {**raw, "hardware_acceleration": payload["hardware_acceleration"]}
-    settings = SubtitleSettings.from_mapping(raw)
-    from backend.tools.shared.hardware import HardwareAccelerator
+    """Validate a subtitle payload and return an immutable settings snapshot.
 
-    HardwareAccelerator.instance().set_enabled(settings.hardware_acceleration)
-    return settings
+    Hardware acceleration is a runtime-wide toggle applied separately via
+    apply_hardware_from_payload(); it is not part of SubtitleSettings.
+    """
+    raw = payload.get("config") or {}
+    return SubtitleSettings.from_mapping(raw)

@@ -9,6 +9,13 @@ import { startPythonControlPlane } from "./python-process.js";
 import { installContentSecurityPolicy, installWindowSecurity, openApprovedExternal, openApprovedHuggingFace } from "./security.js";
 import { createWindowStateStore } from "./window-state.js";
 
+// The renderer only ever loads our own bundled local files (never arbitrary remote/untrusted
+// pages), and installs aren't guaranteed to go through a root-level package manager step that
+// sets chrome-sandbox's setuid bit — so the OS sandbox has no attacker to contain and only
+// costs every user a manual `sudo chown/chmod` on first run. Disabled for dev and packaged
+// builds alike.
+app.commandLine.appendSwitch("no-sandbox");
+
 /** @typedef {Awaited<ReturnType<typeof startPythonControlPlane>>} BackendProcess */
 /** @type {BrowserWindow | null} */
 let mainWindow = null;
