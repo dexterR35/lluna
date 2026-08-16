@@ -439,6 +439,52 @@ def test_video_retouch_forces_sttn_auto_regardless_of_subtitle_settings(monkeypa
     assert captured["payload"]["config"]["inpaint_mode"] == "sttn-auto"
 
 
+def test_remove_text_uses_node_model_parameter(monkeypatch):
+    update_settings({"subtitle": {"inpaint_mode": "sttn-auto"}})
+    manager = object.__new__(RunManager)
+    captured = {}
+
+    def capture(*args, **_kwargs):
+        captured["job_type"] = args[2]
+        captured["payload"] = args[3]
+        return args[3]
+
+    monkeypatch.setattr(manager, "_invoke_worker", capture)
+    node = WorkflowNode(
+        id="remove-subtitles",
+        schema_id="lluna.video.remove_text",
+        parameters={"subAreas": [[100, 200, 20, 300]], "model": "propainter"},
+    )
+
+    manager._run_inference(None, node, {}, [], "cache-key")
+
+    assert captured["job_type"] is JobType.SUBTITLE
+    assert captured["payload"]["config"]["inpaint_mode"] == "propainter"
+
+
+def test_remove_text_falls_back_to_global_inpaint_mode_when_model_unset(monkeypatch):
+    update_settings({"subtitle": {"inpaint_mode": "lama"}})
+    manager = object.__new__(RunManager)
+    captured = {}
+
+    def capture(*args, **_kwargs):
+        captured["job_type"] = args[2]
+        captured["payload"] = args[3]
+        return args[3]
+
+    monkeypatch.setattr(manager, "_invoke_worker", capture)
+    node = WorkflowNode(
+        id="remove-subtitles",
+        schema_id="lluna.video.remove_text",
+        parameters={"subAreas": [[100, 200, 20, 300]]},
+    )
+
+    manager._run_inference(None, node, {}, [], "cache-key")
+
+    assert captured["job_type"] is JobType.SUBTITLE
+    assert captured["payload"]["config"]["inpaint_mode"] == "lama"
+
+
 def test_selected_run_reuses_boundary_artifact_without_running_upstream(monkeypatch, tmp_path):
     monkeypatch.setenv("LLUNA_FAKE_WORKER", "1")
     source_path = tmp_path / "boundary.png"

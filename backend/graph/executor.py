@@ -1919,6 +1919,8 @@ class RunManager:
                 # for actual subtitle removal (see pipelines/subtitle.py:
                 # only sttn_auto_mode skips OCR when areas are supplied).
                 subtitle_config["inpaint_mode"] = "sttn-auto"
+            elif selected_mode := params.get("model"):
+                subtitle_config["inpaint_mode"] = str(selected_mode)
             payload.update(
                 video_path=source,
                 options=_subtitle_options(params),

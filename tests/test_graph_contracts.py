@@ -116,6 +116,27 @@ def test_video_text_removal_publishes_and_translates_rectangle_areas():
     assert _subtitle_options({"subAreas": areas}) == {"sub_areas": areas}
 
 
+def test_remove_text_nodes_expose_inpaint_engine_model_parameter():
+    catalog = {item.schema_id: item for item in list_nodes()}
+
+    video_model = next(
+        item for item in catalog["lluna.video.remove_text"].parameters if item.id == "model"
+    )
+    assert video_model.default == "sttn-auto"
+    assert {option["value"] for option in video_model.options} == {
+        "sttn-auto",
+        "sttn-det",
+        "lama",
+        "propainter",
+    }
+
+    image_model = next(
+        item for item in catalog["lluna.image.remove_text"].parameters if item.id == "model"
+    )
+    assert image_model.default == "lama"
+    assert {option["value"] for option in image_model.options} == {"lama"}
+
+
 def test_select_object_requires_a_name_or_preview_point():
     source = node("lluna.input.image", "source")
     source.parameters = {"pathGrantId": "test-grant"}

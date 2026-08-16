@@ -79,6 +79,12 @@ BIREFNET_MODELS = [
     option("BiRefNet_lite-2K", "BiRefNet · Lite 2K", "birefnet-lite-2k", "Lower-memory 2K model."),
     option("BiRefNet-matting", "BiRefNet · matting", "birefnet-matting", "Trimap-free soft-alpha matting."),
 ]
+INPAINT_MODELS = [
+    option("sttn-auto", "STTN Auto (Recommended)", "sttn-auto", "Video/text inpainting"),
+    option("sttn-det", "STTN Detection", "sttn-detection", "Detected-text video inpainting"),
+    option("lama", "LaMa", "lama", "Image/frame inpainting"),
+    option("propainter", "ProPainter", "propainter", "Motion-aware video inpainting"),
+]
 SUPIR_POSITIVE_PROMPT = (
     "Cinematic, High Contrast, highly detailed, taken using a Canon EOS R camera, "
     "hyper detailed photo - realistic maximum detail, 32k, Color Grading, ultra HD, "
@@ -1112,6 +1118,15 @@ _NODES = [
         "Detects and removes text from an image.",
         inputs=[port("image", "Image", PortType.IMAGE, required=True)],
         outputs=[port("image", "Image", PortType.IMAGE)],
+        parameters=[
+            parameter(
+                "model",
+                "Inpaint engine",
+                "model",
+                "lama",
+                options=[option("lama", "LaMa", "lama", "Image/frame inpainting")],
+            )
+        ],
         required_models=["paddleocr-server", "lama"],
         supports_preview=True,
         adapter="subtitle",
@@ -1127,12 +1142,19 @@ _NODES = [
         outputs=[port("video", "Video", PortType.VIDEO)],
         parameters=[
             parameter(
+                "model",
+                "Inpaint engine",
+                "model",
+                "sttn-auto",
+                options=INPAINT_MODELS,
+            ),
+            parameter(
                 "subAreas",
                 "Removal areas",
                 "regions",
                 [],
                 description="Rectangles selected on the source video, stored as pixel coordinates.",
-            )
+            ),
         ],
         required_models=["paddleocr-server", "sttn-auto"],
         supports_preview=True,
