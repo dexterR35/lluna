@@ -253,51 +253,45 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
 .lluna-node {
   position: relative;
   display: flex;
-  width: 380px;
+  width: 340px;
   flex-direction: column;
   overflow: visible;
   border: 1px solid var(--mg-border);
-  border-radius: var(--mg-radius-lg);
-  background: var(--mg-bg-node);
-  color: var(--mg-text-primary);
-  transition: border-color .15s ease, opacity .15s ease;
+  border-radius: 20px;
+  background:
+    linear-gradient(150deg, color-mix(in srgb, var(--node-accent, var(--mg-accent)) 7%, var(--mg-bg-node)), var(--mg-bg-panel));
+  box-shadow: 0 16px 34px rgba(0, 0, 0, .3), inset 0 0 26px color-mix(in srgb, var(--node-accent, var(--mg-accent)) 5%, transparent);
+  transition: border-color .15s ease, box-shadow .15s ease, opacity .15s ease;
 }
 .lluna-node.is-selected {
-  border-color: color-mix(in srgb, var(--node-accent, var(--mg-accent)) 72%, var(--mg-border));
+  border-color: color-mix(in srgb, var(--node-accent, var(--mg-accent)) 65%, var(--mg-border));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--node-accent, var(--mg-accent)) 40%, transparent),
+    0 16px 34px rgba(0, 0, 0, .34);
 }
 .lluna-node.is-disabled { opacity: .5; }
-.lluna-node-chrome {
+
+.lluna-node-head {
   display: flex;
   min-height: 0;
   align-items: center;
-  gap: 8px;
-  padding: 11px 13px 0;
+  gap: 10px;
+  padding: 12px 12px 0 13px;
 }
-.lluna-node.is-prompt .lluna-node-chrome {
-  padding-bottom: 0;
-}
-.lluna-node-chip {
+.lluna-node.is-prompt .lluna-node-head { padding-bottom: 0; }
+.lluna-node-mark {
   display: grid;
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   flex-shrink: 0;
   place-items: center;
-  border: 1px solid var(--mg-border);
-  border-radius: var(--mg-radius-sm);
-  background: var(--mg-bg-elevated);
-  color: var(--mg-text-secondary);
-  cursor: pointer;
-  transition: color .15s ease, background-color .15s ease, border-color .15s ease;
+  border: 1px solid color-mix(in srgb, var(--node-accent, var(--mg-accent)) 45%, var(--mg-border));
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--node-accent, var(--mg-accent)) 15%, var(--mg-bg-elevated));
+  color: var(--node-accent, var(--mg-accent));
+  box-shadow: inset 0 0 10px color-mix(in srgb, var(--node-accent, var(--mg-accent)) 20%, transparent);
 }
-.lluna-node-chip:hover {
-  border-color: var(--mg-secondary);
-  background: var(--mg-bg-node-selected);
-  color: var(--mg-text-primary);
-}
-.lluna-node-chip > svg {
-  width: 14px;
-  height: 14px;
-}
+.lluna-node-mark > svg { width: 15px; height: 15px; }
 .lluna-node-title {
   min-width: 0;
   flex: 1;
@@ -306,38 +300,65 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   white-space: nowrap;
   font-size: 12px;
   font-weight: 600;
-  letter-spacing: .005em;
+  letter-spacing: -.005em;
 }
+.lluna-node-head-meta {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+}
+.lluna-node-chip {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  place-items: center;
+  border: 1px solid var(--mg-border);
+  border-radius: 999px;
+  background: var(--mg-bg-elevated);
+  color: var(--mg-text-secondary);
+  cursor: pointer;
+  transition: color .15s ease, background-color .15s ease, border-color .15s ease;
+}
+.lluna-node-chip:hover {
+  border-color: color-mix(in srgb, var(--node-accent, var(--mg-accent)) 55%, var(--mg-border));
+  background: var(--mg-bg-node-selected);
+  color: var(--mg-text-primary);
+}
+.lluna-node-chip > svg {
+  width: 13px;
+  height: 13px;
+}
+
 .lluna-node-body {
   position: relative;
   display: flex;
-  min-height: 168px;
-  flex: 1;
+  min-height: 0;
   flex-direction: column;
   margin: 10px 12px 0;
   overflow: hidden;
   border: 1px solid var(--mg-border-subtle);
-  border-radius: var(--mg-radius-md);
-  background: var(--mg-bg-app);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--mg-bg-app) 92%, var(--node-accent, var(--mg-accent)) 3%);
+  box-shadow: inset 0 0 18px rgba(0, 0, 0, .12);
 }
 .lluna-node-body.is-prompt {
-  min-height: 112px;
-  margin-top: 8px;
   border: 0;
   background: transparent;
+  box-shadow: none;
 }
 .lluna-node-body.is-settings {
-  min-height: 0;
   overflow: auto;
-  background: var(--mg-bg-app);
+  max-height: 260px;
 }
 .lluna-node-body.is-save {
-  min-height: 0;
   max-height: 238px;
   margin-top: 8px;
   overflow-y: auto;
   border: 0;
   background: transparent;
+  box-shadow: none;
 }
 .lluna-save-progress-list {
   display: flex;
@@ -435,20 +456,11 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   text-align: right;
 }
 .lluna-node-settings-field .ui-input:focus {
-  border-color: color-mix(in srgb, var(--mg-accent) 55%, var(--mg-border));
+  border-color: color-mix(in srgb, var(--node-accent, var(--mg-accent)) 55%, var(--mg-border));
   --tw-ring-shadow: 0 0 #0000;
-}
-.lluna-node-body .checkerboard,
-.lluna-node-body [aria-label^="Loading"],
-.lluna-node-body .border-y {
-  height: 100%;
-  min-height: 168px;
-  border: 0 !important;
 }
 .lluna-node-thumbs {
   display: grid;
-  flex: 1;
-  min-height: 168px;
   grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
   gap: 4px;
   padding: 6px;
@@ -462,45 +474,39 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   border: 1px solid var(--mg-border-subtle);
   background: var(--mg-bg-app);
 }
-.lluna-node-stage {
-  display: grid;
-  min-height: 168px;
-  flex: 1;
-  place-items: center;
-}
-.lluna-node-stage-glyph {
-  width: 28px;
-  height: 28px;
-  color: var(--node-accent, #2a303c);
-}
 .lluna-node-prompt {
   display: flex;
   flex: 1;
   align-items: stretch;
-  padding: 4px 2px 0;
 }
 .lluna-node-body:not(.is-prompt) .lluna-node-prompt {
-  border-top: 1px solid var(--mg-border-subtle);
-  background: var(--mg-bg-app);
   padding: 10px 12px;
 }
 .lluna-node-prompt textarea {
   width: 100%;
-  min-height: 72px;
+  min-height: 68px;
   resize: none;
   border: 0;
   background: transparent;
   color: var(--mg-text-primary);
   outline: none;
-  font-size: 13px;
-  line-height: 1.45;
+  font-size: 12px;
+  line-height: 1.5;
 }
-.lluna-node-body:not(.is-prompt) .lluna-node-prompt textarea {
-  min-height: 40px;
-  font-size: 11px;
+.lluna-node-body.is-prompt .lluna-node-prompt textarea {
+  min-height: 92px;
+  padding: 4px 2px 0;
 }
 .lluna-node-prompt textarea::placeholder { color: var(--mg-text-muted); }
 .lluna-node-progress { padding: 6px 14px 0; }
+.lluna-node-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px 12px;
+  margin-top: 8px;
+  border-top: 1px solid var(--mg-border-subtle);
+}
 .lluna-node-toolbar {
   display: flex;
   min-width: 0;
@@ -508,7 +514,6 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  overflow-x: auto;
 }
 .lluna-node-toolbar > * {
   flex: 0 0 auto;
@@ -518,12 +523,12 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   position: relative;
   display: inline-flex;
   max-width: 148px;
-  min-height: 32px;
+  min-height: 30px;
   align-items: center;
   gap: 4px;
   overflow: hidden;
   border: 1px solid var(--mg-border);
-  border-radius: var(--mg-radius-sm);
+  border-radius: 999px;
   background: var(--mg-bg-elevated);
   color: var(--mg-text-secondary);
   padding: 0 10px 0 12px;
@@ -531,7 +536,7 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   transition: border-color .15s ease, background-color .15s ease, color .15s ease;
 }
 .lluna-node-pill:hover {
-  border-color: var(--mg-secondary);
+  border-color: color-mix(in srgb, var(--node-accent, var(--mg-accent)) 55%, var(--mg-border));
   background: var(--mg-bg-node-selected);
   color: var(--mg-text-primary);
 }
@@ -562,11 +567,11 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
 
 .lluna-node-stepper {
   display: inline-flex;
-  min-height: 32px;
+  min-height: 30px;
   align-items: center;
   gap: 2px;
   border: 1px solid var(--mg-border);
-  border-radius: var(--mg-radius-sm);
+  border-radius: 999px;
   background: var(--mg-bg-elevated);
   color: var(--mg-text-secondary);
   padding: 0 4px;
@@ -581,11 +586,11 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
 }
 .lluna-node-stepper > button {
   display: grid;
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   place-items: center;
   border: 0;
-  border-radius: var(--mg-radius-sm);
+  border-radius: 999px;
   background: transparent;
   color: inherit;
   cursor: pointer;
@@ -606,20 +611,13 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
 .lluna-node-llava-toggle {
   padding: 0 8px 0 10px;
   border: 1px solid var(--mg-border);
-  border-radius: var(--mg-radius-sm);
+  border-radius: 999px;
   background: var(--mg-bg-elevated);
 }
 .lluna-node-llava-toggle .ui-switch {
   min-height: 30px;
   gap: 8px;
   font-size: 10px;
-}
-.lluna-node-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 10px 12px 12px;
 }
 .lluna-node-footer-actions {
   display: flex;
@@ -630,60 +628,73 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
 }
 .lluna-node-icon-btn {
   display: grid;
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   place-items: center;
   border: 1px solid var(--mg-border);
-  border-radius: var(--mg-radius-sm);
+  border-radius: 999px;
   background: var(--mg-bg-elevated);
   color: var(--mg-text-secondary);
   cursor: pointer;
   transition: color .15s ease, background-color .15s ease, border-color .15s ease;
 }
 .lluna-node-icon-btn:hover {
-  border-color: var(--mg-secondary);
+  border-color: color-mix(in srgb, var(--node-accent, var(--mg-accent)) 55%, var(--mg-border));
   background: var(--mg-bg-node-selected);
   color: var(--mg-text-primary);
 }
 .lluna-node-icon-btn > svg {
-  width: 16px;
-  height: 16px;
+  width: 15px;
+  height: 15px;
 }
 .lluna-node-run {
   display: grid;
   width: 38px;
   height: 38px;
+  flex-shrink: 0;
   place-items: center;
-  border: 1px solid color-mix(in srgb, var(--mg-accent) 50%, var(--mg-border));
-  border-radius: var(--mg-radius-sm);
-  background: color-mix(in srgb, var(--mg-accent) 18%, var(--mg-bg-elevated));
-  color: var(--mg-text-primary);
+  border: 1.5px solid color-mix(in srgb, var(--node-accent, var(--mg-accent)) 65%, transparent);
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 35% 30%,
+    color-mix(in srgb, var(--node-accent, var(--mg-accent)) 75%, white 8%),
+    color-mix(in srgb, var(--node-accent, var(--mg-accent)) 55%, black 20%) 65%,
+    color-mix(in srgb, var(--node-accent, var(--mg-accent)) 40%, black 45%)
+  );
+  box-shadow:
+    0 0 10px color-mix(in srgb, var(--node-accent, var(--mg-accent)) 55%, transparent),
+    inset 0 0 8px rgba(255, 255, 255, .2);
+  color: #fff;
   cursor: pointer;
-  transition: filter .15s ease, opacity .15s ease, background-color .15s ease;
+  transition: filter .15s ease, opacity .15s ease, transform .15s ease;
 }
-.lluna-node-run:hover { background: color-mix(in srgb, var(--mg-accent) 28%, var(--mg-bg-elevated)); }
-.lluna-node-run:disabled { cursor: not-allowed; opacity: .45; }
+.lluna-node-run:hover:not(:disabled) { filter: brightness(1.1); }
+.lluna-node-run:active:not(:disabled) { transform: scale(.94); }
+.lluna-node-run:disabled { cursor: not-allowed; opacity: .4; }
 .lluna-node-run > svg {
-  width: 15px;
-  height: 15px;
+  width: 14px;
+  height: 14px;
   margin-left: 1px;
 }
 
 .react-flow__handle.lluna-port-handle {
   display: grid;
-  width: 24px !important;
-  height: 24px !important;
+  width: 20px !important;
+  height: 20px !important;
   place-items: center;
   overflow: visible !important;
-  border: 1px solid color-mix(in srgb, var(--port-color) 55%, var(--mg-border)) !important;
-  border-radius: var(--mg-radius-sm) !important;
-  background: var(--mg-bg-elevated) !important;
+  border: 2px solid color-mix(in srgb, var(--port-color) 65%, transparent) !important;
+  border-radius: 50% !important;
+  background: color-mix(in srgb, var(--port-color) 20%, var(--mg-bg-node)) !important;
   outline: none !important;
-  opacity: .88;
-  transition: opacity .15s ease, border-color .15s ease, background-color .15s ease;
+  box-shadow:
+    0 0 6px color-mix(in srgb, var(--port-color) 55%, transparent),
+    0 0 14px color-mix(in srgb, var(--port-color) 28%, transparent) !important;
+  opacity: .82;
+  transition: opacity .15s ease, border-color .15s ease, background-color .15s ease, box-shadow .15s ease;
 }
-.react-flow__handle-left.lluna-port-handle { left: -6px !important; }
-.react-flow__handle-right.lluna-port-handle { right: -6px !important; }
+.react-flow__handle-left.lluna-port-handle { left: -10px !important; }
+.react-flow__handle-right.lluna-port-handle { right: -10px !important; }
 .lluna-node.is-ports-open .react-flow__handle.lluna-port-handle,
 .react-flow__handle.lluna-port-handle.is-active,
 .react-flow__handle.lluna-port-handle.connecting,
@@ -693,11 +704,11 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
 }
 .react-flow__handle.lluna-port-handle:hover {
   border-color: var(--port-color) !important;
-  background: var(--mg-bg-node-selected) !important;
+  background: color-mix(in srgb, var(--port-color) 32%, var(--mg-bg-node)) !important;
 }
 .lluna-port-glyph {
-  width: 10px;
-  height: 10px;
+  width: 9px;
+  height: 9px;
   pointer-events: none;
 }
 

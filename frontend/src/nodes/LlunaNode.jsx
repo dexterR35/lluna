@@ -14,8 +14,6 @@ import {
   resolvePortIcon,
   resolveStatusIcon,
 } from "../icons";
-import { ArtifactThumbGrid, ArtifactThumbnail } from "../preview/ArtifactPreview";
-import { useEditorStore } from "../state/editorStore";
 import { useRunStore } from "../state/runStore";
 import { useNodeActionsContext } from "./NodeActionsContext";
 import {
@@ -255,30 +253,7 @@ function SaveProgressList({ items }) {
 
 /** @param {import("@xyflow/react").NodeProps<import("../types").EditorNode>} props */
 function LlunaNodeComponent({ id, data, selected }) {
-  const isVideoTextRemoval = data.schemaId === "lluna.video.remove_text";
-  const isVideoRetouch = data.schemaId === "lluna.video.retouch";
-  // Both nodes preview/edit the original source video directly rather than
-  // their own (not-yet-run) output - see NodePreviewDialog.jsx for the same
-  // split.
-  const hasAreaDrawing = isVideoTextRemoval || isVideoRetouch;
-  const sourceVideoNodeId = useEditorStore((store) =>
-    hasAreaDrawing
-      ? store.edges.find(
-          (edge) => edge.target === id && edge.targetHandle === "video",
-        )?.source
-      : undefined,
-  );
-  const sourceVideoArtifactId = useEditorStore((store) =>
-    sourceVideoNodeId
-      ? store.nodes
-          .find((node) => node.id === sourceVideoNodeId)
-          ?.data.result?.artifactIds?.at(-1)
-      : undefined,
-  );
   const state = useRunStore((store) => store.nodeStates[id]);
-  const sourceVideoState = useRunStore((store) =>
-    sourceVideoNodeId ? store.nodeStates[sourceVideoNodeId] : null,
-  );
   const { actions, modelInventory } = useNodeActionsContext();
   const [hovered, setHovered] = useState(false);
   /** @type {import("../types").NodeDefinition} */
@@ -291,7 +266,6 @@ function LlunaNodeComponent({ id, data, selected }) {
     name: data.schemaId,
     description: "Unknown node",
   };
-  const appearance = data.appearance || {};
   const persistedResult = data.result;
   const status = data.disabled
     ? "DISABLED"
@@ -301,16 +275,10 @@ function LlunaNodeComponent({ id, data, selected }) {
   const artifactIds = state?.artifactIds?.length
     ? state.artifactIds
     : persistedResult?.artifactIds || [];
-  const artifactId = artifactIds.at(-1);
-  const originalVideoArtifactId =
-    sourceVideoState?.artifactIds?.at(-1) || sourceVideoArtifactId;
-  const previewArtifactId =
-    artifactId || (hasAreaDrawing ? originalVideoArtifactId : undefined);
   const StatusIcon = resolveStatusIcon(status);
   const HeaderIcon = resolveNodeIcon(definition.icon);
   const accent = resolveCategoryColor(definition.category);
   const busy = status === "RUNNING" || status === "QUEUED";
-  const previewImage = state?.previewImage;
   const showPorts = selected || hovered || busy;
   const nodeLabel = data.label || definition.name;
   const runLabel = definition.kind === "input" ? "Run" : "Run from here";
@@ -411,13 +379,7 @@ function LlunaNodeComponent({ id, data, selected }) {
           detail: "Saved successfully",
         }))
       : [];
-  const showPreview =
-    !isSettingsCard &&
-    supportsPreview &&
-    appearance.showPreview !== false &&
-    (Boolean(previewArtifactId) || artifactIds.length > 1 || !showPromptField);
-  const showNodeBody =
-    isSettingsCard || showPreview || showPromptField || saveItems.length > 0;
+  const showNodeBody = isSettingsCard || showPromptField || saveItems.length > 0;
   const promptFirst = showPromptField && !isSettingsCard;
   const inputs = definition.inputs || [];
   const outputs = definition.outputs || [];
@@ -492,59 +454,56 @@ function LlunaNodeComponent({ id, data, selected }) {
         />
       ))}
 
-      <div className="lluna-node-chrome">
-        <button
-          type="button"
-          className="nodrag nowheel lluna-node-chip"
-          aria-label={
-            status !== "IDLE" && status !== "SUCCEEDED"
-              ? `${nodeLabel} status ${status.replaceAll("_", " ")}`
-              : isPreviewOutput
-                ? `Open ${nodeLabel} preview`
-                : `Open ${nodeLabel} options`
-          }
-          title={nodeLabel}
-          onPointerDown={stopPointer}
-          onClick={(event) => {
-            event.stopPropagation();
-            if (isPreviewOutput) actions.onPreview?.(id);
-            else actions.onOpen?.(id);
-          }}
-        >
-          {status !== "IDLE" && status !== "SUCCEEDED" ? (
-            <StatusIcon
-              className={status === "RUNNING" ? "animate-spin" : undefined}
-            />
-          ) : isPreviewOutput ? (
-            <Eye aria-hidden />
-          ) : (
-            <Settings2 aria-hidden />
-          )}
-        </button>
+      <header className="lluna-node-head">
+        <div className="lluna-node-mark" aria-hidden>
+          <HeaderIcon />
+        </div>
         <strong className="lluna-node-title">{nodeLabel}</strong>
-        {status !== "IDLE" && (
-          <Badge size="xs" tone={STATUS_TONE[status] || "neutral"}>
-            {status.replaceAll("_", " ")}
-          </Badge>
-        )}
-        {artifactIds.length > 1 && (
-          <Badge size="xs" tone="accent">
-            {artifactIds.length} items
-          </Badge>
-        )}
-      </div>
+        <div className="lluna-node-head-meta">
+          {status !== "IDLE" && (
+            <Badge size="xs" tone={STATUS_TONE[status] || "neutral"}>
+              {status.replaceAll("_", " ")}
+            </Badge>
+          )}
+          {artifactIds.length > 1 && (
+            <Badge size="xs" tone="accent">
+              {artifactIds.length} items
+            </Badge>
+          )}
+          <button
+            type="button"
+            className="nodrag nowheel lluna-node-chip"
+            aria-label={
+              status !== "IDLE" && status !== "SUCCEEDED"
+                ? `${nodeLabel} status ${status.replaceAll("_", " ")}`
+                : isPreviewOutput
+                  ? `Open ${nodeLabel} preview`
+                  : `Open ${nodeLabel} options`
+            }
+            title={nodeLabel}
+            onPointerDown={stopPointer}
+            onClick={(event) => {
+              event.stopPropagation();
+              if (isPreviewOutput) actions.onPreview?.(id);
+              else actions.onOpen?.(id);
+            }}
+          >
+            {status !== "IDLE" && status !== "SUCCEEDED" ? (
+              <StatusIcon
+                className={status === "RUNNING" ? "animate-spin" : undefined}
+              />
+            ) : isPreviewOutput ? (
+              <Eye aria-hidden />
+            ) : (
+              <Settings2 aria-hidden />
+            )}
+          </button>
+        </div>
+      </header>
 
       {showNodeBody && (
         <div
-          className={`lluna-node-body ${isSettingsCard ? "is-settings" : ""} ${isSaveImage ? "is-save" : ""} ${promptFirst && !showPreview ? "is-prompt" : ""}`}
-          onClick={
-            supportsPreview
-              ? (event) => {
-                  event.stopPropagation();
-                  actions.onPreview?.(id);
-                }
-              : undefined
-          }
+          className={`lluna-node-body ${isSettingsCard ? "is-settings" : ""} ${isSaveImage ? "is-save" : ""} ${promptFirst ? "is-prompt" : ""}`}
         >
           {isSaveImage ? (
             <SaveProgressList items={saveItems} />
@@ -682,67 +641,29 @@ function LlunaNodeComponent({ id, data, selected }) {
             })}
           </div>
         ) : (
-          <>
-            {showPreview && busy && previewImage && !hasAreaDrawing ? (
-              // Live mid-generation frame takes priority over any stale
-              // completed-result thumbnail from a previous run of this node.
-              <img
-                src={previewImage}
-                alt={`${nodeLabel} generating…`}
-                className={`min-h-[196px] flex-1 ${String(appearance.imageFit || "cover") === "contain" ? "object-contain" : "object-cover"}`}
-              />
-            ) : showPreview && artifactIds.length > 1 ? (
-              <ArtifactThumbGrid
-                artifactIds={artifactIds}
-                schemaId={data.schemaId}
-                fit={String(appearance.imageFit || "cover")}
-                label={`${nodeLabel} output`}
-              />
-            ) : showPreview && previewArtifactId ? (
-              <ArtifactThumbnail
-                artifactId={previewArtifactId}
-                schemaId={data.schemaId}
-                fit={String(appearance.imageFit || "cover")}
-                ratio="square"
-                label={
-                  hasAreaDrawing && !artifactId
-                    ? `${nodeLabel} original video`
-                    : `${nodeLabel} output`
+          showPromptField &&
+          promptParam && (
+            <div className="lluna-node-prompt">
+              <textarea
+                className="nodrag nowheel"
+                rows={promptFirst ? 4 : 2}
+                placeholder={
+                  promptParam.description ||
+                  `Describe the ${definition.category?.split("/")[0]?.toLowerCase() || "result"} you want…`
                 }
-                useOriginal={hasAreaDrawing}
+                aria-label={promptParam.label || "Prompt"}
+                disabled={data.disabled || busy}
+                value={String(data.parameters?.[promptParam.id] ?? "")}
+                onPointerDown={stopPointer}
+                onClick={stopPointer}
+                onKeyDown={stopPointer}
+                onChange={(event) => {
+                  event.stopPropagation();
+                  setParameter(promptParam.id, event.target.value);
+                }}
               />
-            ) : showPreview ? (
-              <div className="lluna-node-stage" aria-hidden>
-                <HeaderIcon
-                  className="lluna-node-stage-glyph"
-                  style={{ color: accent }}
-                />
-              </div>
-            ) : null}
-
-            {showPromptField && promptParam && (
-              <div className="lluna-node-prompt">
-                <textarea
-                  className="nodrag nowheel"
-                  rows={promptFirst && !showPreview ? 4 : 2}
-                  placeholder={
-                    promptParam.description ||
-                    `Describe the ${definition.category?.split("/")[0]?.toLowerCase() || "result"} you want…`
-                  }
-                  aria-label={promptParam.label || "Prompt"}
-                  disabled={data.disabled || busy}
-                  value={String(data.parameters?.[promptParam.id] ?? "")}
-                  onPointerDown={stopPointer}
-                  onClick={stopPointer}
-                  onKeyDown={stopPointer}
-                  onChange={(event) => {
-                    event.stopPropagation();
-                    setParameter(promptParam.id, event.target.value);
-                  }}
-                />
-              </div>
-            )}
-          </>
+            </div>
+          )
           )}
         </div>
       )}
