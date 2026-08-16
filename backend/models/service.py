@@ -175,6 +175,10 @@ def _installed(model_id: str) -> bool:
         from backend.tools.installers.sam3 import is_model_installed as sam3_installed
 
         return sam3_installed()
+    if model_id == "qwen3-tts-customvoice":
+        from backend.tools.installers.qwen_tts import is_model_installed as qwen_tts_installed
+
+        return qwen_tts_installed()
     if model_id == "mirnet":
         from backend.tools.shared.constants import LowLightMode
         from backend.tools.installers.low_light import is_model_installed
@@ -228,6 +232,7 @@ def list_models() -> list[dict]:
                 "supir",
                 "mirnet",
                 "sam3.1",
+                "qwen3-tts-customvoice",
             }
             | _BIREFNET_IDS
             | _SEEDVR_IDS
@@ -262,6 +267,8 @@ def _builtin_platform_fields(model_id: str, item: dict) -> dict:
         task, adapter, profile = "image-restoration", "lluna-native", "lluna-native"
     elif model_id == "sam3.1":
         task, adapter, profile = "image-segmentation", "sam3", "sam3-python"
+    elif model_id == "qwen3-tts-customvoice":
+        task, adapter, profile = "text-to-speech", "qwen_tts", "qwen3-tts-python"
     elif model_id.startswith("paddleocr"):
         task, adapter, profile = "text-recognition", "paddle", "paddle"
     else:
@@ -319,6 +326,19 @@ def _builtin_platform_fields(model_id: str, item: dict) -> dict:
             "SAM 3.1 checkpoints are gated on Hugging Face; you must request access and "
             "sign in before installing."
         )
+    elif model_id == "qwen3-tts-customvoice":
+        from backend.hardware.detector import get_hardware_profile
+        from backend.hardware.policy import select_execution_policy
+        from backend.tools.installers.qwen_tts import (
+            QWEN_TTS_PACKAGE_VERSION,
+            QWEN_TTS_TORCH_PACKAGES,
+        )
+
+        runtime_packages = [*QWEN_TTS_TORCH_PACKAGES, f"qwen-tts=={QWEN_TTS_PACKAGE_VERSION}"]
+        runtime_isolated = True
+        selected_backend = select_execution_policy(get_hardware_profile()).backend
+        if selected_backend != "cuda":
+            runtime_reasons.append("Qwen3-TTS requires an NVIDIA CUDA GPU.")
     manifest = {
         "schema": 1,
         "id": model_id.replace(":", "-").lower(),
@@ -588,6 +608,20 @@ def _action(model_id: str, operation: str) -> None:
         else:
             if operation == "enable" and not _installed(model_id):
                 raise ValueError("SAM 3.1 is not fully installed.")
+            _set_enabled_override(model_id, operation == "enable")
+        return
+    if model_id == "qwen3-tts-customvoice":
+        from backend.tools.installers.qwen_tts import install_model, uninstall_model
+
+        if operation == "install":
+            install_model()
+            _set_enabled_override(model_id, True)
+        elif operation == "remove":
+            uninstall_model()
+            _set_enabled_override(model_id, False)
+        else:
+            if operation == "enable" and not _installed(model_id):
+                raise ValueError("Qwen3-TTS (CustomVoice) is not fully installed.")
             _set_enabled_override(model_id, operation == "enable")
         return
     if operation == "install" and model_id in {"lama", "sttn-auto", "sttn-detection", "propainter"}:

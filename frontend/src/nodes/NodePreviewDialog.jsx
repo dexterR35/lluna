@@ -57,8 +57,14 @@ export function NodePreviewDialog({
   const sourceArtifactIds = sourceLiveRun?.artifactIds?.length
     ? sourceLiveRun.artifactIds
     : sourceNode?.data.result?.artifactIds || [];
-  const artifactIds =
-    isSelectObject || hasAreaDrawing ? sourceArtifactIds : nodeArtifactIds;
+  const showingOriginal = hasAreaDrawing && !nodeArtifactIds.length;
+  const artifactIds = isSelectObject
+    ? sourceArtifactIds
+    : hasAreaDrawing
+      ? nodeArtifactIds.length
+        ? nodeArtifactIds
+        : sourceArtifactIds
+      : nodeArtifactIds;
   const artifactId = artifactIds.at(-1);
   const schemaId = node?.data.schemaId || "";
   const label = node?.data.label || node?.data.definition?.name || "Node";
@@ -138,7 +144,7 @@ export function NodePreviewDialog({
         <ImageIcon className="ui-icon" />
         {isSelectObject
           ? "Source image selection"
-          : hasAreaDrawing
+          : showingOriginal
             ? "Original source video"
             : "Completed output"}
         {artifactIds.length > 1 && (
@@ -233,10 +239,8 @@ export function NodePreviewDialog({
               ? () => updateParameters({ subAreas: [] })
               : undefined
           }
-          saveable={!hasAreaDrawing}
-          statusLabel={
-            hasAreaDrawing ? "Original source video" : undefined
-          }
+          saveable={!showingOriginal}
+          statusLabel={showingOriginal ? "Original source video" : undefined}
         />
       )}
     </Dialog>

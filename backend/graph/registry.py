@@ -132,6 +132,35 @@ GENERATE_MODELS = [
     option("Qwen-Image", "Qwen-Image", "generate:Qwen-Image", "Apache-licensed image generation."),
 ]
 IMAGE_EDIT_MODELS = [item for item in GENERATE_MODELS if item["value"] != "Qwen-Image"]
+QWEN_TTS_LANGUAGE_OPTIONS = [
+    {"value": language, "label": language}
+    for language in (
+        "Chinese",
+        "English",
+        "Japanese",
+        "Korean",
+        "German",
+        "French",
+        "Russian",
+        "Portuguese",
+        "Spanish",
+        "Italian",
+    )
+]
+QWEN_TTS_SPEAKER_OPTIONS = [
+    {"value": speaker, "label": speaker.replace("_", " ")}
+    for speaker in (
+        "Vivian",
+        "Serena",
+        "Uncle_Fu",
+        "Dylan",
+        "Eric",
+        "Ryan",
+        "Aiden",
+        "Ono_Anna",
+        "Sohee",
+    )
+]
 GENERATE_DTYPE_OPTIONS = [
     {"value": "auto", "label": "Auto (recommended)"},
     {"value": "bf16", "label": "BF16"},
@@ -1302,6 +1331,61 @@ _NODES = [
         icon="save",
         inputs=[port("video", "Video", PortType.VIDEO, required=True)],
         outputs=[port("video", "Saved Video", PortType.VIDEO)],
+        parameters=[parameter("destinationGrantId", "Destination", "saveFile", "")],
+        side_effects=True,
+        cache_policy="none",
+        adapter="save",
+    ),
+    node(
+        "lluna.audio.qwen_tts_customvoice",
+        "Qwen3-TTS · Custom Voice",
+        "Audio/Speech",
+        "Generates speech from text using one of 9 premium Qwen3-TTS voices (CUDA).",
+        icon="audio",
+        inputs=[port("text", "Text", PortType.PROMPT)],
+        outputs=[port("audio", "Audio", PortType.AUDIO)],
+        parameters=[
+            parameter(
+                "text",
+                "Text",
+                "textarea",
+                "",
+                description="Spoken script. A connected Text input overrides this.",
+            ),
+            parameter(
+                "language",
+                "Language",
+                "select",
+                "English",
+                options=QWEN_TTS_LANGUAGE_OPTIONS,
+            ),
+            parameter(
+                "speaker",
+                "Voice",
+                "select",
+                "Ryan",
+                options=QWEN_TTS_SPEAKER_OPTIONS,
+            ),
+            parameter(
+                "instruct",
+                "Tone instruction",
+                "text",
+                "",
+                description="Optional, e.g. 'speak with quiet excitement'.",
+            ),
+        ],
+        required_models=["qwen3-tts-customvoice"],
+        adapter="qwen_tts",
+    ),
+    node(
+        "lluna.output.save_audio",
+        "Save Audio",
+        "Output/Save",
+        "Copies an audio artifact to a user-selected destination.",
+        kind="output",
+        icon="save",
+        inputs=[port("audio", "Audio", PortType.AUDIO, required=True)],
+        outputs=[port("audio", "Saved Audio", PortType.AUDIO)],
         parameters=[parameter("destinationGrantId", "Destination", "saveFile", "")],
         side_effects=True,
         cache_policy="none",

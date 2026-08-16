@@ -314,6 +314,15 @@ def infer_worker_main(
                     heartbeat_log,
                     job_evt_queue,
                 )
+            elif job_type == JobType.QWEN_TTS.value:
+                _job_qwen_tts(
+                    run_id,
+                    payload,
+                    cancel_event,
+                    on_progress,
+                    heartbeat_log,
+                    job_evt_queue,
+                )
             else:
                 _emit(
                     job_evt_queue,
@@ -1052,6 +1061,58 @@ def _job_select_subject(run_id, payload, cancel_event, on_progress, heartbeat_lo
     _emit(evt_queue, result(run_id, output_path))
 
 
+def _job_qwen_tts(run_id, payload, cancel_event, on_progress, heartbeat_log, evt_queue) -> None:
+    from backend.ai.runtimes.qwen_tts import QwenTtsCancelled, run_custom_voice
+    from backend.tools.installers import qwen_tts as qwen_tts_models
+    from backend.tools.shared.memory import VramBudgetError, preflight_minimum
+
+    text = str(payload.get("text") or "").strip()
+    language = str(payload.get("language") or "English")
+    speaker = str(payload.get("speaker") or "Ryan")
+    instruct = payload.get("instruct")
+    output_path = payload.get("output_path") or _temp_wav("qwen_tts")
+
+    if not text:
+        _emit(evt_queue, error(run_id, "Qwen3-TTS needs text to speak."))
+        return
+    if not qwen_tts_models.is_model_installed():
+        _emit(evt_queue, error(run_id, "Qwen3-TTS (CustomVoice) is not installed."))
+        return
+
+    try:
+        preflight_minimum(
+            "qwen3-tts-customvoice",
+            16384,
+            hint="Free up GPU memory before running Qwen3-TTS.",
+        )
+    except VramBudgetError as e:
+        _emit(evt_queue, error(run_id, str(e)))
+        return
+
+    heartbeat_log(run_id, "Running Qwen3-TTS (CustomVoice)…")
+    on_progress(run_id, 5)
+    try:
+        run_custom_voice(
+            text,
+            language,
+            speaker,
+            output_path,
+            instruct=instruct,
+            cancel_event=cancel_event,
+            progress=lambda value: on_progress(run_id, value),
+        )
+    except QwenTtsCancelled:
+        _emit(evt_queue, error(run_id, "__cancelled__"))
+        return
+    except Exception as e:
+        traceback.print_exc()
+        _emit(evt_queue, error(run_id, str(e)))
+        return
+
+    on_progress(run_id, 100)
+    _emit(evt_queue, result(run_id, output_path))
+
+
 def _job_birefnet(run_id, payload, cancel_event, on_progress, heartbeat_log, evt_queue) -> None:
     from backend.models.manager import ModelManager
     from backend.tools.shared.memory import VramBudgetError
@@ -1273,5 +1334,11 @@ def _job_subtitle(run_id, payload, cancel_event, on_progress, heartbeat_log, evt
 
 def _temp_png(prefix: str) -> str:
     fd, path = tempfile.mkstemp(prefix=f"lluna_{prefix}_", suffix=".png")
+    os.close(fd)
+    return path
+
+
+def _temp_wav(prefix: str) -> str:
+    fd, path = tempfile.mkstemp(prefix=f"lluna_{prefix}_", suffix=".wav")
     os.close(fd)
     return path

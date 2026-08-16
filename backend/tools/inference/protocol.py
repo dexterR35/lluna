@@ -21,6 +21,7 @@ class JobType(str, Enum):
     BIREFNET = "birefnet"
     SEEDVR = "seedvr"
     DESCRIBE_IMAGE = "describe_image"
+    QWEN_TTS = "qwen_tts"
 
 
 @unique

@@ -146,6 +146,20 @@ RUNTIME_PROFILES: dict[str, RuntimeProfile] = {
                 "the sam3 package pins numpy<2, which conflicts with the shared app venv."
             ),
         ),
+        RuntimeProfile(
+            "qwen3-tts-python",
+            "Qwen3-TTS isolated CUDA runtime",
+            "qwen_tts",
+            (),
+            (),
+            ("cuda",),
+            isolated=True,
+            experimental=False,
+            description=(
+                "Official qwen-tts package, its own Python environment - it pins "
+                "transformers==4.57.3, which conflicts with the shared app venv."
+            ),
+        ),
     )
 }
 

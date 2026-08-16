@@ -290,7 +290,24 @@ export function NodeEditorDialog({ nodeId, onClose }) {
                 </div>
               )}
               {isVideoTextRemoval ? (
-                sourceVideoArtifactId ? (
+                artifactId ? (
+                  <ArtifactPreview
+                    artifactId={artifactId}
+                    artifactIds={artifactIds}
+                    schemaId={node.data.schemaId}
+                    subtitleAreas={subtitleAreas}
+                    onSubtitleAreaAdd={(area) =>
+                      setParameter(subtitleAreasParameter, [
+                        ...subtitleAreas,
+                        area,
+                      ])
+                    }
+                    onSubtitleAreasClear={() =>
+                      setParameter(subtitleAreasParameter, [])
+                    }
+                    statusLabel="Completed output"
+                  />
+                ) : sourceVideoArtifactId ? (
                   <ArtifactPreview
                     artifactId={sourceVideoArtifactId}
                     schemaId={node.data.schemaId}

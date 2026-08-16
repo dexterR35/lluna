@@ -42,6 +42,7 @@ SUPPORTED_TASKS = {
     "text-generation",
     "image-to-text",
     "automatic-speech-recognition",
+    "text-to-speech",
     "custom",
 }
 SUPPORTED_VARIANTS = {

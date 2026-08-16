@@ -21,6 +21,7 @@ def _io_for_task(task: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
         "text-recognition": (("image",), ("text",)),
         "text-generation": (("prompt",), ("text",)),
         "automatic-speech-recognition": (("audio",), ("text",)),
+        "text-to-speech": (("prompt",), ("audio",)),
     }
     return values.get(task, ((), ()))
 
@@ -165,6 +166,8 @@ def builtin_contract(model_id: str) -> tuple[ModelVariant, ModelCapabilities]:
         if model_id == "mirnet"
         else "image-segmentation"
         if model_id == "sam3.1"
+        else "text-to-speech"
+        if model_id == "qwen3-tts-customvoice"
         else "text-recognition"
         if model_id.startswith("paddleocr")
         else "inpainting"

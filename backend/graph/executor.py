@@ -1706,12 +1706,15 @@ class RunManager:
             "subtitle": JobType.SUBTITLE,
             "birefnet": JobType.BIREFNET,
             "describe_image": JobType.DESCRIBE_IMAGE,
+            "qwen_tts": JobType.QWEN_TTS,
         }
         job_type = job_types.get(str(adapter))
         if job_type is None:
             raise ExecutionFailure("INTERNAL", f"No adapter for {node.schema_id}")
         output_suffix = (
-            ".mov"
+            ".wav"
+            if adapter == "qwen_tts"
+            else ".mov"
             if adapter == "birefnet"
             and "video" in node.schema_id
             and str(node.parameters.get("outputMode", "transparent")) == "transparent"
@@ -1972,6 +1975,16 @@ class RunManager:
                 temperature=float(params["temperature"]) if params.get("temperature") is not None else None,
                 top_p=float(params["topP"]) if params.get("topP") is not None else None,
                 max_new_tokens=int(params["maxNewTokens"]) if params.get("maxNewTokens") is not None else None,
+            )
+        elif adapter == "qwen_tts":
+            text = inputs.get("text") or params.get("text") or ""
+            if not str(text).strip():
+                raise ExecutionFailure("MISSING_INPUT", "Qwen3-TTS needs text to speak.")
+            payload.update(
+                text=str(text),
+                language=str(params.get("language") or "English"),
+                speaker=str(params.get("speaker") or "Ryan"),
+                instruct=str(params.get("instruct") or ""),
             )
         return self._invoke_worker(
             control,

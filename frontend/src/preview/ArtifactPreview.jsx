@@ -81,6 +81,19 @@ function ArtifactMedia({
         className={`${fit === "cover" ? "object-cover" : "object-contain"} ${className}`}
       />
     );
+  if (state.metadata?.mediaType?.startsWith("audio/"))
+    return (
+      <div
+        className={`flex items-center justify-center bg-mg-app ${className}`}
+      >
+        <audio
+          src={url}
+          aria-label={alt}
+          controls
+          className="w-full max-w-full px-2"
+        />
+      </div>
+    );
   return (
     <img
       src={url}
