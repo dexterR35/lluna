@@ -1139,6 +1139,29 @@ _NODES = [
         adapter="subtitle",
     ),
     node(
+        "lluna.video.retouch",
+        "Video Retouch",
+        "Video/Retouch",
+        "Fills marked regions across the whole video (a watermark, logo, or "
+        "timestamp) - always content-agnostic, unlike Remove Text this never "
+        "runs subtitle/text detection.",
+        icon="paintbrush",
+        inputs=[port("video", "Video", PortType.VIDEO, required=True)],
+        outputs=[port("video", "Video", PortType.VIDEO)],
+        parameters=[
+            parameter(
+                "subAreas",
+                "Areas to fill",
+                "regions",
+                [],
+                description="Rectangles selected on the source video, stored as pixel coordinates.",
+            )
+        ],
+        required_models=["sttn-auto"],
+        supports_preview=True,
+        adapter="subtitle",
+    ),
+    node(
         "lluna.video.remove_background",
         "Remove Background from Video",
         "Video/Remove",

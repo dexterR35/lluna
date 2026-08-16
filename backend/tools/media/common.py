@@ -37,6 +37,8 @@ def is_video_or_image(filename):
     return file_extension in video_extensions or file_extension in image_extensions
 
 def merge_big_file_if_not_exists(dir, file, man_filename = None):
+    if not os.path.isdir(dir):
+        return
     if file not in os.listdir(dir):
         from fsplit.filesplit import Filesplit
 

@@ -144,6 +144,29 @@ def test_select_object_requires_a_name_or_preview_point():
     )
 
 
+def test_video_retouch_requires_at_least_one_area():
+    source = node("lluna.input.video", "source")
+    retouch = node("lluna.video.retouch", "retouch")
+    workflow = WorkflowDocument(
+        nodes=[source, retouch],
+        edges=[
+            WorkflowEdge(
+                source_node_id="source",
+                source_port_id="video",
+                target_node_id="retouch",
+                target_port_id="video",
+            )
+        ],
+    )
+    assert any(
+        issue.code == "VIDEO_RETOUCH_INPUT" for issue in validate_workflow(workflow).issues
+    )
+    retouch.parameters = {"subAreas": [[100, 200, 50, 300]]}
+    assert not any(
+        issue.code == "VIDEO_RETOUCH_INPUT" for issue in validate_workflow(workflow).issues
+    )
+
+
 def test_select_object_passes_source_image_and_mask_directly_to_lama():
     source = node("lluna.input.image", "source")
     source.parameters = {"pathGrantId": "test-grant"}

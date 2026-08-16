@@ -360,6 +360,18 @@ def validate_workflow(
                         action="Enter an object name on the node or click its source image preview.",
                     )
                 )
+        if node.schema_id == "lluna.video.retouch":
+            areas = node.parameters.get("subAreas") or []
+            if not isinstance(areas, list) or not areas:
+                issues.append(
+                    ValidationIssue(
+                        severity="error",
+                        code="VIDEO_RETOUCH_INPUT",
+                        message="Video Retouch needs at least one marked area.",
+                        node_id=node.id,
+                        action="Pause the video preview and draw the area to fill.",
+                    )
+                )
         if check_model_availability and os.environ.get("LLUNA_FAKE_WORKER") != "1":
             from backend.models.service import model_available
 

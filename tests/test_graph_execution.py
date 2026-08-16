@@ -412,6 +412,33 @@ def test_subtitle_job_carries_disabled_hardware_acceleration(monkeypatch):
     assert captured["payload"]["hardware_acceleration"] is False
 
 
+def test_video_retouch_forces_sttn_auto_regardless_of_subtitle_settings(monkeypatch):
+    """Video Retouch must always be content-agnostic region fill, never
+    subtitle/text detection - independent of whatever inpaint_mode the user
+    has configured for actual subtitle removal (see pipelines/subtitle.py:
+    only sttn_auto_mode skips OCR when areas are supplied)."""
+    update_settings({"subtitle": {"inpaint_mode": "lama"}})
+    manager = object.__new__(RunManager)
+    captured = {}
+
+    def capture(*args, **_kwargs):
+        captured["job_type"] = args[2]
+        captured["payload"] = args[3]
+        return args[3]
+
+    monkeypatch.setattr(manager, "_invoke_worker", capture)
+    node = WorkflowNode(
+        id="retouch",
+        schema_id="lluna.video.retouch",
+        parameters={"subAreas": [[100, 200, 20, 300]]},
+    )
+
+    manager._run_inference(None, node, {}, [], "cache-key")
+
+    assert captured["job_type"] is JobType.SUBTITLE
+    assert captured["payload"]["config"]["inpaint_mode"] == "sttn-auto"
+
+
 def test_selected_run_reuses_boundary_artifact_without_running_upstream(monkeypatch, tmp_path):
     monkeypatch.setenv("LLUNA_FAKE_WORKER", "1")
     source_path = tmp_path / "boundary.png"

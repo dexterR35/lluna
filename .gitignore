@@ -22,8 +22,11 @@ backend/test.py
 
 # Merged from split parts on install / first run (not downloaded; rebuild locally)
 backend/models/big-lama/big-lama.pt
-backend/models/propainter/ProPainter.pth
+backend/models/propainter/*.pth
 backend/models/**/*.pth.part
+
+# SAM3 checkpoints (downloaded, not shipped in git)
+backend/models/sam3/checkpoints/
 
 # Downloaded by install.py / Settings (not shipped in git)
 backend/models/realesrgan/

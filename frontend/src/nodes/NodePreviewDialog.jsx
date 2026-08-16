@@ -21,11 +21,17 @@ export function NodePreviewDialog({
     store.nodes.find((item) => item.id === nodeId),
   );
   const isVideoTextRemoval = node?.data.schemaId === "lluna.video.remove_text";
+  const isVideoRetouch = node?.data.schemaId === "lluna.video.retouch";
+  // Both nodes let the user draw a fixed rectangle on the source video and
+  // edit its own parameters from it - text-removal-specific copy still
+  // branches separately below (isVideoTextRemoval), everything about the
+  // area-drawing wiring itself is shared.
+  const hasAreaDrawing = isVideoTextRemoval || isVideoRetouch;
   const incomingSourceEdge = useEditorStore((store) =>
     store.edges.find(
       (edge) =>
         edge.target === nodeId &&
-        edge.targetHandle === (isVideoTextRemoval ? "video" : "image"),
+        edge.targetHandle === (hasAreaDrawing ? "video" : "image"),
     ),
   );
   const sourceNode = useEditorStore((store) =>
@@ -52,7 +58,7 @@ export function NodePreviewDialog({
     ? sourceLiveRun.artifactIds
     : sourceNode?.data.result?.artifactIds || [];
   const artifactIds =
-    isSelectObject || isVideoTextRemoval ? sourceArtifactIds : nodeArtifactIds;
+    isSelectObject || hasAreaDrawing ? sourceArtifactIds : nodeArtifactIds;
   const artifactId = artifactIds.at(-1);
   const schemaId = node?.data.schemaId || "";
   const label = node?.data.label || node?.data.definition?.name || "Node";
@@ -120,6 +126,8 @@ export function NodePreviewDialog({
           ? "Enter an object name or click the source image. Shift-click adds an exclusion point."
           : isVideoTextRemoval
             ? "Pause the original video, zoom or move the preview, then draw the rectangle to remove."
+          : isVideoRetouch
+            ? "Pause the original video, zoom or move the preview, then draw the rectangle to fill."
           : isPreviewOutput && schemaId === "lluna.output.preview_image"
             ? "Inspect the finished image here. Transparent pixels appear over the checkerboard."
           : "Latest locally stored image or video output."
@@ -130,7 +138,7 @@ export function NodePreviewDialog({
         <ImageIcon className="ui-icon" />
         {isSelectObject
           ? "Source image selection"
-          : isVideoTextRemoval
+          : hasAreaDrawing
             ? "Original source video"
             : "Completed output"}
         {artifactIds.length > 1 && (
@@ -213,21 +221,21 @@ export function NodePreviewDialog({
                   })
               : undefined
           }
-          subtitleAreas={isVideoTextRemoval ? subtitleAreas : []}
+          subtitleAreas={hasAreaDrawing ? subtitleAreas : []}
           onSubtitleAreaAdd={
-            isVideoTextRemoval
+            hasAreaDrawing
               ? (area) =>
                   updateParameters({ subAreas: [...subtitleAreas, area] })
               : undefined
           }
           onSubtitleAreasClear={
-            isVideoTextRemoval
+            hasAreaDrawing
               ? () => updateParameters({ subAreas: [] })
               : undefined
           }
-          saveable={!isVideoTextRemoval}
+          saveable={!hasAreaDrawing}
           statusLabel={
-            isVideoTextRemoval ? "Original source video" : undefined
+            hasAreaDrawing ? "Original source video" : undefined
           }
         />
       )}

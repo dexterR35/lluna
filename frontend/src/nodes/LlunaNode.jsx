@@ -256,8 +256,13 @@ function SaveProgressList({ items }) {
 /** @param {import("@xyflow/react").NodeProps<import("../types").EditorNode>} props */
 function LlunaNodeComponent({ id, data, selected }) {
   const isVideoTextRemoval = data.schemaId === "lluna.video.remove_text";
+  const isVideoRetouch = data.schemaId === "lluna.video.retouch";
+  // Both nodes preview/edit the original source video directly rather than
+  // their own (not-yet-run) output - see NodePreviewDialog.jsx for the same
+  // split.
+  const hasAreaDrawing = isVideoTextRemoval || isVideoRetouch;
   const sourceVideoNodeId = useEditorStore((store) =>
-    isVideoTextRemoval
+    hasAreaDrawing
       ? store.edges.find(
           (edge) => edge.target === id && edge.targetHandle === "video",
         )?.source
@@ -300,7 +305,7 @@ function LlunaNodeComponent({ id, data, selected }) {
   const originalVideoArtifactId =
     sourceVideoState?.artifactIds?.at(-1) || sourceVideoArtifactId;
   const previewArtifactId =
-    artifactId || (isVideoTextRemoval ? originalVideoArtifactId : undefined);
+    artifactId || (hasAreaDrawing ? originalVideoArtifactId : undefined);
   const StatusIcon = resolveStatusIcon(status);
   const HeaderIcon = resolveNodeIcon(definition.icon);
   const accent = resolveCategoryColor(definition.category);
@@ -678,7 +683,7 @@ function LlunaNodeComponent({ id, data, selected }) {
           </div>
         ) : (
           <>
-            {showPreview && busy && previewImage && !isVideoTextRemoval ? (
+            {showPreview && busy && previewImage && !hasAreaDrawing ? (
               // Live mid-generation frame takes priority over any stale
               // completed-result thumbnail from a previous run of this node.
               <img
@@ -700,11 +705,11 @@ function LlunaNodeComponent({ id, data, selected }) {
                 fit={String(appearance.imageFit || "cover")}
                 ratio="square"
                 label={
-                  isVideoTextRemoval && !artifactId
+                  hasAreaDrawing && !artifactId
                     ? `${nodeLabel} original video`
                     : `${nodeLabel} output`
                 }
-                useOriginal={isVideoTextRemoval}
+                useOriginal={hasAreaDrawing}
               />
             ) : showPreview ? (
               <div className="lluna-node-stage" aria-hidden>

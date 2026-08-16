@@ -488,11 +488,6 @@ function EditorApp() {
       <NodeEditorDialog
         nodeId={editingNodeId}
         onClose={() => setEditingNodeId(null)}
-        onManageModels={() => {
-          setEditingNodeId(null);
-          layout.setValue("settingsSection", "models");
-          layout.setValue("settingsOpen", true);
-        }}
       />
       <NodePreviewDialog
         nodeId={previewNodeId}

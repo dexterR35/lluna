@@ -1912,10 +1912,17 @@ class RunManager:
             )
         elif adapter == "subtitle":
             source = artifact_path("video") or artifact_path("image")
+            subtitle_config = settings.subtitle.to_payload()
+            if node.schema_id == "lluna.video.retouch":
+                # Content-agnostic region fill, never subtitle/text detection -
+                # independent of whatever inpaint_mode the user has configured
+                # for actual subtitle removal (see pipelines/subtitle.py:
+                # only sttn_auto_mode skips OCR when areas are supplied).
+                subtitle_config["inpaint_mode"] = "sttn-auto"
             payload.update(
                 video_path=source,
                 options=_subtitle_options(params),
-                config=settings.subtitle.to_payload(),
+                config=subtitle_config,
             )
         elif adapter == "birefnet":
             model_value = str(params.get("model") or "BiRefNet")

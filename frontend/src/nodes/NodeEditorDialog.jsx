@@ -1,10 +1,8 @@
 import {
   Box,
-  Database,
   Settings2,
   resolveCategoryColor,
   resolveNodeIcon,
-  resolveSectionIcon,
 } from "../icons";
 import { ArtifactPreview } from "../preview/ArtifactPreview";
 import {
@@ -14,7 +12,6 @@ import {
   Dialog,
   EmptyState,
   IconTile,
-  Select,
   TextField,
 } from "../components";
 import { downstreamNodeIds, useEditorStore } from "../state/editorStore";
@@ -26,37 +23,12 @@ import {
   selectedModelOption,
 } from "../models/modelAvailability";
 import {
-  applyCapabilityDefaults,
   capabilityContract,
   parametersForCapabilities,
 } from "../models/modelCapabilities";
 
-/** @param {{ids?: string[], models: Record<string, any>[]}} props */
-function RequiredModels({ ids, models }) {
-  if (!ids?.length) return null;
-  return (
-    <div className="ui-stack-xs">
-      <span className="ui-field-label">Required runtime</span>
-      {ids.map((id) => {
-        const model = models.find((item) => item.id === id);
-        return (
-          <div key={id} className="ui-inline py-1">
-            <Database className="ui-icon-sm text-mg-muted" />
-            <span className="ui-copy-body min-w-0 flex-1 truncate">
-              {model?.name || id}
-            </span>
-            <Badge tone={model?.installed ? "success" : "neutral"}>
-              {model?.installed ? "Ready" : "On demand"}
-            </Badge>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-/** @param {{nodeId: string | null, onClose: () => void, onManageModels: () => void}} props */
-export function NodeEditorDialog({ nodeId, onClose, onManageModels }) {
+/** @param {{nodeId: string | null, onClose: () => void}} props */
+export function NodeEditorDialog({ nodeId, onClose }) {
   const node = useEditorStore((store) =>
     store.nodes.find((item) => item.id === nodeId),
   );
@@ -103,9 +75,6 @@ export function NodeEditorDialog({ nodeId, onClose, onManageModels }) {
     currentModel,
   );
   const selectedCapabilities = capabilityContract(selectedOption);
-  const effectiveRequiredModels = selectedOption?.modelId
-    ? [selectedOption.modelId]
-    : definition?.requiredModels || [];
   const operationParameters = parametersForCapabilities(
     parameters.filter(
       (parameter) =>
@@ -137,7 +106,6 @@ export function NodeEditorDialog({ nodeId, onClose, onManageModels }) {
   const supportsPreview = definition?.supportsPreview === true;
   const NodeIcon = resolveNodeIcon(definition?.icon);
   const accent = resolveCategoryColor(definition?.category);
-  const ModelsIcon = resolveSectionIcon("models");
 
   function setParameter(
     /** @type {import("../types").ParameterDefinition | undefined} */ parameter,
@@ -186,20 +154,6 @@ export function NodeEditorDialog({ nodeId, onClose, onManageModels }) {
       );
   }
 
-  function selectModel(/** @type {import("../types").ParameterOption} */ option) {
-    const capabilities = capabilityContract(option);
-    update(activeNode.id, {
-      parameters: capabilities?.complete
-        ? applyCapabilityDefaults(activeNode.data.parameters || {}, capabilities, option.value)
-        : { ...activeNode.data.parameters, model: option.value },
-    });
-    useRunStore
-      .getState()
-      .clearNodeResults(
-        downstreamNodeIds([activeNode.id], useEditorStore.getState().edges),
-      );
-  }
-
   return (
     <Dialog
       open
@@ -218,84 +172,10 @@ export function NodeEditorDialog({ nodeId, onClose, onManageModels }) {
       <div
         className={
           supportsPreview
-            ? "grid h-[62vh] min-h-[30rem] grid-cols-[15rem_minmax(15rem,0.85fr)_minmax(0,1.15fr)]"
-            : "grid h-[62vh] min-h-[30rem] grid-cols-[15rem_minmax(15rem,1fr)]"
+            ? "grid h-[62vh] min-h-[30rem] grid-cols-[minmax(15rem,0.85fr)_minmax(0,1.15fr)]"
+            : "grid h-[62vh] min-h-[30rem] grid-cols-1"
         }
       >
-        <aside className="ui-settings-nav border-r p-3.5">
-          <div className="ui-inline mb-2.5">
-            <IconTile size="sm" style={{ color: accent }}>
-              <ModelsIcon className="ui-icon-sm" style={{ color: accent }} />
-            </IconTile>
-            <div>
-              <h3 className="ui-copy-title text-[11px]">Model</h3>
-              <p className="ui-copy-muted">Stored with this node</p>
-            </div>
-          </div>
-          {modelParameter ? (
-            modelOptions.length ? (
-              <Select
-                label="Model"
-                value={String(currentModel ?? "")}
-                options={modelOptions.map((option) => ({
-                  value: String(option.value),
-                  label: option.label,
-                  disabled: option.disabled,
-                }))}
-                hint={selectedOption?.description}
-                onChange={(event) => {
-                  const option = modelOptions.find(
-                    (candidate) =>
-                      String(candidate.value) === event.target.value,
-                  );
-                  if (option) selectModel(option);
-                }}
-              />
-            ) : (
-              <EmptyState
-                icon={<Box className="ui-icon-lg" />}
-                title="No enabled model"
-                description="Install and enable a compatible model in Model settings."
-                compact
-              />
-            )
-          ) : (
-            <EmptyState
-              icon={<Box className="ui-icon-lg" />}
-              title="No model choice"
-              description={
-                definition?.requiredModels?.length
-                  ? "This operation uses its required bundled model."
-                  : "This node does not run an AI model."
-              }
-              compact
-            />
-          )}
-          <div className="mt-3">
-            {selectedOption?.variant && (
-              <div className="ui-actions mb-2 justify-start">
-                <Badge tone="accent">{selectedOption.variant.kind}</Badge>
-                {selectedOption.variant.quantization && (
-                  <Badge tone="neutral">{selectedOption.variant.quantization}</Badge>
-                )}
-                <Badge tone={selectedCapabilities?.complete ? "success" : "warning"}>
-                  {selectedCapabilities?.complete ? "Reviewed settings" : "Needs configuration"}
-                </Badge>
-              </div>
-            )}
-            <RequiredModels ids={effectiveRequiredModels} models={models} />
-          </div>
-          {effectiveRequiredModels?.length > 0 && (
-            <Button
-              variant="secondary"
-              className="mt-2 w-full"
-              onClick={onManageModels}
-            >
-              Manage local models
-            </Button>
-          )}
-        </aside>
-
         <section className="ui-settings-main border-r p-4">
           <div className="ui-inline mb-3">
             <IconTile size="sm">
