@@ -10,6 +10,7 @@ import os
 import shutil
 import tempfile
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from enum import Enum
@@ -1997,90 +1998,101 @@ class RunManager:
     ) -> Any:
         from backend.tools.inference.client import InferClient
 
-        done = threading.Event()
-        result_path: list[str] = []
-        error: list[str] = []
         run_id = control.snapshot.run_id
-
-        def progress(value: int) -> None:
-            aggregate = min(
-                100,
-                int(progress_offset + progress_span * int(value) / 100),
-            )
-            self._node_state(
-                control,
-                node.id,
-                "RUNNING",
-                aggregate,
-                f"Processing item {item_index + 1} of {item_count}",
-            )
-            self._events.publish(
-                "node.progress",
-                run_id=run_id,
-                node_id=node.id,
-                payload={
-                    "progress": aggregate,
-                    "itemProgress": int(value),
-                    "itemIndex": item_index,
-                    "itemCount": item_count,
-                    "message": f"Processing item {item_index + 1} of {item_count}",
-                },
-            )
+        RETRYABLE_CODES = {"TIMEOUT", "WORKER_CRASH", "BUSY"}
+        retry_limit = max(0, int(get_settings().runtime.node_retry_limit))
 
         def log(message: str) -> None:
             self._events.publish(
                 "node.log", run_id=run_id, node_id=node.id, payload={"message": str(message)}
             )
 
-        def result(path: str) -> None:
-            result_path.append(str(path))
-            done.set()
-
-        def failed(message: str) -> None:
-            error.append(str(message))
-            done.set()
-
         def preview(image: str) -> None:
             self._events.publish(
                 "node.preview", run_id=run_id, node_id=node.id, payload={"image": image}
             )
 
-        client = InferClient.for_device(device)
-        worker_id = client.start_job(
-            job_type,
-            payload,
-            on_progress=progress,
-            on_log=log,
-            on_result=result,
-            on_error=failed,
-            on_done=done.set,
-            on_preview=preview,
-            coalesce=False,
-        )
-        if worker_id < 0:
-            raise ExecutionFailure("BUSY", "Another GPU-heavy job is running.", retryable=True)
-        with control.lock:
-            control.worker_jobs.add((client, worker_id))
-        try:
-            while not done.wait(0.2):
-                if control.cancel.is_set():
-                    client.cancel(worker_id)
-        finally:
-            # Always deregister: leaving a finished job registered would make a
-            # later Stop cancel whatever job inherited that id on this client.
-            with control.lock:
-                control.worker_jobs.discard((client, worker_id))
-        if error:
+        attempt = 0
+        while True:
+            done = threading.Event()
+            result_path: list[str] = []
+            error: list[str] = []
+
+            def progress(value: int) -> None:
+                aggregate = min(
+                    100,
+                    int(progress_offset + progress_span * int(value) / 100),
+                )
+                self._node_state(
+                    control,
+                    node.id,
+                    "RUNNING",
+                    aggregate,
+                    f"Processing item {item_index + 1} of {item_count}",
+                )
+                self._events.publish(
+                    "node.progress",
+                    run_id=run_id,
+                    node_id=node.id,
+                    payload={
+                        "progress": aggregate,
+                        "itemProgress": int(value),
+                        "itemIndex": item_index,
+                        "itemCount": item_count,
+                        "message": f"Processing item {item_index + 1} of {item_count}",
+                    },
+                )
+
+            def result(path: str) -> None:
+                result_path.append(str(path))
+                done.set()
+
+            def failed(message: str) -> None:
+                error.append(str(message))
+                done.set()
+
+            client = InferClient.for_device(device)
+            worker_id = client.start_job(
+                job_type,
+                payload,
+                on_progress=progress,
+                on_log=log,
+                on_result=result,
+                on_error=failed,
+                on_done=done.set,
+                on_preview=preview,
+                coalesce=False,
+            )
+            if worker_id < 0:
+                error = ["BUSY"]
+            else:
+                with control.lock:
+                    control.worker_jobs.add((client, worker_id))
+                try:
+                    while not done.wait(0.2):
+                        if control.cancel.is_set():
+                            client.cancel(worker_id)
+                finally:
+                    # Always deregister: leaving a finished job registered would make a
+                    # later Stop cancel whatever job inherited that id on this client.
+                    with control.lock:
+                        control.worker_jobs.discard((client, worker_id))
+            if not error:
+                final_path = result_path[-1] if result_path else output_path
+                break
             code = {
                 "__cancelled__": "CANCELLED",
                 "TIMEOUT": "TIMEOUT",
                 "CRASH": "WORKER_CRASH",
                 "BUSY": "BUSY",
             }.get(error[0], "INTERNAL")
-            raise ExecutionFailure(
-                code, error[0], retryable=code in {"TIMEOUT", "WORKER_CRASH", "BUSY"}
-            )
-        final_path = result_path[-1] if result_path else output_path
+            retryable = code in RETRYABLE_CODES
+            if retryable and not control.cancel.is_set() and attempt < retry_limit:
+                attempt += 1
+                log(f"Retrying after {code.lower()} (attempt {attempt}/{retry_limit})…")
+                time.sleep(1.0)
+                continue
+            raise ExecutionFailure(code, error[0], retryable=retryable)
         if node.schema_id == "lluna.input.describe_image":
             # Text result, not media: it's written to output_path as UTF-8
             # by _job_describe_image, so it's read back and returned as a

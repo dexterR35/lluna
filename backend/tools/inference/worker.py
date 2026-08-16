@@ -160,13 +160,24 @@ def _release_all_except(keep: Optional[str] = None) -> None:
             release_select_object_models(blocking=True, timeout=5.0)
         except Exception:
             traceback.print_exc()
-    if keep != JobType.BIREFNET.value:
-        try:
-            from backend.ai.runtimes.birefnet import release_models
+    try:
+        # This is the one cache shared by custom (manifest-backed) models and
+        # any builtin runtime migrated onto ModelManager (currently BiRefNet,
+        # cache key "builtin:birefnet") - release_*() above only ever knew
+        # about the old ad hoc builtin globals, so without this a resident
+        # custom model (or a migrated builtin) silently survived every other
+        # modality's "release everything else" sweep.
+        from backend.models.adapters import DynamicRuntimeManager
 
-            release_models()
-        except Exception:
-            traceback.print_exc()
+        if keep == JobType.BIREFNET.value:
+            DynamicRuntimeManager.instance().evict_except("builtin:birefnet")
+        elif keep not in (JobType.GENERATE.value, JobType.DESCRIBE_IMAGE.value):
+            # GENERATE/DESCRIBE_IMAGE may themselves be a custom-model job;
+            # leave the cache alone so a repeated call reuses it - the
+            # custom-model path's own LRU governs eviction in that case.
+            DynamicRuntimeManager.instance().unload_all()
+    except Exception:
+        traceback.print_exc()
     empty_cuda_cache()
 
 
@@ -1064,54 +1075,51 @@ def _job_select_subject(run_id, payload, on_progress, heartbeat_log, evt_queue) 
 
 
 def _job_birefnet(run_id, payload, cancel_event, on_progress, heartbeat_log, evt_queue) -> None:
-    from backend.ai.runtimes.birefnet import process_image, process_video
+    from backend.models.manager import ModelManager
+    from backend.tools.shared.memory import VramBudgetError
 
     model_id = str(payload.get("model_id") or "birefnet")
     input_path = str(payload.get("input_path") or "")
     output_path = str(payload.get("output_path") or _temp_png("birefnet"))
-    params = {
-        "resolution": int(payload.get("resolution") or 1024),
-        "precision": str(payload.get("precision") or "auto"),
+    resolution = int(payload.get("resolution") or 1024)
+    precision = str(payload.get("precision") or "auto")
+    media_type = payload.get("media_type")
+    inputs = {
+        "input_path": input_path,
+        "output_path": output_path,
+        "model_id": model_id,
+        "resolution": resolution,
+        "precision": precision,
         "threshold": float(payload.get("threshold", 0.5)),
         "feather": int(payload.get("feather") or 0),
         "output_mode": str(payload.get("output_mode") or "transparent"),
         "background_color": str(payload.get("background_color") or "#ffffff"),
         "model_path": payload.get("model_path"),
         "hardware_acceleration": bool(payload.get("hardware_acceleration", True)),
+        "media_type": media_type,
     }
+    if media_type != "video":
+        inputs["mask_output_path"] = f"{output_path}.mask.png"
+        inputs["alpha_output_path"] = f"{output_path}.alpha.png"
     if not input_path:
         _emit(evt_queue, error(run_id, "BiRefNet input is missing."))
         return
 
-    from backend.tools.shared.memory import VramBudgetError, preflight_birefnet
-
+    manager = ModelManager.instance()
+    adapter = manager.adapter("builtin:birefnet")
     try:
-        preflight_birefnet(params["resolution"], precision=params["precision"])
+        adapter.estimate(resolution=resolution, precision=precision)
     except VramBudgetError as e:
         _emit(evt_queue, error(run_id, str(e)))
         return
 
     heartbeat_log(run_id, f"BiRefNet model: {model_id}")
     on_progress(run_id, 5)
+    progress_cb = (lambda value: on_progress(run_id, 10 + int(value * 0.85))) if media_type == "video" else None
     try:
-        if payload.get("media_type") == "video":
-            process_video(
-                input_path,
-                output_path,
-                model_id=model_id,
-                progress=lambda value: on_progress(run_id, 10 + int(value * 0.85)),
-                cancel_event=cancel_event,
-                **params,
-            )
-        else:
-            process_image(
-                input_path,
-                output_path,
-                model_id=model_id,
-                mask_output_path=f"{output_path}.mask.png",
-                alpha_output_path=f"{output_path}.alpha.png",
-                **params,
-            )
+        with manager.acquire_model("builtin:birefnet") as lease:
+            lease.adapter.run(lease.loaded, inputs, progress=progress_cb, cancel_event=cancel_event)
+        if media_type != "video":
             on_progress(run_id, 95)
     except RuntimeError as exc:
         if str(exc) == "__cancelled__":

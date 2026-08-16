@@ -37,6 +37,7 @@ class RuntimeSettings:
     check_updates_on_startup: bool = True
     soft_defaults_applied: bool = False
     hardware_acceleration: bool = True
+    node_retry_limit: int = 2
 
     def __post_init__(self) -> None:
         if not 5 <= float(self.job_watchdog_seconds) <= 3600:
@@ -46,6 +47,7 @@ class RuntimeSettings:
         if not isinstance(self.smart_cache_enabled, bool):
             raise TypeError("smart_cache_enabled must be a boolean")
         _bounded("run_history_limit", self.run_history_limit, 10, 1000)
+        _bounded("node_retry_limit", self.node_retry_limit, 0, 5)
         if not isinstance(self.check_updates_on_startup, bool):
             raise TypeError("check_updates_on_startup must be a boolean")
         if not isinstance(self.soft_defaults_applied, bool):

@@ -68,6 +68,26 @@ class RuntimeAdapter:
     def unload(self, loaded: Any) -> None:
         del loaded
 
+    def estimate(self, record: DynamicModelRecord, **kwargs: Any) -> "GenericBudget":
+        """Resource estimate for loading+running this adapter's model.
+
+        Default: the manifest's declared flat VRAM floor, the same figure
+        ``DynamicRuntimeManager.run`` already treats as authoritative for
+        models with no per-input cost formula. Override when a calibrated
+        per-input formula exists (see ``backend/tools/shared/memory.py``).
+        """
+        from backend.tools.shared.memory import preflight_minimum
+
+        return preflight_minimum(
+            record.manifest.id or self.id,
+            float(record.manifest.hardware.minimum_vram_mb),
+            allow_cpu_offload=bool(kwargs.get("allow_cpu_offload", False)),
+        )
+
+    def health_check(self, loaded: Any) -> bool:
+        """Whether a cached ``loaded`` handle is still usable. Default: assume yes."""
+        return loaded is not None
+
 
 QUANTIZED_DTYPES = {"int8", "int4"}
 _QUANTIZABLE_COMPONENT_NAMES = {"transformer", "unet", "text_encoder", "text_encoder_2", "text_encoder_3"}
@@ -278,6 +298,15 @@ class DiffusersAdapter(RuntimeAdapter):
         except ImportError:
             pass
 
+    def health_check(self, loaded: Any) -> bool:
+        pipeline, device = loaded
+        if pipeline is None:
+            return False
+        try:
+            return str(getattr(pipeline, "device", device)) != ""
+        except Exception:
+            return False
+
 
 class TransformersAdapter(RuntimeAdapter):
     id = "transformers"
@@ -425,6 +454,12 @@ class OnnxAdapter(RuntimeAdapter):
         # ORT frees device memory when the session is collected; drop the handle.
         del loaded
 
+    def health_check(self, loaded: Any) -> bool:
+        try:
+            return bool(loaded.get_outputs())
+        except Exception:
+            return False
+
 
 ADAPTERS: dict[str, RuntimeAdapter] = {
     adapter.id: adapter
@@ -500,24 +535,39 @@ class DynamicRuntimeManager:
         if adapter_issues:
             raise AdapterError(" ".join(adapter_issues))
         cache_key = f"{model_id}:{(dtype or 'auto').strip().lower()}"
+        loaded = self.acquire(cache_key, adapter, lambda: adapter.load(record, dtype=dtype))
+        return adapter.run(loaded, inputs, progress=progress, cancel_event=cancel_event)
+
+    def acquire(self, cache_key: str, adapter: RuntimeAdapter, loader: Callable[[], Any]) -> Any:
+        """Reuse-or-load `cache_key` under `adapter`, then LRU-evict down to budget.
+
+        Generic on purpose: manifest-backed models (via `run`, above) and
+        builtin runtimes (via `backend.models.manager.ModelManager`) share this
+        one cache and one eviction policy, so neither pool is invisible to the
+        other's memory pressure.
+        """
         with self._cache_lock:
             cached = self._cache.pop(cache_key, None)
             if cached is None:
-                loaded = adapter.load(record, dtype=dtype)
+                loaded = loader()
             else:
                 _cached_adapter, loaded = cached
             self._cache[cache_key] = (adapter, loaded)
             while len(self._cache) > self.cache_size:
                 _old_key, (old_adapter, old_loaded) = self._cache.popitem(last=False)
                 old_adapter.unload(old_loaded)
-        return adapter.run(loaded, inputs, progress=progress, cancel_event=cancel_event)
+            return loaded
+
+    def evict_except(self, keep_cache_key: str | None) -> None:
+        """Unload every cached entry except `keep_cache_key` (None evicts all)."""
+        with self._cache_lock:
+            victim_keys = [key for key in self._cache if key != keep_cache_key]
+            victims = [self._cache.pop(key) for key in victim_keys]
+        for adapter, loaded in victims:
+            adapter.unload(loaded)
 
     def unload_all(self) -> None:
-        with self._cache_lock:
-            values = tuple(self._cache.values())
-            self._cache.clear()
-        for adapter, loaded in values:
-            adapter.unload(loaded)
+        self.evict_except(None)
 
 
 def generate_with_custom_model(

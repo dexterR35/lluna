@@ -115,6 +115,21 @@ class ArtifactStore:
         except (ImportError, OSError):
             return None, None, None
 
+    @staticmethod
+    def _video_metadata(path: Path) -> tuple[int | None, int | None, float | None, int | None]:
+        """Fallback prober for artifacts the image probe can't open (i.e. video) -
+        without this, a committed video artifact records no width/height/duration
+        at all, since PIL raises OSError before ever reaching the caller."""
+        try:
+            from backend.media.video import VideoSource
+
+            with VideoSource.open(str(path)) as source:
+                meta = source.metadata
+                duration = meta.frame_count / meta.fps if meta.fps > 0 else None
+                return meta.width, meta.height, duration, meta.frame_count
+        except Exception:
+            return None, None, None, None
+
     def register_source(self, path: str | Path, *, media_type: str | None = None) -> ArtifactRecord:
         source = Path(path).expanduser().resolve()
         if not source.is_file():
@@ -147,7 +162,23 @@ class ArtifactStore:
         schema_id: str = "",
         media_type: str | None = None,
         parameters_hash: str = "",
+        width: int | None = None,
+        height: int | None = None,
+        duration: float | None = None,
+        frame_count: int | None = None,
+        color_metadata: dict | None = None,
+        alpha: bool | None = None,
     ) -> ArtifactRecord:
+        """Copy `source` into the store and record it as a new artifact.
+
+        `width`/`height`/`duration`/`frame_count`/`color_metadata`/`alpha` are
+        an optional precomputed-metadata pass-through: when the caller (e.g. a
+        worker job that already knows its own output's dimensions) supplies
+        them, they're used as-is instead of re-probing the file. Omitted
+        fields fall back to the image probe below (or stay unset - there is
+        no video prober here, so video callers that want duration/frame_count
+        recorded must pass them explicitly).
+        """
         source_path = Path(source).expanduser().resolve()
         if not source_path.is_file():
             raise FileNotFoundError(source_path)
@@ -157,7 +188,10 @@ class ArtifactStore:
         temporary = destination.with_suffix(destination.suffix + ".tmp")
         shutil.copy2(source_path, temporary)
         temporary.replace(destination)
-        width, height, alpha = self._image_metadata(destination)
+        if width is None and height is None and alpha is None:
+            width, height, alpha = self._image_metadata(destination)
+        if width is None and duration is None and frame_count is None:
+            width, height, duration, frame_count = self._video_metadata(destination)
         record = ArtifactRecord(
             artifact_id=artifact_id,
             media_type=media_type
@@ -168,6 +202,9 @@ class ArtifactStore:
             byte_size=destination.stat().st_size,
             width=width,
             height=height,
+            duration=duration,
+            frame_count=frame_count,
+            color_metadata=color_metadata or {},
             alpha=alpha,
             creating_run_id=run_id,
             creating_node_id=node_id,

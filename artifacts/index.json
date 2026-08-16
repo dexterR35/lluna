@@ -1,0 +1,25 @@
+{
+  "df39deed-fee1-475a-ad9a-9cfbc5ea5dc0": {
+    "alpha": true,
+    "artifact_id": "df39deed-fee1-475a-ad9a-9cfbc5ea5dc0",
+    "byte_size": 77,
+    "color_metadata": {},
+    "content_hash": "8a0ded6876f7d6f21c83b3bb839989693547b0d21aeee8e2549ac9b00ec399f3",
+    "created_at": "2026-08-16T15:26:48.602153Z",
+    "creating_node_id": "n-1",
+    "creating_run_id": "run-1",
+    "creating_schema_id": "lluna.image.upscale",
+    "duration": null,
+    "frame_count": null,
+    "height": 2,
+    "input_artifact_ids": [],
+    "media_type": "image/png",
+    "model_revision": "",
+    "original_source_path": null,
+    "parameters_hash": "cache-key",
+    "path": "/home/dexter/Desktop/projects/lluna/artifacts/files/df39deed-fee1-475a-ad9a-9cfbc5ea5dc0.png",
+    "streams": [],
+    "timebase": null,
+    "width": 2
+  }
+}

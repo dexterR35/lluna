@@ -104,6 +104,16 @@ def test_a_job_runs_on_the_device_its_node_leased(control, monkeypatch):
         return _Busy(device)
 
     monkeypatch.setattr(InferClient, "for_device", _for_device)
+    # BUSY is retryable (see test_node_retry.py); disable retries here so this
+    # test's one concern - which device a job is routed to - isn't entangled
+    # with how many times a retryable failure gets resubmitted.
+    class _NoRetrySettings:
+        class runtime:
+            node_retry_limit = 0
+
+    monkeypatch.setattr(
+        "backend.graph.executor.get_settings", lambda: _NoRetrySettings()
+    )
     node = WorkflowNode(id="n-1", schema_id="lluna.generate.image")
 
     with pytest.raises(ExecutionFailure):
