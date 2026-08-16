@@ -26,6 +26,7 @@ def test_required_model_inventory_is_unique() -> None:
         "flux2-dev",
         "flux2-klein-9b-fp8",
         "qwen-image",
+        "qwen3-tts-customvoice",
         "birefnet",
         "birefnet-dynamic",
         "birefnet-hr",

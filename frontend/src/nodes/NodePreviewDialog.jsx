@@ -54,14 +54,18 @@ export function NodePreviewDialog({
   const nodeArtifactIds = liveRun?.artifactIds?.length
     ? liveRun.artifactIds
     : persistedResult?.artifactIds || [];
+  const nodeStatus = liveRun?.status || persistedResult?.status || "IDLE";
+  const nodeOutputAvailable =
+    nodeArtifactIds.length > 0 &&
+    !["FAILED", "CANCELLED", "STALE"].includes(nodeStatus);
   const sourceArtifactIds = sourceLiveRun?.artifactIds?.length
     ? sourceLiveRun.artifactIds
     : sourceNode?.data.result?.artifactIds || [];
-  const showingOriginal = hasAreaDrawing && !nodeArtifactIds.length;
+  const showingOriginal = hasAreaDrawing && !nodeOutputAvailable;
   const artifactIds = isSelectObject
     ? sourceArtifactIds
     : hasAreaDrawing
-      ? nodeArtifactIds.length
+      ? nodeOutputAvailable
         ? nodeArtifactIds
         : sourceArtifactIds
       : nodeArtifactIds;
@@ -101,7 +105,7 @@ export function NodePreviewDialog({
 
   if (!node || node.data.definition?.supportsPreview !== true) return null;
   const activeNode = node;
-  const status = liveRun?.status || persistedResult?.status || "IDLE";
+  const status = nodeStatus;
   const busy = ["QUEUED", "RUNNING", "PAUSED", "PAUSE_REQUESTED"].includes(
     status,
   );

@@ -96,3 +96,36 @@ test("remove-text preview uses the original video and saves drawn areas", () => 
   if (!target) throw new Error("Expected remove-text node");
   expect(target.data.parameters.subAreas).toEqual([[100, 200, 300, 400]]);
 });
+
+test("remove-text preview uses a successful processed output", () => {
+  useEditorStore.setState((state) => ({
+    nodes: state.nodes.map((node) =>
+      node.id === "remove-text"
+        ? {
+            ...node,
+            data: {
+              ...node.data,
+              result: {
+                status: "SUCCEEDED",
+                artifactIds: ["processed-output"],
+              },
+            },
+          }
+        : node,
+    ),
+  }));
+
+  render(
+    <ToastProvider>
+      <NodePreviewDialog
+        nodeId="remove-text"
+        onClose={vi.fn()}
+        onRun={vi.fn()}
+      />
+    </ToastProvider>,
+  );
+
+  expect(screen.getByText("Completed output")).toBeInTheDocument();
+  expect(preview.props.artifactId).toBe("processed-output");
+  expect(preview.props.saveable).toBe(true);
+});

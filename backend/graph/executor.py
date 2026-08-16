@@ -15,7 +15,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -2034,6 +2034,24 @@ class RunManager:
             )
 
         attempt = 0
+
+        def attempt_callbacks(
+            done: threading.Event,
+            result_path: list[str],
+            error: list[str],
+        ) -> tuple[Callable[[str], None], Callable[[str], None]]:
+            """Bind completion callbacks to one retry attempt's state."""
+
+            def result(path: str) -> None:
+                result_path.append(str(path))
+                done.set()
+
+            def failed(message: str) -> None:
+                error.append(str(message))
+                done.set()
+
+            return result, failed
+
         while True:
             done = threading.Event()
             result_path: list[str] = []
@@ -2064,13 +2082,7 @@ class RunManager:
                     },
                 )
 
-            def result(path: str) -> None:
-                result_path.append(str(path))
-                done.set()
-
-            def failed(message: str) -> None:
-                error.append(str(message))
-                done.set()
+            result, failed = attempt_callbacks(done, result_path, error)
 
             client = InferClient.for_device(device)
             worker_id = client.start_job(
