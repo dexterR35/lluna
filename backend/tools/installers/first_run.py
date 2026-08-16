@@ -5,19 +5,19 @@ from __future__ import annotations
 from backend.tools.shared.download_registry import (
     KIND_ENHANCE,
     KIND_LOW_LIGHT,
-    KIND_SELECT_OBJECT,
     ModelDownloadRegistry,
 )
 
 def seed_first_run_downloads() -> int:
-    """Schedule missing default models. Returns count of newly scheduled items."""
+    """Schedule missing default models. Returns count of newly scheduled items.
+
+    SAM 3.1 is deliberately not seeded here (unlike the old SAM2 pair): like
+    SUPIR/SeedVR2, it's a large, gated, isolated-runtime install and stays
+    opt-in from the model manager rather than auto-downloading on first run.
+    """
     from backend.tools.shared.constants import EnhanceMode, LowLightMode
     from backend.tools.installers.enhance import is_model_installed as enhance_installed
     from backend.tools.installers.low_light import is_model_installed as low_light_installed
-    from backend.tools.installers.select_object import (
-        SelectObjectPairId,
-        is_pair_installed,
-    )
 
     reg = ModelDownloadRegistry.instance()
     scheduled = 0
@@ -28,10 +28,6 @@ def seed_first_run_downloads() -> int:
 
     if not low_light_installed(LowLightMode.MIRNET_LOL):
         reg.schedule(KIND_LOW_LIGHT, LowLightMode.MIRNET_LOL.value)
-        scheduled += 1
-
-    if not is_pair_installed(SelectObjectPairId.FAST):
-        reg.schedule(KIND_SELECT_OBJECT, SelectObjectPairId.FAST.value)
         scheduled += 1
 
     return scheduled

@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any, Mapping
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 _INPAINT_MODES = {"sttn-auto", "sttn-det", "lama", "propainter"}
 _DETECT_MODES = {"PP_OCRv5_MOBILE", "PP_OCRv5_SERVER"}
 _DENOISE_STRENGTHS = {"safe", "medium"}
@@ -152,11 +152,16 @@ class GenerationSettings:
 
 @dataclass(frozen=True)
 class ObjectSelectionSettings:
-    more_complex: bool = False
+    """SAM 3.1 (Select Object) tuning - see backend/ai/runtimes/sam3_process.py."""
+
+    confidence_threshold: float = 0.3
+    mask_threshold: float = 0.5
 
     def __post_init__(self) -> None:
-        if not isinstance(self.more_complex, bool):
-            raise TypeError("object_selection.more_complex must be a boolean")
+        if not 0.0 <= float(self.confidence_threshold) <= 1.0:
+            raise ValueError("object_selection.confidence_threshold must be between 0 and 1")
+        if not 0.0 <= float(self.mask_threshold) <= 1.0:
+            raise ValueError("object_selection.mask_threshold must be between 0 and 1")
 
 
 @dataclass(frozen=True)

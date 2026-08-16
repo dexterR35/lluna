@@ -171,10 +171,10 @@ def _installed(model_id: str) -> bool:
 
         return is_model_installed(GenerateMode(model_id.removeprefix("generate:")))
     metadata = MODEL_REGISTRY[model_id]
-    if model_id in {"sam2", "grounding-dino"}:
-        from backend.tools.installers.select_object import is_fast_pair_installed
+    if model_id == "sam3.1":
+        from backend.tools.installers.sam3 import is_model_installed as sam3_installed
 
-        return is_fast_pair_installed()
+        return sam3_installed()
     if model_id == "mirnet":
         from backend.tools.shared.constants import LowLightMode
         from backend.tools.installers.low_light import is_model_installed
@@ -227,8 +227,7 @@ def list_models() -> list[dict]:
                 "realesrgan-x4",
                 "supir",
                 "mirnet",
-                "sam2",
-                "grounding-dino",
+                "sam3.1",
             }
             | _BIREFNET_IDS
             | _SEEDVR_IDS
@@ -261,10 +260,8 @@ def _builtin_platform_fields(model_id: str, item: dict) -> dict:
         task, adapter, profile = "image-upscaling", "seedvr", "seedvr-python"
     elif model_id == "mirnet":
         task, adapter, profile = "image-restoration", "lluna-native", "lluna-native"
-    elif model_id == "sam2":
-        task, adapter, profile = "image-segmentation", "transformers", "transformers-torch"
-    elif model_id == "grounding-dino":
-        task, adapter, profile = "object-detection", "transformers", "transformers-torch"
+    elif model_id == "sam3.1":
+        task, adapter, profile = "image-segmentation", "sam3", "sam3-python"
     elif model_id.startswith("paddleocr"):
         task, adapter, profile = "text-recognition", "paddle", "paddle"
     else:
@@ -313,6 +310,15 @@ def _builtin_platform_fields(model_id: str, item: dict) -> dict:
         runtime_warnings.append(
             "SeedVR2 is a prototype restoration model and can oversharpen lightly degraded inputs."
         )
+    elif model_id == "sam3.1":
+        from backend.tools.installers.sam3 import SAM3_PACKAGE_VERSION, SAM3_PACKAGES
+
+        runtime_packages = [*SAM3_PACKAGES, f"sam3=={SAM3_PACKAGE_VERSION}"]
+        runtime_isolated = True
+        runtime_warnings.append(
+            "SAM 3.1 checkpoints are gated on Hugging Face; you must request access and "
+            "sign in before installing."
+        )
     manifest = {
         "schema": 1,
         "id": model_id.replace(":", "-").lower(),
@@ -349,8 +355,8 @@ def _builtin_platform_fields(model_id: str, item: dict) -> dict:
         },
         "security": {
             "trustRemoteCode": model_id in _BIREFNET_IDS,
-            "preferSafetensors": model_id not in {"supir", *_SEEDVR_IDS},
-            "allowPickle": model_id == "supir" or model_id in _SEEDVR_IDS,
+            "preferSafetensors": model_id not in {"supir", "sam3.1", *_SEEDVR_IDS},
+            "allowPickle": model_id in {"supir", "sam3.1"} or model_id in _SEEDVR_IDS,
         },
         "variant": variant.to_dict(),
         "capabilities": capabilities.to_dict(task),
@@ -570,26 +576,19 @@ def _action(model_id: str, operation: str) -> None:
             operation, lambda value: set_model_enabled(value, operation == "enable")
         )(mode)
         return
-    if model_id in {"sam2", "grounding-dino"}:
-        from backend.tools.installers.select_object import (
-            SelectObjectPairId,
-            install_pair,
-            uninstall_pair,
-        )
+    if model_id == "sam3.1":
+        from backend.tools.installers.sam3 import install_model, uninstall_model
 
         if operation == "install":
-            install_pair(SelectObjectPairId.FAST, skip_if_complete=True)
-            _set_enabled_overrides(("sam2", "grounding-dino"), True)
+            install_model()
+            _set_enabled_override(model_id, True)
         elif operation == "remove":
-            uninstall_pair(SelectObjectPairId.FAST)
-            _set_enabled_overrides(("sam2", "grounding-dino"), False)
+            uninstall_model()
+            _set_enabled_override(model_id, False)
         else:
             if operation == "enable" and not _installed(model_id):
-                raise ValueError("SAM2 and Grounding DINO are not fully installed.")
-            _set_enabled_overrides(
-                ("sam2", "grounding-dino"),
-                operation == "enable",
-            )
+                raise ValueError("SAM 3.1 is not fully installed.")
+            _set_enabled_override(model_id, operation == "enable")
         return
     if operation == "install" and model_id in {"lama", "sttn-auto", "sttn-detection", "propainter"}:
         from backend.models.paths import SubtitleModelPaths, prepare_bundled_subtitle_models

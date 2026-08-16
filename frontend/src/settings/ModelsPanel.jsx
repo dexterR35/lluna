@@ -50,8 +50,8 @@ function optionsForModel(modelId) {
   if (modelId === "mirnet") {
     return { section: "low_light", keys: ["mode", "max_long_edge"] };
   }
-  if (modelId === "sam2" || modelId === "grounding-dino") {
-    return { section: "object_selection", keys: ["more_complex"] };
+  if (modelId === "sam3.1") {
+    return { section: "object_selection", keys: ["confidence_threshold", "mask_threshold"] };
   }
   if (
     modelId === "sttn-auto" ||
@@ -110,10 +110,7 @@ const MODEL_SECTIONS = [
   {
     id: "object",
     label: "Object selection",
-    match: (model) =>
-      model.id === "sam2" ||
-      model.id === "grounding-dino" ||
-      model.task === "object-detection",
+    match: (model) => model.id === "sam3.1" || model.task === "object-detection",
   },
   {
     id: "background_removal",
@@ -147,33 +144,8 @@ const MODEL_SECTIONS = [
   },
 ];
 
-/**
- * SAM2 and Grounding DINO always install/uninstall together as one pair on
- * the backend (backend/tools/installers/select_object.py), so present them
- * as a single "Select Object" row instead of two rows that happen to
- * trigger the same server-side action.
- * @param {import("../types").ModelInventory[]} models
- */
-function mergeSelectObjectModels(models) {
-  const sam2 = models.find((model) => model.id === "sam2");
-  const dino = models.find((model) => model.id === "grounding-dino");
-  if (!sam2 || !dino) return models;
-  const merged = {
-    ...sam2,
-    display_name: "Select Object (SAM2 + Grounding DINO)",
-    purpose: "Point/box/text-prompted subject selection.",
-    installed: sam2.installed && dino.installed,
-    enabled: sam2.enabled && dino.enabled,
-    can_install: !(sam2.installed && dino.installed) && (sam2.can_install || dino.can_install),
-    can_uninstall: sam2.can_uninstall || dino.can_uninstall,
-    can_toggle: sam2.can_toggle && dino.can_toggle,
-  };
-  return [merged, ...models.filter((model) => model.id !== "sam2" && model.id !== "grounding-dino")];
-}
-
 /** @param {import("../types").ModelInventory[]} models */
 function groupModels(models) {
-  models = mergeSelectObjectModels(models);
   /** @type {Map<string, import("../types").ModelInventory[]>} */
   const buckets = new Map(MODEL_SECTIONS.map((section) => [section.id, []]));
   for (const model of models) {

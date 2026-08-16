@@ -13,16 +13,16 @@ from typing import Iterable, Iterator, List, Optional, Tuple
 from backend.core.atomic import atomic_write_json
 from backend.core.paths import AppPaths
 
-# (kind, key) e.g. ("enhance", "x2plus"), ("select_object", "fast")
+# (kind, key) e.g. ("enhance", "x2plus"), ("sam3", "sam3")
 PendingItem = Tuple[str, str]
 
 KIND_ENHANCE = "enhance"
 KIND_LOW_LIGHT = "low_light"
 KIND_GENERATE = "generate"
-KIND_SELECT_OBJECT = "select_object"
 KIND_BIREFNET = "birefnet"
 KIND_SEEDVR = "seedvr2"
 KIND_SUPIR = "supir"
+KIND_SAM3 = "sam3"
 _progress_context = threading.local()
 
 
@@ -249,11 +249,10 @@ def discard_partial(kind: str, key: str) -> None:
         from backend.tools.installers import generate as m
 
         m.discard_partial(GenerateMode(key))
-    elif kind == KIND_SELECT_OBJECT:
-        from backend.tools.installers.select_object import SelectObjectPairId
-        from backend.tools.installers import select_object as m
+    elif kind == KIND_SAM3:
+        from backend.tools.installers import sam3 as m
 
-        m.discard_pair_partial(SelectObjectPairId(key))
+        m.discard_partial(key)
     elif kind == KIND_BIREFNET:
         from backend.tools.installers import birefnet as m
 

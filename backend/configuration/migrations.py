@@ -38,6 +38,14 @@ def migrate_mapping(raw: Mapping[str, Any]) -> dict[str, Any]:
             # fall back to CPU on their own); remap existing selections to the default.
             subtitle["inpaint_mode"] = "sttn-auto"
         migrated["subtitle"] = subtitle
+        object_selection = dict(migrated.get("object_selection", {}))
+        if "more_complex" in object_selection:
+            # v5 -> v6: Select Object moved from SAM2+Grounding DINO (a tiny/large
+            # pair chosen via more_complex) to SAM 3.1, a single model with no pair
+            # toggle; drop the now-meaningless field and let the new confidence/
+            # mask threshold fields fall back to their defaults.
+            object_selection.pop("more_complex")
+            migrated["object_selection"] = object_selection
         return migrated
 
     main = dict(raw.get("Main", {}))
@@ -47,7 +55,6 @@ def migrate_mapping(raw: Mapping[str, Any]) -> dict[str, Any]:
     enhancement = dict(raw.get("Enhance", {}))
     low_light = dict(raw.get("LowLight", {}))
     generation = dict(raw.get("Generate", {}))
-    object_selection = dict(raw.get("SelectObject", {}))
     legacy_inpaint_mode = main.get("InpaintMode", "sttn-auto")
     if legacy_inpaint_mode == "opencv":
         legacy_inpaint_mode = "sttn-auto"
@@ -95,7 +102,8 @@ def migrate_mapping(raw: Mapping[str, Any]) -> dict[str, Any]:
             "height": generation.get("Height", 768),
             "steps": generation.get("Steps", 4),
         },
-        "object_selection": {"more_complex": object_selection.get("MoreComplex", False)},
+        # No legacy INI equivalent (SAM 3.1 didn't exist pre-schema); defaults apply.
+        "object_selection": {},
         "models": {},
         "save_directory": main.get("SaveDirectory", ""),
     }

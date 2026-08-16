@@ -95,9 +95,13 @@ export const FIELD_META = {
   "generation.height": { label: "Height" },
   "generation.steps": { label: "Steps" },
 
-  "object_selection.more_complex": {
-    label: "Higher quality models",
-    description: "Use the more accurate object-selection model pair when available.",
+  "object_selection.confidence_threshold": {
+    label: "Confidence threshold",
+    description: "Minimum SAM 3.1 match confidence before accepting a result.",
+  },
+  "object_selection.mask_threshold": {
+    label: "Mask threshold",
+    description: "Cutoff used to turn SAM 3.1's soft mask into a binary selection.",
   },
 
   // Flat aliases used by model option panels
@@ -130,9 +134,13 @@ export const FIELD_META = {
   width: { label: "Width" },
   height: { label: "Height" },
   steps: { label: "Steps" },
-  more_complex: {
-    label: "Higher quality models",
-    description: "Use the more accurate object-selection model pair when available.",
+  confidence_threshold: {
+    label: "Confidence threshold",
+    description: "Minimum SAM 3.1 match confidence before accepting a result.",
+  },
+  mask_threshold: {
+    label: "Mask threshold",
+    description: "Cutoff used to turn SAM 3.1's soft mask into a binary selection.",
   },
 };
 

@@ -1907,9 +1907,8 @@ class RunManager:
                 text=params.get("text") or "",
                 points=params.get("points") or None,
                 labels=params.get("labels") or None,
-                more_complex=bool(
-                    params.get("moreComplex", settings.object_selection.more_complex)
-                ),
+                confidence_threshold=settings.object_selection.confidence_threshold,
+                mask_threshold=settings.object_selection.mask_threshold,
             )
         elif adapter == "subtitle":
             source = artifact_path("video") or artifact_path("image")

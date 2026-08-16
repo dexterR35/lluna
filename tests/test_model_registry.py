@@ -21,8 +21,7 @@ def test_required_model_inventory_is_unique() -> None:
         "realesrgan-x4",
         "supir",
         "mirnet",
-        "sam2",
-        "grounding-dino",
+        "sam3.1",
         "flux",
         "flux2-dev",
         "flux2-klein-9b-fp8",
@@ -53,16 +52,14 @@ def test_verifier_checks_hash_and_rejects_traversal(tmp_path) -> None:
     assert not verify_file(tmp_path, ExpectedFile("../outside.bin")).valid
 
 
-def test_select_object_pair_enables_and_disables_together(tmp_path, monkeypatch) -> None:
+def test_sam3_enables_and_disables(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("LLUNA_CONFIG_DIR", str(tmp_path))
     monkeypatch.setattr(model_service, "_installed", lambda _model_id: True)
 
-    model_service._action("sam2", "enable")
+    model_service._action("sam3.1", "enable")
     state = json.loads((tmp_path / "model-lifecycle.json").read_text())
-    assert state["sam2"] is True
-    assert state["grounding-dino"] is True
+    assert state["sam3.1"] is True
 
-    model_service._action("grounding-dino", "disable")
+    model_service._action("sam3.1", "disable")
     state = json.loads((tmp_path / "model-lifecycle.json").read_text())
-    assert state["sam2"] is False
-    assert state["grounding-dino"] is False
+    assert state["sam3.1"] is False

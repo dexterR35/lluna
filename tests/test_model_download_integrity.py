@@ -12,7 +12,6 @@ from backend.models.reference.catalog import MODEL_REGISTRY
 from backend.models.reference.metadata import ExpectedFile
 from backend.tools.installers import enhance as enhance_models
 from backend.tools.installers.enhance import catalog_info
-from backend.tools.installers.select_object import MODEL_CATALOG as SELECT_OBJECT_CATALOG
 from backend.tools.shared.constants import EnhanceMode
 
 
@@ -83,12 +82,10 @@ def test_realesrgan_download_catalog_has_pinned_artifact_integrity() -> None:
         assert registered.expected_files == (info.artifact,)
 
 
-def test_select_object_downloads_only_transformers_safetensors_layout() -> None:
-    for info in SELECT_OBJECT_CATALOG:
-        assert "model.safetensors" in info.download_allow_patterns
-        assert not any(
-            pattern.endswith((".bin", ".pt")) for pattern in info.download_allow_patterns
-        )
+def test_sam3_downloads_the_expected_file_types() -> None:
+    from backend.tools.installers.sam3 import SAM3_ALLOW_PATTERNS
+
+    assert any(pattern.endswith((".pt", ".pth")) for pattern in SAM3_ALLOW_PATTERNS)
 
 
 def test_realesrgan_installer_rejects_tampered_download(tmp_path, monkeypatch) -> None:

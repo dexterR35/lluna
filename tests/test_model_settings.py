@@ -7,7 +7,6 @@ from backend.settings.presets import Preset, ResolutionContext, resolve
 from backend.settings.schemas.model import (
     GenerateSettings,
     LowLightSettings,
-    ObjectSelectionSettings,
     ProPainterSettings,
     STTNSettings,
     UpscaleSettings,
@@ -23,7 +22,6 @@ from tests.fakes.hardware import CPU_ONLY, CUDA, DIRECTML, MPS, profile
         STTNSettings(),
         UpscaleSettings(),
         LowLightSettings(),
-        ObjectSelectionSettings(),
     ],
 )
 def test_schemas_round_trip(settings) -> None:

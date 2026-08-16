@@ -121,37 +121,6 @@ class VideoInpaintAdapter(_BuiltinAdapter):
         release_video_inpaint_models()
 
 
-class SegmentationAdapter(_BuiltinAdapter):
-    id = "builtin:segmentation"
-    supported_tasks = ("select-object",)
-
-    def run(self, loaded: Any, inputs: dict[str, Any], *, progress: Progress = None, cancel_event: CancelEvent = None) -> Any:
-        del progress, cancel_event  # run_select_object does not accept these
-        from backend.ai.runtimes.segmentation import run_select_object
-
-        return run_select_object(
-            inputs["image_path"],
-            inputs["output_mask_path"],
-            points=inputs.get("points"),
-            labels=inputs.get("labels"),
-            text=inputs.get("text"),
-            box_threshold=float(inputs.get("box_threshold", 0.25)),
-            text_threshold=float(inputs.get("text_threshold", 0.25)),
-            more_complex=inputs.get("more_complex"),
-        )
-
-    def estimate(self, record: Any = None, **kwargs: Any):
-        from backend.tools.shared.memory import preflight_select_subject
-
-        return preflight_select_subject(
-            int(kwargs["h"]), int(kwargs["w"]), complex_pair=bool(kwargs.get("complex_pair", False))
-        )
-
-    def _release(self) -> None:
-        from backend.ai.runtimes.segmentation import release_select_object_models
-
-        release_select_object_models(blocking=True, timeout=5.0)
-
 
 class BirefnetNativeAdapter(_BuiltinAdapter):
     id = "builtin:birefnet"
@@ -211,7 +180,6 @@ BUILTIN_ADAPTERS: dict[str, RuntimeAdapter] = {
         MirnetAdapter(),
         LamaAdapter(),
         VideoInpaintAdapter(),
-        SegmentationAdapter(),
         BirefnetNativeAdapter(),
         DiffusionGenerateAdapter(),
     )

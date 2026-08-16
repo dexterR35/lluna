@@ -55,7 +55,7 @@ The installer detects CUDA, CPU, or Apple MPS automatically. It does not downloa
 ./install.sh --schedule-default-models
 ```
 
-That option queues the starter models after the first launch: Real-ESRGAN x2, MIRNet, and the small SAM2 + Grounding DINO pair.
+That option queues the starter models after the first launch: Real-ESRGAN x2 and MIRNet. Larger, gated, or isolated-runtime models (SUPIR, SeedVR2, SAM 3.1) stay opt-in from Settings → Models.
 
 To force a backend:
 
@@ -89,7 +89,7 @@ The values below are Lluna's declared compatibility floors. They are not peak-us
 | **PaddleOCR Server / Mobile** | Detecting text and subtitles before inpainting | CPU, CUDA | 2 GB / 1 GB RAM |
 | **STTN Auto / Detection** | Video and subtitle inpainting | CUDA, DirectML, MPS | 4 GB graphics memory, 4 GB RAM |
 | **ProPainter** | Motion-aware video inpainting | CUDA, DirectML, MPS | 8 GB graphics memory, 8 GB RAM |
-| **SAM2 + Grounding DINO** | Selecting objects by click or text prompt | CUDA, DirectML, MPS | 4.5 GB graphics memory, 8 GB RAM |
+| **SAM 3.1** | Selecting objects by click or text prompt (gated, isolated runtime) | CPU, CUDA | 8 GB RAM, 6 GB graphics memory if using GPU |
 | **SUPIR v0** | Diffusion-based photo restoration and upscaling | CUDA | 12 GB VRAM, 32 GB RAM, about 75.2 GB disk |
 | **SeedVR2 3B** | One-step image/video restoration and upscaling | CUDA | 24 GB VRAM, 32 GB RAM, about 14.6 GB disk |
 | **SeedVR2 7B** | Higher-capacity SeedVR2 restoration | CUDA | 48 GB VRAM, 64 GB RAM, about 66.9 GB disk |

@@ -8,7 +8,12 @@ import sys
 import pytest
 
 from backend.configuration.loader import ConfigurationLoader
-from backend.configuration.models import ApplicationConfiguration, SubtitleSettings
+from backend.configuration.migrations import migrate_mapping
+from backend.configuration.models import (
+    ApplicationConfiguration,
+    ObjectSelectionSettings,
+    SubtitleSettings,
+)
 from backend.diagnostics.errors import ConfigurationError
 
 
@@ -42,6 +47,29 @@ def test_configuration_precedence_and_legacy_migration(tmp_path) -> None:
         "environment",
         "runtime overrides",
     )
+
+
+def test_object_selection_more_complex_is_dropped_on_migration() -> None:
+    """v5 -> v6: SAM2's tiny/large pair toggle no longer exists under SAM 3.1;
+    a saved config that still has it must load with the new defaults, not
+    fail construction on an unexpected keyword."""
+    migrated = migrate_mapping(
+        {
+            "schema_version": 5,
+            "object_selection": {"more_complex": True},
+        }
+    )
+    assert "more_complex" not in migrated["object_selection"]
+    config = ApplicationConfiguration.from_mapping(migrated)
+    assert config.object_selection == ObjectSelectionSettings()
+
+
+def test_object_selection_thresholds_are_bounded() -> None:
+    ObjectSelectionSettings(confidence_threshold=0.0, mask_threshold=1.0)
+    with pytest.raises(ValueError):
+        ObjectSelectionSettings(confidence_threshold=1.5)
+    with pytest.raises(ValueError):
+        ObjectSelectionSettings(mask_threshold=-0.1)
 
 
 def test_corrupt_user_configuration_is_backed_up(tmp_path) -> None:

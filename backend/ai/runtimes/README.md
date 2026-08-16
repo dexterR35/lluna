@@ -15,8 +15,9 @@ ai/runtimes/
 ├── realesrgan.py     # image upscaling
 ├── mirnet.py         # low-light restoration
 ├── diffusion.py      # local image generation pipelines
-├── segmentation.py   # SAM2/Grounding DINO selection
 ├── supir.py          # SUPIR control bridge
 ├── supir_process.py  # isolated SUPIR subprocess bridge
+├── sam3.py           # isolated SAM 3.1 subprocess bridge
+├── sam3_process.py   # isolated SAM 3.1 subprocess entry point
 └── seedvr2.py        # isolated SeedVR2 subprocess bridge
 ```

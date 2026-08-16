@@ -164,9 +164,7 @@ def builtin_contract(model_id: str) -> tuple[ModelVariant, ModelCapabilities]:
         "image-restoration"
         if model_id == "mirnet"
         else "image-segmentation"
-        if model_id == "sam2"
-        else "object-detection"
-        if model_id == "grounding-dino"
+        if model_id == "sam3.1"
         else "text-recognition"
         if model_id.startswith("paddleocr")
         else "inpainting"

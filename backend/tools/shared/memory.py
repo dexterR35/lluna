@@ -13,8 +13,6 @@ _ENHANCE_WEIGHTS_MB = {2: 70.0, 4: 70.0}
 _ENHANCE_TILE_ACT_PER_PX = 0.00012  # MB per input tile pixel (incl. pad/scale scratch)
 _LAMA_WEIGHTS_MB = 200.0
 _LAMA_PER_MPX = 180.0
-_SELECT_OBJECT_TINY_MB = 4500.0
-_SELECT_OBJECT_COMPLEX_MB = 12000.0
 _STTN_BASE_MB = 400.0
 _STTN_PER_FRAME_MPX = 90.0
 _PROPAINTER_BASE_MB = 800.0
@@ -29,6 +27,10 @@ _SUPIR_MINIMUM_VRAM_MB = 12000.0  # SDXL backbone + VAE + dual CLIP + SUPIR weig
 _SUPIR_LLAVA_FP16_EXTRA_MB = 8000.0  # automatic captioning at fp16 (~20GB total)
 _SUPIR_LLAVA_8BIT_EXTRA_MB = 4000.0  # automatic captioning, 8-bit quantized
 _SEEDVR_MINIMUM_VRAM_MB = {"seedvr2-3b": 24576.0, "seedvr2-7b": 49152.0}
+# SAM 3.1 also runs in an isolated per-call CUDA subprocess (see
+# backend/ai/runtimes/sam3.py); this is an estimate (848M params, no vendor
+# figure published) pending real-world measurement.
+_SAM3_MINIMUM_VRAM_MB = 6000.0
 
 # BiRefNet (a Swin-transformer segmentation model) processes every image at a
 # fixed square `resolution` regardless of the source image's native size, so
@@ -190,20 +192,8 @@ def preflight_birefnet(resolution: int, *, precision: str = "auto") -> GenericBu
     return GenericBudget(estimated_mb=est, free_mb=free)
 
 
-def preflight_select_subject(h: int, w: int, *, complex_pair: bool = False) -> GenericBudget:
-    if not _has_cuda_budget():
-        return GenericBudget(estimated_mb=0.0, free_mb=0.0)
-    free, _ = _free_total_mb()
-    mpx = (h * w) / 1_000_000.0
-    base = _SELECT_OBJECT_COMPLEX_MB if complex_pair else _SELECT_OBJECT_TINY_MB
-    est = base + 80.0 * mpx
-    if _with_headroom(est) > free:
-        raise VramBudgetError(
-            f"Not enough GPU memory for Select Object "
-            f"(need ~{_with_headroom(est):.0f} MB free, have {free:.0f} MB). "
-            f"Turn off More complex in Settings or use a smaller image."
-        )
-    return GenericBudget(estimated_mb=est, free_mb=free)
+def preflight_sam3() -> GenericBudget:
+    return preflight_minimum("SAM 3.1", _SAM3_MINIMUM_VRAM_MB, hint="Free up GPU memory.")
 
 
 def preflight_minimum(

@@ -132,6 +132,20 @@ RUNTIME_PROFILES: dict[str, RuntimeProfile] = {
             experimental=False,
             description="Official SeedVR2 Python 3.9/3.10 runtime with CUDA-only dependencies.",
         ),
+        RuntimeProfile(
+            "sam3-python",
+            "SAM 3.1 isolated runtime",
+            "sam3",
+            (),
+            (),
+            ("cuda", "cpu"),
+            isolated=True,
+            experimental=False,
+            description=(
+                "Official SAM 3.1 (Object Multiplex) runtime, its own Python environment - "
+                "the sam3 package pins numpy<2, which conflicts with the shared app venv."
+            ),
+        ),
     )
 }
 

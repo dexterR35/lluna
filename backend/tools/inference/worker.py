@@ -153,13 +153,9 @@ def _release_all_except(keep: Optional[str] = None) -> None:
             release_retouch_lama()
         except Exception:
             pass
-    if keep != JobType.SELECT_SUBJECT.value:
-        try:
-            from backend.ai.runtimes.segmentation import release_select_object_models
-
-            release_select_object_models(blocking=True, timeout=5.0)
-        except Exception:
-            traceback.print_exc()
+    # SELECT_SUBJECT (SAM 3.1) has no branch here: like SUPIR/SeedVR2, it runs
+    # as an isolated per-call subprocess with no persistent in-process state
+    # to release - its VRAM is freed when that subprocess exits.
     try:
         # This is the one cache shared by custom (manifest-backed) models and
         # any builtin runtime migrated onto ModelManager (currently BiRefNet,
@@ -280,7 +276,7 @@ def infer_worker_main(
                 )
             elif job_type == JobType.SELECT_SUBJECT.value:
                 _job_select_subject(
-                    run_id, payload, on_progress, heartbeat_log, job_evt_queue
+                    run_id, payload, cancel_event, on_progress, heartbeat_log, job_evt_queue
                 )
             elif job_type == JobType.SUBTITLE.value:
                 _job_subtitle(
@@ -1000,18 +996,11 @@ def _job_lama_retouch(run_id, payload, on_progress, heartbeat_log, evt_queue) ->
     _emit(evt_queue, result(run_id, output_path))
 
 
-def _job_select_subject(run_id, payload, on_progress, heartbeat_log, evt_queue) -> None:
-    from backend.ai.runtimes.segmentation import (
-        run_select_object,
-        select_object_models_ready,
-    )
+def _job_select_subject(run_id, payload, cancel_event, on_progress, heartbeat_log, evt_queue) -> None:
+    from backend.ai.runtimes.sam3 import Sam3Cancelled, run_select_object
+    from backend.tools.installers import sam3 as sam3_models
     from backend.tools.shared.jobs import apply_hardware_from_payload
-    from backend.tools.installers.select_object import (
-        ensure_active_pair_installed,
-        resolve_pair,
-    )
-    from backend.tools.shared.memory import VramBudgetError, preflight_select_subject
-    from PIL import Image
+    from backend.tools.shared.memory import VramBudgetError, preflight_sam3
 
     apply_hardware_from_payload(payload)
 
@@ -1020,40 +1009,25 @@ def _job_select_subject(run_id, payload, on_progress, heartbeat_log, evt_queue) 
     points = payload.get("points") or None
     labels = payload.get("labels") or None
     text = payload.get("text") or None
-    box_threshold = float(payload.get("box_threshold") or 0.25)
-    text_threshold = float(payload.get("text_threshold") or 0.25)
-    more_complex = payload.get("more_complex")
-    if more_complex is not None:
-        more_complex = bool(more_complex)
+    confidence_threshold = payload.get("confidence_threshold")
+    mask_threshold = payload.get("mask_threshold")
 
     if not points and not (text and str(text).strip()):
         _emit(evt_queue, error(run_id, "Select Object needs a click or object name."))
         return
 
-    sam2_id, dino_id = resolve_pair(more_complex)
-    heartbeat_log(run_id, f"Select Object: {sam2_id.value} + {dino_id.value}")
-    on_progress(run_id, 5)
+    if not sam3_models.is_model_installed():
+        _emit(evt_queue, error(run_id, "SAM 3.1 is not installed."))
+        return
 
     try:
-        with Image.open(image_path) as im:
-            w, h = im.size
-        preflight_select_subject(h, w, complex_pair=sam2_id.value.endswith("large"))
+        preflight_sam3()
     except VramBudgetError as e:
         _emit(evt_queue, error(run_id, str(e)))
         return
 
-    try:
-        ensure_active_pair_installed(more_complex)
-    except Exception as e:
-        _emit(evt_queue, error(run_id, f"Select Object models missing: {e}"))
-        return
-
-    on_progress(run_id, 15)
-    need_dino = bool(text and str(text).strip())
-    if select_object_models_ready(sam2_id, dino_id, need_dino=need_dino):
-        heartbeat_log(run_id, "Running Select Object…")
-    else:
-        heartbeat_log(run_id, "Loading Select Object models…")
+    heartbeat_log(run_id, "Running Select Object (SAM 3.1)…")
+    on_progress(run_id, 5)
     try:
         run_select_object(
             image_path,
@@ -1061,10 +1035,14 @@ def _job_select_subject(run_id, payload, on_progress, heartbeat_log, evt_queue) 
             points=points,
             labels=labels,
             text=text,
-            box_threshold=box_threshold,
-            text_threshold=text_threshold,
-            more_complex=more_complex,
+            confidence_threshold=confidence_threshold,
+            mask_threshold=mask_threshold,
+            cancel_event=cancel_event,
+            progress=lambda value: on_progress(run_id, value),
         )
+    except Sam3Cancelled:
+        _emit(evt_queue, error(run_id, "__cancelled__"))
+        return
     except Exception as e:
         traceback.print_exc()
         _emit(evt_queue, error(run_id, str(e)))

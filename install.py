@@ -672,12 +672,6 @@ checks = [
     ),
     ("QwenImagePipeline", "from diffusers import QwenImagePipeline", False),
     ("accelerate", "import accelerate", False),
-    ("Sam2Model", "from transformers import Sam2Model, Sam2Processor", False),
-    (
-        "Grounding DINO",
-        "from transformers import AutoModelForZeroShotObjectDetection, AutoProcessor",
-        False,
-    ),
 ]
 failed = []
 for name, stmt, required in checks:
