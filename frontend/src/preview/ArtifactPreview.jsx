@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
   Download,
@@ -282,6 +282,79 @@ export function ArtifactPreview({
     setSelectingArea(false);
     setAreaDrag(null);
   }, [primaryId]);
+  // A plain click means something else while these are active (add a point,
+  // draw a removal box) - drag-to-pan only turns on by itself the rest of the
+  // time, matching how the main canvas already behaves (no mode toggle
+  // needed there either). The Move button still force-enables it either way.
+  const canDragPan = !onPointAdd && !selectingArea;
+  const dragPanActive = zoomable && (panMode || canDragPan);
+  const contentRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+  // CSS `zoom` resizes the scrollable content asynchronously relative to the
+  // state update that triggers it, and the content sits centered (not flush
+  // top-left) whenever it's smaller than the stage on an axis - so scrollLeft
+  // alone can't tell us where the cursor lands on the image. The wheel
+  // handler instead records the cursor as a fraction of the content's own
+  // (pre-zoom) box, and a layout effect - which runs after the browser has
+  // relaid-out the content at the new size - re-derives the content's
+  // top-left in scroll space from its actual post-zoom geometry and scrolls
+  // so that same fraction lands back under the cursor.
+  const pendingZoomOrigin = useRef(
+    /** @type {{fracX: number, fracY: number, cursorLeft: number, cursorTop: number} | null} */ (
+      null
+    ),
+  );
+  useEffect(() => {
+    const stage = stageRef.current;
+    const content = contentRef.current;
+    if (!stage || !content || !zoomable) return undefined;
+    /** @param {WheelEvent} event */
+    function onWheel(event) {
+      if (!stage || !content) return;
+      event.preventDefault();
+      const stageBounds = stage.getBoundingClientRect();
+      const contentBounds = content.getBoundingClientRect();
+      const cursorLeft = event.clientX - stageBounds.left;
+      const cursorTop = event.clientY - stageBounds.top;
+      const fracX = contentBounds.width
+        ? (event.clientX - contentBounds.left) / contentBounds.width
+        : 0.5;
+      const fracY = contentBounds.height
+        ? (event.clientY - contentBounds.top) / contentBounds.height
+        : 0.5;
+      setZoom((previous) => {
+        const step = previous * 0.0015 * -event.deltaY;
+        const next = Math.min(4, Math.max(0.5, previous + step));
+        if (next === previous) return previous;
+        pendingZoomOrigin.current = { fracX, fracY, cursorLeft, cursorTop };
+        return next;
+      });
+    }
+    stage.addEventListener("wheel", onWheel, { passive: false });
+    return () => stage.removeEventListener("wheel", onWheel);
+    // stageRef/contentRef.current are null until the stage below actually
+    // mounts (the early returns above skip it entirely while
+    // loading/erroring) - re-run once state.url flips truthy so the listener
+    // attaches to the real nodes.
+  }, [zoomable, state.url]);
+  useLayoutEffect(() => {
+    const stage = stageRef.current;
+    const content = contentRef.current;
+    const pending = pendingZoomOrigin.current;
+    if (!stage || !content || !pending) return;
+    pendingZoomOrigin.current = null;
+    const stageBounds = stage.getBoundingClientRect();
+    const contentBounds = content.getBoundingClientRect();
+    // Content's top-left in scroll space, i.e. where it'd sit if scrollLeft/
+    // Top were reset to 0 - derived from where it's actually rendered now.
+    const contentScrollLeft =
+      contentBounds.left - stageBounds.left + stage.scrollLeft;
+    const contentScrollTop =
+      contentBounds.top - stageBounds.top + stage.scrollTop;
+    stage.scrollLeft =
+      contentScrollLeft + pending.fracX * contentBounds.width - pending.cursorLeft;
+    stage.scrollTop =
+      contentScrollTop + pending.fracY * contentBounds.height - pending.cursorTop;
+  }, [zoom]);
   if (!primaryId)
     return (
       <EmptyState
@@ -410,9 +483,9 @@ export function ArtifactPreview({
       </div>
       <div
         ref={stageRef}
-        className={`ui-preview-stage checkerboard overflow-auto ${panMode ? (panning ? "cursor-grabbing" : "cursor-grab") : ""} ${compact ? "min-h-28 max-h-52" : "min-h-44 max-h-[26rem]"}`}
+        className={`ui-preview-stage checkerboard overflow-auto ${dragPanActive ? (panning ? "cursor-grabbing" : "cursor-grab") : ""} ${compact ? "min-h-28 max-h-52" : "min-h-44 max-h-[26rem]"}`}
         onPointerDown={
-          panMode
+          dragPanActive
             ? (event) => {
                 if (event.button !== 0) return;
                 event.preventDefault();
@@ -428,7 +501,7 @@ export function ArtifactPreview({
             : undefined
         }
         onPointerMove={
-          panMode
+          dragPanActive
             ? (event) => {
                 const start = panStart.current;
                 if (!start) return;
@@ -449,6 +522,7 @@ export function ArtifactPreview({
         }}
       >
         <div
+          ref={contentRef}
           className={`relative inline-grid place-items-center ${onPointAdd ? "cursor-crosshair" : ""}`}
           style={{ zoom }}
           onClick={
