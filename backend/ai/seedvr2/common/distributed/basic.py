@@ -17,6 +17,7 @@ Distributed basic functions.
 """
 
 import os
+import sys
 from datetime import timedelta
 import torch
 import torch.distributed as dist
@@ -67,8 +68,11 @@ def init_torch(cudnn_benchmark=True, timeout=timedelta(seconds=600)):
     torch.backends.cudnn.allow_tf32 = True
     torch.backends.cudnn.benchmark = cudnn_benchmark
     torch.cuda.set_device(get_local_rank())
+    # NCCL has no Windows build at all (CUDA-only, Linux-only upstream); gloo is
+    # PyTorch's own documented Windows substitute for the collectives SeedVR2 needs.
+    backend = "gloo" if sys.platform == "win32" else "nccl"
     dist.init_process_group(
-        backend="nccl",
+        backend=backend,
         rank=get_global_rank(),
         world_size=get_world_size(),
         timeout=timeout,

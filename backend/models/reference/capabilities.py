@@ -143,7 +143,13 @@ def builtin_contract(model_id: str) -> tuple[ModelVariant, ModelCapabilities]:
             scales=tuple(range(1, 9)),
             tile_size=NumberCapability(512, 128, 1024),
         )
-    if model_id in {"seedvr2-3b", "seedvr2-7b"}:
+    if model_id in {
+        "seedvr2-3b",
+        "seedvr2-7b",
+        "seedvr2-3b-gguf-q3",
+        "seedvr2-3b-gguf-q4",
+        "seedvr2-3b-gguf-q8",
+    }:
         inputs, outputs = _io_for_task("image-upscaling")
         return ModelVariant(
             "upscaler",

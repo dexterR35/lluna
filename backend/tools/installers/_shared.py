@@ -200,6 +200,17 @@ def create_isolated_venv(
         [python_executable, "-m", "venv", str(staging)], check=True, timeout=venv_timeout
     )
     runtime_python = staging / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+    # The venv's bundled pip (whatever version shipped with the source Python) can be
+    # old enough to mis-normalize package names on some indexes -- e.g. pip 23.0.1
+    # discards PyTorch's cu121 index wheels over a "Jinja2" vs "jinja2" / "typing_extensions"
+    # vs "typing-extensions" casing mismatch and falls back to building from an sdist,
+    # which then fails because build backends like flit_core aren't hosted on a
+    # CUDA-only --index-url. Upgrading pip first avoids that class of failure.
+    subprocess.run(  # noqa: S603 - managed venv, fixed pip upgrade command
+        [str(runtime_python), "-m", "pip", "install", "--disable-pip-version-check", "--upgrade", "pip"],
+        check=True,
+        timeout=pip_timeout,
+    )
     for step in pip_install_steps:
         subprocess.run(  # noqa: S603 - managed venv and policy-controlled package pins
             [str(runtime_python), "-m", "pip", "install", "--disable-pip-version-check", *step],

@@ -34,10 +34,13 @@ backend/models/select_object/
 backend/models/generate/
 backend/models/mirnet/
 backend/models/supir/
+backend/models/qwen3-tts/
+backend/models/seedvr2/
 backend/models/**/*.ckpt
 backend/models/**/*.onnx
 backend/models/**/*.safetensors
 backend/models/**/*.bin
+backend/models/**/*.gguf
 inference.onnx
 
 # Secrets (never commit)

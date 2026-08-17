@@ -69,17 +69,17 @@ def is_image_file(filename):
     image_exts = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.webp'}
     return os.path.splitext(filename.lower())[1] in image_exts
 
-def configure_runner(sp_size, checkpoint_dir=None):
+def configure_runner(sp_size, checkpoint_dir=None, checkpoint_filename='seedvr2_ema_3b.pth'):
     checkpoint_dir = Path(checkpoint_dir or SOURCE_ROOT / 'ckpts')
     config_path = SOURCE_ROOT / 'configs_3b' / 'main.yaml'
     config = load_config(config_path)
     runner = VideoDiffusionInfer(config)
     OmegaConf.set_readonly(runner.config, False)
-    
+
     init_torch(cudnn_benchmark=False, timeout=datetime.timedelta(seconds=3600))
     configure_sequence_parallel(sp_size)
     runner.config.vae.checkpoint = str(checkpoint_dir / 'ema_vae.pth')
-    runner.configure_dit_model(device="cuda", checkpoint=str(checkpoint_dir / 'seedvr2_ema_3b.pth'))
+    runner.configure_dit_model(device="cuda", checkpoint=str(checkpoint_dir / checkpoint_filename))
     runner.configure_vae_model()
     # Set memory limit.
     if hasattr(runner.vae, "set_memory_limit"):
@@ -261,6 +261,11 @@ def generation_loop(runner, video_path='./test_videos', output_dir='./results', 
                 ).unsqueeze(0) / 255.0
                 if sp_size > 1:
                     raise ValueError("Sp size should be set to 1 for image inputs!")
+                # save_fps is unused by the mediapy.write_image branch below, but the
+                # save loop zips videos/input_videos/samples/ori_lengths/fps_lists
+                # together -- an unfilled fps_lists truncates that zip() to empty and
+                # silently skips saving every image in this batch.
+                fps_lists.append(out_fps or 0)
             else:
                 video, _, info = read_video(
                     os.path.join(video_path, video), output_format="TCHW"
@@ -337,7 +342,9 @@ if __name__ == "__main__":
     parser.add_argument("--sp_size", type=int, default=1)
     parser.add_argument("--out_fps", type=float, default=None)
     parser.add_argument("--checkpoint_dir", type=str, default=None)
+    parser.add_argument("--checkpoint_filename", type=str, default="seedvr2_ema_3b.pth")
     args = vars(parser.parse_args())
     checkpoint_dir = args.pop("checkpoint_dir")
-    runner = configure_runner(args["sp_size"], checkpoint_dir)
+    checkpoint_filename = args.pop("checkpoint_filename")
+    runner = configure_runner(args["sp_size"], checkpoint_dir, checkpoint_filename)
     generation_loop(runner, **args)

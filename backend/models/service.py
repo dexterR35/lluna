@@ -24,7 +24,18 @@ _BIREFNET_IDS = {
     "birefnet-lite-2k",
     "birefnet-matting",
 }
-_SEEDVR_IDS = {"seedvr2-3b", "seedvr2-7b"}
+_SEEDVR_IDS = {
+    "seedvr2-3b",
+    "seedvr2-7b",
+    "seedvr2-3b-gguf-q3",
+    "seedvr2-3b-gguf-q4",
+    "seedvr2-3b-gguf-q8",
+}
+# Shipped as repo-bundled chunks that need merging into a full checkpoint before
+# first use (see prepare_bundled_subtitle_models); "install" here just does that
+# merge, so they're install-able but -- unlike the lifecycle_managed set below --
+# not independently uninstallable (removing the merged file isn't a supported op).
+_BUNDLED_SUBTITLE_IDS = {"lama", "sttn-auto", "sttn-detection", "propainter"}
 _STATE_LOCK = threading.RLock()
 _QUEUE_EVENT_LOCK = threading.Lock()
 _QUEUE_EVENT_SOURCE: ModelDownloadQueue | None = None
@@ -237,7 +248,7 @@ def list_models() -> list[dict]:
             | _BIREFNET_IDS
             | _SEEDVR_IDS
         )
-        item["can_install"] = lifecycle_managed
+        item["can_install"] = lifecycle_managed or model_id in _BUNDLED_SUBTITLE_IDS
         item["can_uninstall"] = lifecycle_managed
         item["can_toggle"] = True
         item.update(_builtin_platform_fields(model_id, item))

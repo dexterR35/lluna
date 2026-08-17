@@ -35,6 +35,9 @@ def test_required_model_inventory_is_unique() -> None:
         "birefnet-matting",
         "seedvr2-3b",
         "seedvr2-7b",
+        "seedvr2-3b-gguf-q3",
+        "seedvr2-3b-gguf-q4",
+        "seedvr2-3b-gguf-q8",
     }
     assert required == set(MODEL_REGISTRY)
     assert all(model.source and model.license for model in MODEL_REGISTRY.values())

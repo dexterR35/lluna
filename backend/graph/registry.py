@@ -70,6 +70,24 @@ UPSCALE_MODELS = [
         "seedvr2-7b",
         "Higher-capacity one-step image/video restoration (CUDA, very high VRAM).",
     ),
+    option(
+        "SeedVR2_3B_GGUF_Q3",
+        "SeedVR2 · 3B (GGUF Q3_K_M)",
+        "seedvr2-3b-gguf-q3",
+        "GGUF-quantized for the lowest VRAM use, some quality loss (CUDA).",
+    ),
+    option(
+        "SeedVR2_3B_GGUF_Q4",
+        "SeedVR2 · 3B (GGUF Q4_K_M)",
+        "seedvr2-3b-gguf-q4",
+        "GGUF-quantized for low VRAM use (CUDA).",
+    ),
+    option(
+        "SeedVR2_3B_GGUF_Q8",
+        "SeedVR2 · 3B (GGUF Q8_0)",
+        "seedvr2-3b-gguf-q8",
+        "GGUF-quantized for reduced VRAM use, closest to fp16 quality (CUDA).",
+    ),
 ]
 BIREFNET_MODELS = [
     option("BiRefNet", "BiRefNet · general", "birefnet", "Official general-purpose model."),
@@ -506,7 +524,13 @@ _NODES = [
                 maximum=8192,
                 step=16,
                 description="Target output size. SeedVR2 preserves the input aspect ratio.",
-                visible_for_models=["SeedVR2_3B", "SeedVR2_7B"],
+                visible_for_models=[
+                    "SeedVR2_3B",
+                    "SeedVR2_7B",
+                    "SeedVR2_3B_GGUF_Q3",
+                    "SeedVR2_3B_GGUF_Q4",
+                    "SeedVR2_3B_GGUF_Q8",
+                ],
             ),
             parameter(
                 "seedvrSpSize",
@@ -516,7 +540,13 @@ _NODES = [
                 minimum=1,
                 maximum=8,
                 description="Use one process per GPU for long videos; keep 1 for images.",
-                visible_for_models=["SeedVR2_3B", "SeedVR2_7B"],
+                visible_for_models=[
+                    "SeedVR2_3B",
+                    "SeedVR2_7B",
+                    "SeedVR2_3B_GGUF_Q3",
+                    "SeedVR2_3B_GGUF_Q4",
+                    "SeedVR2_3B_GGUF_Q8",
+                ],
             ),
             parameter(
                 "seedvrSeed",
@@ -525,7 +555,13 @@ _NODES = [
                 666,
                 minimum=-1,
                 maximum=2147483647,
-                visible_for_models=["SeedVR2_3B", "SeedVR2_7B"],
+                visible_for_models=[
+                    "SeedVR2_3B",
+                    "SeedVR2_7B",
+                    "SeedVR2_3B_GGUF_Q3",
+                    "SeedVR2_3B_GGUF_Q4",
+                    "SeedVR2_3B_GGUF_Q8",
+                ],
             ),
             parameter(
                 "denoise",

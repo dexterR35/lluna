@@ -198,7 +198,25 @@ def compatible_backend(manifest: ModelManifest) -> tuple[str, tuple[str, ...], t
     elif backend not in runtime.backends:
         reasons.append(f"The {runtime.name} runtime does not support {backend}.")
     if backend not in manifest.hardware.backends:
-        reasons.append(f"This model does not declare support for {backend}.")
+        if (
+            backend != "cuda"
+            and "cuda" in manifest.hardware.backends
+            and any(gpu.vendor.upper() == "NVIDIA" for gpu in profile.gpus)
+            and not profile.capabilities.torch_cuda
+        ):
+            # The GPU is real (detect_gpus() falls back to nvidia-smi here), but
+            # this environment's installed Torch build has no CUDA support, so
+            # select_execution_policy() fell back to `backend`. Say that plainly
+            # instead of the generic message below, which reads as if the model
+            # were simply incompatible with hardware the user does have.
+            reasons.append(
+                "An NVIDIA GPU was detected, but the installed PyTorch build has "
+                "no CUDA support, so this CUDA-only model is unavailable. "
+                "Re-run install.sh (or install.bat on Windows) to reinstall with "
+                "the correct backend for this hardware."
+            )
+        else:
+            reasons.append(f"This model does not declare support for {backend}.")
     # Eligibility is judged against *installed* memory, never momentarily free
     # memory: a model does not stop being supported by this machine because a
     # browser is holding RAM or VRAM right now. Free memory is a warning here and

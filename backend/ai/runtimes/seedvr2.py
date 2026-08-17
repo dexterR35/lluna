@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import random
 import shutil
+import socket
 import subprocess
 import tempfile
 import threading
@@ -42,6 +43,12 @@ def _dimensions(path: Path, target_long_edge: int) -> tuple[int, int]:
     return output_height, output_width
 
 
+def _free_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
+
+
 def run_seedvr(
     payload: dict,
     *,
@@ -65,8 +72,15 @@ def run_seedvr(
     script = seedvr_models.source_dir() / "projects" / (
         "inference_seedvr2_7b.py" if model_id.endswith("7b") else "inference_seedvr2_3b.py"
     )
-    torchrun = seedvr_models.runtime_dir() / ("Scripts/torchrun.exe" if os.name == "nt" else "bin/torchrun")
-    if not script.is_file() or not torchrun.is_file():
+    # When torch.distributed.run is used below (sp_size > 1) it's invoked as
+    # `python -m torch.distributed.run` rather than the compiled torchrun.exe
+    # launcher: on Windows that launcher stub swallows stdout/stderr when the
+    # interpreter crashes before argparse runs (e.g. a missing runtime DLL during
+    # `import torch`), leaving run_seedvr()'s captured output empty and only
+    # "SeedVR2 inference failed." to show the user. `python -m` reliably
+    # propagates the real traceback through the redirected pipe instead.
+    runtime_python = seedvr_models.runtime_python()
+    if not script.is_file() or not runtime_python.is_file():
         raise RuntimeError("SeedVR2 source or isolated runtime is incomplete.")
 
     target_long_edge = max(512, int(payload.get("target_long_edge") or 2048))
@@ -93,11 +107,7 @@ def run_seedvr(
             staged_name = f"{input_path.stem}.png"
         staged_input = input_dir / staged_name
         shutil.copy2(input_path, staged_input)
-        command = [
-            str(torchrun),
-            "--nproc-per-node",
-            str(sp_size),
-            str(script),
+        script_args = [
             "--video_path",
             str(input_dir),
             "--output_dir",
@@ -113,6 +123,42 @@ def run_seedvr(
             "--checkpoint_dir",
             str(seedvr_models.checkpoints_dir()),
         ]
+        # torch's Windows wheels aren't built with libuv, and torchrun's own
+        # elastic-agent rendezvous hardcodes socket.getfqdn() for the address it
+        # hands to worker processes with no override -- which hangs forever on a
+        # machine whose hostname doesn't resolve on its local network (common on
+        # corporate/VPN setups). For the common single-process case, skip torchrun
+        # entirely: dist.init_process_group()'s own env:// path reads MASTER_ADDR
+        # straight from the environment with no fqdn substitution, so setting the
+        # same env vars torchrun would have gets there without the broken lookup.
+        libuv_env = {"USE_LIBUV": "0"}
+        if sp_size == 1:
+            command = [str(runtime_python), str(script), *script_args]
+            libuv_env.update(
+                MASTER_ADDR="127.0.0.1",
+                MASTER_PORT=str(_free_port()),
+                RANK="0",
+                WORLD_SIZE="1",
+                LOCAL_RANK="0",
+            )
+        else:
+            command = [
+                str(runtime_python),
+                "-m",
+                "torch.distributed.run",
+                "--standalone",
+                "--nproc-per-node",
+                str(sp_size),
+                str(script),
+                *script_args,
+            ]
+        if not model_id.endswith("7b"):
+            # The 3B script accepts an explicit checkpoint filename so GGUF
+            # variants (which share checkpoints_dir() with the fp16/bf16 model)
+            # load the right file; the 7B script has no GGUF variants yet.
+            command.extend(
+                ("--checkpoint_filename", seedvr_models.MODEL_CONFIG[model_id]["checkpoint"])
+            )
         if payload.get("out_fps"):
             command.extend(("--out_fps", str(float(payload["out_fps"]))))
         log(f"SeedVR2 {model_id}: {res_w}×{res_h}, sequence parallel {sp_size}")
@@ -121,6 +167,7 @@ def run_seedvr(
         env["PYTHONPATH"] = os.pathsep.join(
             item for item in (str(seedvr_models.source_dir()), env.get("PYTHONPATH", "")) if item
         )
+        env.update(libuv_env)
         with tempfile.NamedTemporaryFile(mode="w+", encoding="utf-8") as output_log:
             process = subprocess.Popen(  # noqa: S603 - managed runtime and fixed script
                 command,
@@ -131,9 +178,10 @@ def run_seedvr(
                 text=True,
                 start_new_session=os.name != "nt",
             )
-            # torchrun spawns --nproc-per-node worker children; terminating only
-            # the torchrun PID can orphan them, so cancellation goes through
-            # ProcessManager, which also reaps the process's descendants.
+            # When sp_size > 1, torchrun spawns --nproc-per-node worker children;
+            # terminating only the launcher PID can orphan them, so cancellation
+            # goes through ProcessManager, which also reaps the process's
+            # descendants (a no-op tree of one for the sp_size == 1 direct case).
             ProcessManager.instance().add_process(process, name="seedvr2-worker")
             try:
                 while process.poll() is None:

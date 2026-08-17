@@ -86,10 +86,16 @@ class VideoDiffusionInfer():
         self.dit.set_gradient_checkpointing(self.config.dit.gradient_checkpoint)
 
         if checkpoint:
-            state = torch.load(checkpoint, map_location="cpu", mmap=True)
-            loading_info = self.dit.load_state_dict(state, strict=True, assign=True)
-            print(f"Loading pretrained ckpt from {checkpoint}")
-            print(f"Loading info: {loading_info}")
+            if str(checkpoint).lower().endswith(".gguf"):
+                from common.gguf_loader import load_gguf_checkpoint
+
+                print(f"Loading GGUF quantized ckpt from {checkpoint}")
+                load_gguf_checkpoint(self.dit, checkpoint)
+            else:
+                state = torch.load(checkpoint, map_location="cpu", mmap=True)
+                loading_info = self.dit.load_state_dict(state, strict=True, assign=True)
+                print(f"Loading pretrained ckpt from {checkpoint}")
+                print(f"Loading info: {loading_info}")
             self.dit = meta_non_persistent_buffer_init_fn(self.dit)
 
         if device in [get_device(), "cuda"]:

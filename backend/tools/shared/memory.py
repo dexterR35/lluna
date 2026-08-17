@@ -26,7 +26,13 @@ _PROPAINTER_PER_FRAME_MPX = 140.0
 _SUPIR_MINIMUM_VRAM_MB = 12000.0  # SDXL backbone + VAE + dual CLIP + SUPIR weights
 _SUPIR_LLAVA_FP16_EXTRA_MB = 8000.0  # automatic captioning at fp16 (~20GB total)
 _SUPIR_LLAVA_8BIT_EXTRA_MB = 4000.0  # automatic captioning, 8-bit quantized
-_SEEDVR_MINIMUM_VRAM_MB = {"seedvr2-3b": 24576.0, "seedvr2-7b": 49152.0}
+_SEEDVR_MINIMUM_VRAM_MB = {
+    "seedvr2-3b": 24576.0,
+    "seedvr2-7b": 49152.0,
+    "seedvr2-3b-gguf-q3": 8192.0,
+    "seedvr2-3b-gguf-q4": 9216.0,
+    "seedvr2-3b-gguf-q8": 11264.0,
+}
 # SAM 3.1 also runs in an isolated per-call CUDA subprocess (see
 # backend/ai/runtimes/sam3.py); this is an estimate (848M params, no vendor
 # figure published) pending real-world measurement.

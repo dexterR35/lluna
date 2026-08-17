@@ -118,11 +118,27 @@ async function startPythonControlPlane() {
   }
   async function stop() {
     if (child.exitCode !== null) return;
-    child.kill("SIGTERM");
-    await Promise.race([
-      new Promise((resolve) => child.once("exit", resolve)),
-      new Promise((resolve) => setTimeout(resolve, 3500)),
-    ]);
+    const exited = () => new Promise((resolve) => {
+      if (child.exitCode !== null) return resolve();
+      child.once("exit", resolve);
+    });
+    // Windows delivers no real signals to child processes: child.kill()
+    // there always force-terminates immediately, skipping Python's atexit
+    // cleanup and orphaning the inference worker subprocess with its
+    // loaded model still resident in memory. Ask the backend to shut
+    // itself down over HTTP first so it can tear down that worker.
+    try {
+      await fetch(`${baseUrl}/api/shutdown`, {
+        method: "POST",
+        headers: { "X-Lluna-Token": token },
+        signal: AbortSignal.timeout(2000),
+      });
+    } catch { /* Backend may already be unresponsive; fall through to kill. */ }
+    await Promise.race([exited(), new Promise((resolve) => setTimeout(resolve, 3500))]);
+    if (child.exitCode === null) {
+      child.kill("SIGTERM");
+      await Promise.race([exited(), new Promise((resolve) => setTimeout(resolve, 1500))]);
+    }
     if (child.exitCode === null) child.kill("SIGKILL");
     log.end();
   }

@@ -96,4 +96,4 @@ def test_seedvr_is_available_in_image_and_video_upscale_nodes() -> None:
         parameter for parameter in catalog["lluna.video.upscale"].parameters if parameter.id == "model"
     )
     assert {item["modelId"] for item in image_model.options} >= {"seedvr2-3b", "seedvr2-7b"}
-    assert {item["modelId"] for item in video_model.options} == {"seedvr2-3b", "seedvr2-7b"}
+    assert {item["modelId"] for item in video_model.options} >= {"seedvr2-3b", "seedvr2-7b"}

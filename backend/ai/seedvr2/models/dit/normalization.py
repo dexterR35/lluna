@@ -12,12 +12,27 @@
 # // See the License for the specific language governing permissions and
 # // limitations under the License.
 
+import warnings
 from typing import Callable, Optional
 from diffusers.models.normalization import RMSNorm
 from torch import nn
 
 # (dim: int, eps: float, elementwise_affine: bool)
 norm_layer_type = Callable[[int, float, bool], nn.Module]
+
+_warned_apex_fallback: set[str] = set()
+
+
+def _warn_apex_fallback(norm_type: str) -> None:
+    if norm_type in _warned_apex_fallback:
+        return
+    _warned_apex_fallback.add(norm_type)
+    warnings.warn(
+        f"SeedVR2: apex is not available, falling back to a plain PyTorch "
+        f"implementation for norm_type={norm_type!r}. This is slower but "
+        f"numerically equivalent.",
+        stacklevel=3,
+    )
 
 
 def get_norm_layer(norm_type: Optional[str]) -> norm_layer_type:
@@ -41,22 +56,38 @@ def get_norm_layer(norm_type: Optional[str]) -> norm_layer_type:
             )
 
         if norm_type == "fusedln":
-            from apex.normalization import FusedLayerNorm
+            try:
+                from apex.normalization import FusedLayerNorm
 
-            return FusedLayerNorm(
-                normalized_shape=dim,
-                elementwise_affine=elementwise_affine,
-                eps=eps,
-            )
+                return FusedLayerNorm(
+                    normalized_shape=dim,
+                    elementwise_affine=elementwise_affine,
+                    eps=eps,
+                )
+            except ImportError:
+                _warn_apex_fallback(norm_type)
+                return nn.LayerNorm(
+                    normalized_shape=dim,
+                    eps=eps,
+                    elementwise_affine=elementwise_affine,
+                )
 
         if norm_type == "fusedrms":
-            from apex.normalization import FusedRMSNorm
+            try:
+                from apex.normalization import FusedRMSNorm
 
-            return FusedRMSNorm(
-                normalized_shape=dim,
-                elementwise_affine=elementwise_affine,
-                eps=eps,
-            )
+                return FusedRMSNorm(
+                    normalized_shape=dim,
+                    elementwise_affine=elementwise_affine,
+                    eps=eps,
+                )
+            except ImportError:
+                _warn_apex_fallback(norm_type)
+                return RMSNorm(
+                    dim=dim,
+                    eps=eps,
+                    elementwise_affine=elementwise_affine,
+                )
 
         raise NotImplementedError(f"{norm_type} is not supported")
 

@@ -61,6 +61,23 @@ class HardwareDetector:
         except Exception as exc:
             gpus = ()
             warnings.append(f"GPU probe failed: {type(exc).__name__}")
+        if (
+            not capabilities.torch_cuda
+            and not capabilities.torch_directml
+            and any(gpu.vendor.upper() == "NVIDIA" for gpu in gpus)
+        ):
+            # detect_gpus() falls back to nvidia-smi (independent of Torch) when
+            # Torch itself has no CUDA support, so a GPU can be visible here while
+            # torch_cuda is still False -- e.g. this environment's Torch build was
+            # installed as CPU-only before this GPU was available. That leaves
+            # CUDA-only models permanently unavailable with no explanation unless
+            # this is called out explicitly.
+            warnings.append(
+                "An NVIDIA GPU was detected, but the installed PyTorch build has "
+                "no CUDA support (running CPU-only). CUDA-only models will stay "
+                "unavailable until the correct backend is installed for this "
+                "hardware: re-run install.sh (or install.bat on Windows)."
+            )
         try:
             disk_mb = shutil.disk_usage(Path(self._paths.project_root)).free / (1024 * 1024)
         except OSError as exc:

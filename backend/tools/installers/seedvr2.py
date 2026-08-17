@@ -44,10 +44,46 @@ MODEL_CONFIG = {
         "checkpoint_sha256": "e1b2ae25505607e61f2a7dc7967ba778aaf3e3626d9969ce6e24c52d9ddebfcd",
         "minimum_vram_mb": 49152,
     },
+    # GGUF-quantized 3B variants: same architecture and (verified) identical
+    # state_dict tensor names as "seedvr2-3b" above, loaded through
+    # backend/ai/seedvr2/common/gguf_loader.py instead of a plain torch.load. Only
+    # the 2D weight matrix of each Linear-like layer is quantized; the compressed
+    # bytes stay on CPU and are dequantized just-in-time per forward pass, so the
+    # resident VRAM footprint is far below the fp16/bf16 checkpoint's 24576 MB
+    # floor -- the minimum_vram_mb values below are engineering estimates pending
+    # confirmation on real hardware, not measured floors like the entry above.
+    "seedvr2-3b-gguf-q3": {
+        "repo": "cmeka/SeedVR2-GGUF",
+        "revision": "de058a1261f2fc4bb41f39e9ddf313877e4ebf0d",
+        "checkpoint": "seedvr2_ema_3b-Q3_K_M.gguf",
+        "checkpoint_size": 1553006944,
+        "checkpoint_sha256": "44b67c65b272cb778cef68c67370a5703a4e1ab09e2cd5b9a8e2a4eb4e3bdb8c",
+        "minimum_vram_mb": 8192,
+    },
+    "seedvr2-3b-gguf-q4": {
+        "repo": "cmeka/SeedVR2-GGUF",
+        "revision": "de058a1261f2fc4bb41f39e9ddf313877e4ebf0d",
+        "checkpoint": "seedvr2_ema_3b-Q4_K_M.gguf",
+        "checkpoint_size": 1995344224,
+        "checkpoint_sha256": "e665e3909de1a8c88a69c609bca9d43ff5a134647face2ce4497640cc3597f0e",
+        "minimum_vram_mb": 9216,
+    },
+    "seedvr2-3b-gguf-q8": {
+        "repo": "cmeka/SeedVR2-GGUF",
+        "revision": "de058a1261f2fc4bb41f39e9ddf313877e4ebf0d",
+        "checkpoint": "seedvr2_ema_3b-Q8_0.gguf",
+        "checkpoint_size": 3660613984,
+        "checkpoint_sha256": "be0d60083a2051a265eb4b77f28edf494e6db67ffc250216f32b72292e5cbd96",
+        "minimum_vram_mb": 11264,
+    },
 }
 
-# The VAE is byte-identical across both repos (same lfs oid on both), so any
-# installed model's download can supply it.
+# The VAE is byte-identical across the official 3B/7B repos (same lfs oid on both),
+# so any of those two downloads can supply it -- but the GGUF repo above doesn't
+# host it at all, so it's always sourced from the canonical 3B repo/revision
+# regardless of which variant is being installed.
+VAE_SOURCE_REPO = MODEL_CONFIG["seedvr2-3b"]["repo"]
+VAE_SOURCE_REVISION = MODEL_CONFIG["seedvr2-3b"]["revision"]
 VAE_ARTIFACT = {
     "filename": "ema_vae.pth",
     "size": 1002691902,
@@ -75,9 +111,11 @@ APEX_WHEELS = {
 # source: a CUDA Toolkit, ~10 GB of RAM and up to two hours on the user's machine.
 # The project's own GitHub releases carry prebuilt wheels keyed by CUDA line, torch
 # minor, C++ ABI and Python tag; the entry below is the one matching this runtime's
-# torch 2.4.0+cu121 (cu122 wheels are the CUDA 12.x line, and torch's own wheels are
+# torch 2.4.1+cu121 (cu122 wheels are the CUDA 12.x line, and torch's own wheels are
 # built with _GLIBCXX_USE_CXX11_ABI=0 -> abiFALSE). Upstream publishes no Windows
-# wheel, and neither does Apex, which is what keeps this runtime Linux-only.
+# wheel, and neither does Apex; both are skipped outside Linux and the runtime
+# falls back to SDPA attention / plain PyTorch normalization instead (see
+# models/dit{,_v2}/attention.py and normalization.py).
 FLASH_ATTN_VERSION = "2.5.9.post1"
 FLASH_ATTN_WHEELS = {
     ("cp310", "linux"): {
@@ -95,8 +133,13 @@ FLASH_ATTN_RELEASE_URL = (
 
 SEEDVR_PACKAGES = (
     "einops==0.7.0",
-    "torch==2.4.0",
-    "torchvision==0.19.0",
+    # torch==2.4.0's Windows cu121 wheel ships fbgemm.dll without a DLL it needs
+    # (libomp140.x86_64.dll), so `import torch` itself fails with WinError 126.
+    # 2.4.1 is the same minor line (ABI-compatible with the flash-attn wheel
+    # below, which is tagged for the 2.4.x line generically) with that packaging
+    # bug fixed; torchvision 0.19.1 is the version pytorch.org pairs with it.
+    "torch==2.4.1",
+    "torchvision==0.19.1",
     "omegaconf==2.3.0",
     "opencv-python==4.9.0.80",
     "diffusers==0.33.1",
@@ -113,6 +156,7 @@ SEEDVR_PACKAGES = (
     "timm==1.0.11",
     "tqdm",
     "ninja",
+    "gguf",
 )
 
 
@@ -199,11 +243,10 @@ def _platform_tag() -> str:
 def _ensure_flash_attn_wheel(python_tag: str) -> Path:
     """Download and verify the pinned flash-attn wheel.
 
-    flash-attn is not optional for SeedVR2: the vendored DiT imports
-    ``flash_attn_varlen_func`` at module scope and its attention blocks are built
-    around packed variable-length sequences. Installing without it would produce
-    a runtime that imports and then fails on the first frame, so a missing wheel
-    fails the install here, where the message can be acted on.
+    flash-attn is an optional accelerator, not a hard requirement: the vendored DiT
+    (``models/dit{,_v2}/attention.py``) falls back to a PyTorch SDPA attention
+    implementation when flash-attn isn't importable. It's only worth installing
+    where a prebuilt wheel exists (Linux); callers gate on that before calling this.
     """
     expected = FLASH_ATTN_WHEELS.get((python_tag, _platform_tag()))
     if expected is None:
@@ -251,9 +294,11 @@ def _ensure_flash_attn_wheel(python_tag: str) -> Path:
 def _ensure_apex_wheel(python_tag: str) -> Path:
     """Download (if needed) and verify the pinned Apex wheel for ``python_tag``.
 
-    Required, not optional: the shipped SeedVR2 configs ask for ``fusedrms`` and
-    ``fusedln`` normalization, which resolve to apex classes. Apex publishes
-    Linux wheels only, which is what limits this runtime's platforms.
+    Apex is an optional accelerator, not a hard requirement: the shipped SeedVR2
+    configs ask for ``fusedrms``/``fusedln`` normalization, but
+    ``models/dit{,_v2}/normalization.py`` falls back to plain RMSNorm/LayerNorm when
+    apex isn't importable. Apex publishes Linux wheels only, so it's only worth
+    installing there; callers gate on that before calling this.
     """
     expected = APEX_WHEELS.get(python_tag) if _platform_tag() == "linux" else None
     if expected is None:
@@ -299,14 +344,6 @@ def _ensure_apex_wheel(python_tag: str) -> Path:
 def _install_runtime() -> None:
     if runtime_python().is_file() and (runtime_dir() / "runtime.json").is_file():
         return
-    if _platform_tag() != "linux":
-        # Checked before anything is downloaded or provisioned: SeedVR2's two
-        # native dependencies ship Linux wheels only, and building either from
-        # source on Windows needs a CUDA Toolkit and MSVC.
-        raise RuntimeError(
-            "SeedVR2 installs on Linux only: its required flash-attn and Apex "
-            "wheels are published for Linux exclusively."
-        )
     python = _bootstrap_python()
     version_probe = subprocess.run(  # noqa: S603 - reviewed Python executable and fixed probe
         [python, "-c", "import sys; print(f'cp{sys.version_info.major}{sys.version_info.minor}')"],
@@ -316,37 +353,43 @@ def _install_runtime() -> None:
         timeout=30,
     )
     python_tag = version_probe.stdout.strip()
-    # Both are hard dependencies of the vendored source, and both are installed
-    # from pinned, hash-verified prebuilt wheels rather than compiled here: a
-    # source build of flash-attn would demand a CUDA Toolkit and up to two hours
-    # on the user's machine. Either failing aborts the install, so a runtime is
-    # never left in a state that imports but cannot run a frame.
-    apex_wheel = _ensure_apex_wheel(python_tag)
-    flash_attn_wheel = _ensure_flash_attn_wheel(python_tag)
+    # flash-attn and Apex are optional accelerators (see models/dit{,_v2}/attention.py
+    # and normalization.py for the SDPA / plain-norm fallbacks they use when absent).
+    # Both publish prebuilt wheels for Linux only, so they're attempted there when a
+    # matching wheel is pinned and skipped everywhere else, rather than failing the
+    # install outright.
+    pip_install_steps = [
+        [
+            "torch==2.4.1",
+            "torchvision==0.19.1",
+            "--index-url",
+            "https://download.pytorch.org/whl/cu121",
+        ],
+        list(SEEDVR_PACKAGES),
+    ]
+    runtime_metadata = {
+        "profile": SEEDVR_RUNTIME_PROFILE,
+        "bundledSource": SEEDVR_SOURCE_REPO,
+        "sourceCommit": SEEDVR_COMMIT,
+        "packages": list(SEEDVR_PACKAGES),
+        "flashAttention": None,
+        "fusedNorm": None,
+        "managedBy": "lluna",
+    }
+    if _platform_tag() == "linux" and (python_tag, "linux") in FLASH_ATTN_WHEELS:
+        flash_attn_wheel = _ensure_flash_attn_wheel(python_tag)
+        pip_install_steps.append([str(flash_attn_wheel)])
+        runtime_metadata["flashAttention"] = flash_attn_wheel.name
+    if _platform_tag() == "linux" and python_tag in APEX_WHEELS:
+        apex_wheel = _ensure_apex_wheel(python_tag)
+        pip_install_steps.append([str(apex_wheel)])
+        runtime_metadata["fusedNorm"] = apex_wheel.name
     create_isolated_venv(
         python_executable=python,
         target_dir=runtime_dir(),
         staging_name=".seedvr-python.staging",
-        pip_install_steps=[
-            [
-                "torch==2.4.0",
-                "torchvision==0.19.0",
-                "--index-url",
-                "https://download.pytorch.org/whl/cu121",
-            ],
-            list(SEEDVR_PACKAGES),
-            [str(flash_attn_wheel)],
-            [str(apex_wheel)],
-        ],
-        runtime_metadata={
-            "profile": SEEDVR_RUNTIME_PROFILE,
-            "bundledSource": SEEDVR_SOURCE_REPO,
-            "sourceCommit": SEEDVR_COMMIT,
-            "packages": list(SEEDVR_PACKAGES),
-            "flashAttention": flash_attn_wheel.name,
-            "fusedNorm": apex_wheel.name,
-            "managedBy": "lluna",
-        },
+        pip_install_steps=pip_install_steps,
+        runtime_metadata=runtime_metadata,
     )
 
 
@@ -358,27 +401,46 @@ def _download_checkpoint(model_id: str) -> None:
     if staging.exists():
         shutil.rmtree(staging, ignore_errors=True)
     staging.mkdir(parents=True, exist_ok=True)
-    patterns = [config["checkpoint"], VAE_ARTIFACT["filename"]]
+
+    # The VAE is shared across every SeedVR2 variant; skip re-downloading it once
+    # any prior install has already placed it in the shared checkpoints dir.
+    need_vae = not (checkpoints_dir() / VAE_ARTIFACT["filename"]).is_file()
+
     snapshot_download_with_progress(
         repo_id=config["repo"],
         revision=config["revision"],
         local_dir=str(staging),
-        allow_patterns=patterns,
+        allow_patterns=[config["checkpoint"]],
     )
     checkpoint_file = staging / config["checkpoint"]
-    vae_file = staging / VAE_ARTIFACT["filename"]
-    if not checkpoint_file.is_file() or not vae_file.is_file():
-        raise RuntimeError(f"Hugging Face did not provide the complete SeedVR2 {model_id} checkpoint.")
+    if not checkpoint_file.is_file():
+        raise RuntimeError(f"Hugging Face did not provide the SeedVR2 {model_id} checkpoint.")
     verify_pinned_artifact(
         checkpoint_file,
         expected_size=config["checkpoint_size"],
         expected_sha256=config["checkpoint_sha256"],
     )
-    verify_pinned_artifact(
-        vae_file, expected_size=VAE_ARTIFACT["size"], expected_sha256=VAE_ARTIFACT["sha256"]
-    )
+
+    if need_vae:
+        # config["repo"] may be a GGUF-only repo that doesn't host the VAE at all
+        # (e.g. cmeka/SeedVR2-GGUF), so it's always fetched from the canonical
+        # ByteDance 3B repo regardless of which variant's checkpoint this is.
+        snapshot_download_with_progress(
+            repo_id=VAE_SOURCE_REPO,
+            revision=VAE_SOURCE_REVISION,
+            local_dir=str(staging),
+            allow_patterns=[VAE_ARTIFACT["filename"]],
+        )
+        vae_file = staging / VAE_ARTIFACT["filename"]
+        if not vae_file.is_file():
+            raise RuntimeError("Hugging Face did not provide the SeedVR2 shared VAE.")
+        verify_pinned_artifact(
+            vae_file, expected_size=VAE_ARTIFACT["size"], expected_sha256=VAE_ARTIFACT["sha256"]
+        )
+
     checkpoints_dir().mkdir(parents=True, exist_ok=True)
-    for filename in (config["checkpoint"], VAE_ARTIFACT["filename"]):
+    filenames = [config["checkpoint"]] + ([VAE_ARTIFACT["filename"]] if need_vae else [])
+    for filename in filenames:
         source = staging / filename
         target = checkpoints_dir() / filename
         temporary = target.with_suffix(target.suffix + ".part")

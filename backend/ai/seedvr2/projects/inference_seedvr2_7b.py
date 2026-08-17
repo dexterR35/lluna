@@ -260,6 +260,11 @@ def generation_loop(runner, video_path='./test_videos', output_dir='./results', 
                 ).unsqueeze(0) / 255.0
                 if sp_size > 1:
                     raise ValueError("Sp size should be set to 1 for image inputs!")
+                # save_fps is unused by the mediapy.write_image branch below, but the
+                # save loop zips videos/input_videos/samples/ori_lengths/fps_lists
+                # together -- an unfilled fps_lists truncates that zip() to empty and
+                # silently skips saving every image in this batch.
+                fps_lists.append(out_fps or 0)
             else:
                 video, _, info = read_video(
                     os.path.join(video_path, video), output_format="TCHW"

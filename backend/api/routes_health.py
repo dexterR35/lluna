@@ -5,7 +5,7 @@ from __future__ import annotations
 import platform
 import sys
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 
 from backend.api.auth import require_token
 from backend.core.build_info import VERSION
@@ -27,6 +27,17 @@ def health() -> dict:
 @router.get("/ready")
 def ready() -> dict:
     return {"ready": _ready}
+
+
+@router.post("/api/shutdown", dependencies=[Depends(require_token)])
+def shutdown(request: Request) -> dict:
+    """Ask uvicorn to exit gracefully so the app lifespan can tear down
+    the inference worker process. Windows child_process.kill() never
+    delivers a real signal, so callers must use this instead of relying
+    on SIGTERM to reach the process.
+    """
+    request.app.state.server.should_exit = True
+    return {"stopping": True}
 
 
 @router.get("/api/version", dependencies=[Depends(require_token)])

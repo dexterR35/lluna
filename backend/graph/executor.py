@@ -1737,7 +1737,13 @@ class RunManager:
         }
         if adapter == "enhance":
             model_value = params.get("model") or settings.enhancement.mode
-            if model_value in {"SeedVR2_3B", "SeedVR2_7B"}:
+            if model_value in {
+                "SeedVR2_3B",
+                "SeedVR2_7B",
+                "SeedVR2_3B_GGUF_Q3",
+                "SeedVR2_3B_GGUF_Q4",
+                "SeedVR2_3B_GGUF_Q8",
+            }:
                 model_parameter = next(
                     item for item in get_node(node.schema_id).parameters if item.id == "model"
                 )

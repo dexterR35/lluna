@@ -116,7 +116,10 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("Lluna control plane may bind only to loopback")
     token = args.token or secrets.token_urlsafe(48)
     app = create_app(token)
-    uvicorn.run(app, host="127.0.0.1", port=args.port, access_log=False, log_level="info")
+    config = uvicorn.Config(app, host="127.0.0.1", port=args.port, access_log=False, log_level="info")
+    server = uvicorn.Server(config)
+    app.state.server = server
+    server.run()
     return 0
 
 
