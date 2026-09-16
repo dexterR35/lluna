@@ -118,9 +118,9 @@ async function startPythonControlPlane() {
   }
   async function stop() {
     if (child.exitCode !== null) return;
-    const exited = () => new Promise((resolve) => {
-      if (child.exitCode !== null) return resolve();
-      child.once("exit", resolve);
+    const exited = () => new Promise(/** @param {(value: void) => void} resolve */ (resolve) => {
+      if (child.exitCode !== null) return resolve(undefined);
+      child.once("exit", () => resolve(undefined));
     });
     // Windows delivers no real signals to child processes: child.kill()
     // there always force-terminates immediately, skipping Python's atexit

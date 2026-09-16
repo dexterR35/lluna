@@ -214,6 +214,20 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
     @apply bg-mg-accent/15 font-medium text-mg-accent hover:bg-mg-accent/15 hover:text-mg-accent;
   }
   .ui-nav-item > svg { @apply size-3.5 shrink-0; }
+  .lluna-library-filters {
+    @apply flex gap-1 overflow-x-auto border-b border-mg-border px-3 py-2;
+    scrollbar-width: none;
+  }
+  .lluna-library-filters::-webkit-scrollbar { display: none; }
+  .lluna-library-filter {
+    @apply inline-flex h-6 shrink-0 items-center gap-1.5 rounded-full border border-mg-border bg-mg-app px-2 text-[9px] font-medium text-mg-muted transition hover:border-mg-secondary/50 hover:text-mg-primary;
+  }
+  .lluna-library-filter small {
+    @apply text-[8px] tabular-nums opacity-70;
+  }
+  .lluna-library-filter.is-active {
+    @apply border-mg-accent/50 bg-mg-accent/10 text-mg-accent;
+  }
   .ui-settings {
     @apply grid h-[min(78vh,44rem)] grid-cols-[14rem_minmax(0,1fr)];
   }
@@ -359,6 +373,61 @@ button:not(:disabled), select:not(:disabled), [role="button"] { cursor: pointer;
   border: 0;
   background: transparent;
   box-shadow: none;
+}
+.lluna-node-body.is-media {
+  margin-top: 10px;
+  border-color: color-mix(in srgb, var(--node-accent, var(--mg-accent)) 20%, var(--mg-border));
+  background: var(--mg-bg-app);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .015);
+}
+.lluna-node.is-media-node {
+  background: linear-gradient(
+    155deg,
+    color-mix(in srgb, var(--node-accent, var(--mg-accent)) 9%, var(--mg-bg-node)),
+    var(--mg-bg-panel) 58%
+  );
+}
+.lluna-node-media {
+  position: relative;
+  min-height: 176px;
+  overflow: hidden;
+  background: var(--mg-bg-app);
+}
+.lluna-node-media .checkerboard {
+  min-height: 176px;
+  border: 0;
+}
+.lluna-node-media .lluna-node-thumbs {
+  min-height: 176px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 3px;
+  padding: 3px;
+}
+.lluna-node-live-preview {
+  display: block;
+  width: 100%;
+  min-height: 176px;
+  max-height: 240px;
+  object-fit: contain;
+  background: var(--mg-bg-app);
+}
+.lluna-node-media-name {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  max-width: calc(100% - 16px);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, .1);
+  border-radius: 999px;
+  background: rgba(5, 8, 12, .78);
+  padding: 4px 8px;
+  color: rgba(255, 255, 255, .86);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  backdrop-filter: blur(8px);
 }
 .lluna-save-progress-list {
   display: flex;

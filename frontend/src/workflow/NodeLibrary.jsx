@@ -79,11 +79,14 @@ function LibraryGroup({ category, nodes, closed, onToggle }) {
   );
 }
 
-/** @param {{query: string, onQuery: (value: string) => void, groups: [string, import("../types").NodeDefinition[]][], closed: string[], onToggleCategory: (category: string) => void, trailing?: import("react").ReactNode, templates?: TemplateSummary[], onInsertTemplate?: (template: TemplateSummary) => void}} props */
+/** @param {{query: string, onQuery: (value: string) => void, groups: [string, import("../types").NodeDefinition[]][], filters?: Array<{name: string, count: number}>, activeFilter?: string, onFilter?: (value: string) => void, closed: string[], onToggleCategory: (category: string) => void, trailing?: import("react").ReactNode, templates?: TemplateSummary[], onInsertTemplate?: (template: TemplateSummary) => void}} props */
 function LibraryBody({
   query,
   onQuery,
   groups,
+  filters = [],
+  activeFilter = "All",
+  onFilter = () => {},
   closed,
   onToggleCategory,
   trailing,
@@ -103,6 +106,26 @@ function LibraryBody({
         </div>
         {trailing}
       </div>
+      {filters.length > 1 && (
+        <div
+          className="lluna-library-filters"
+          role="group"
+          aria-label="Filter nodes by category"
+        >
+          {filters.map((filter) => (
+            <button
+              key={filter.name}
+              type="button"
+              className={`lluna-library-filter ${activeFilter === filter.name ? "is-active" : ""}`}
+              aria-pressed={activeFilter === filter.name}
+              onClick={() => onFilter(filter.name)}
+            >
+              <span>{filter.name}</span>
+              <small>{filter.count}</small>
+            </button>
+          ))}
+        </div>
+      )}
       <div className="min-h-0 flex-1 overflow-y-auto p-2.5">
         <TemplateList templates={templates} onInsert={onInsertTemplate} />
         {!groups.length && !templates.length && (
@@ -194,6 +217,7 @@ export function NodeLibrary() {
   );
   const setValue = useDesktopStore((store) => store.setValue);
   const [query, setQuery] = useState("");
+  const [activeFilter, setActiveFilter] = useState("All");
   const [closed, setClosed] = useState(/** @type {string[]} */ ([]));
   const [preview, setPreview] = useState(false);
   const [activeCategory, setActiveCategory] = useState(
@@ -216,31 +240,56 @@ export function NodeLibrary() {
     () => definitions.filter(isVisibleCatalogNode),
     [definitions],
   );
+  const filters = useMemo(() => {
+    const counts = new Map();
+    for (const item of visibleDefinitions) {
+      const name = (item.category || "Other").split("/")[0];
+      counts.set(name, (counts.get(name) || 0) + 1);
+    }
+    return [
+      { name: "All", count: visibleDefinitions.length },
+      ...[...counts.entries()]
+        .sort(([a], [b]) => a.localeCompare(b, "en-US"))
+        .map(([name, count]) => ({ name, count })),
+    ];
+  }, [visibleDefinitions]);
   const matchingTemplates = useMemo(() => {
     const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-    return templates.filter((template) =>
-      words.every((word) =>
-        `${template.name} ${template.category} ${template.description}`
-          .toLowerCase()
-          .includes(word),
-      ),
-    );
-  }, [templates, query]);
+    return templates.filter((template) => {
+      const inCategory =
+        activeFilter === "All" ||
+        (template.category || "Other").split("/")[0] === activeFilter;
+      return (
+        inCategory &&
+        words.every((word) =>
+          `${template.name} ${template.category} ${template.description}`
+            .toLowerCase()
+            .includes(word),
+        )
+      );
+    });
+  }, [templates, query, activeFilter]);
   const groups = useMemo(() => {
     const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-    const filtered = visibleDefinitions.filter((item) =>
-      words.every((word) =>
-        `${item.name} ${item.category || ""} ${item.description || ""}`
-          .toLowerCase()
-          .includes(word),
-      ),
-    );
+    const filtered = visibleDefinitions.filter((item) => {
+      const inCategory =
+        activeFilter === "All" ||
+        (item.category || "Other").split("/")[0] === activeFilter;
+      return (
+        inCategory &&
+        words.every((word) =>
+          `${item.name} ${item.category || ""} ${item.description || ""}`
+            .toLowerCase()
+            .includes(word),
+        )
+      );
+    });
     /** @type {Record<string, import("../types").NodeDefinition[]>} */
     const grouped = {};
     for (const item of filtered)
       (grouped[item.category || "Other"] ||= []).push(item);
     return Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b, "en-US"));
-  }, [visibleDefinitions, query]);
+  }, [visibleDefinitions, query, activeFilter]);
 
   const categoryIcons = useMemo(() => {
     /** @type {Record<string, import("../types").NodeDefinition[]>} */
@@ -336,6 +385,12 @@ export function NodeLibrary() {
               query={query}
               onQuery={setQuery}
               groups={previewGroups}
+              filters={filters}
+              activeFilter={activeFilter}
+              onFilter={(value) => {
+                setActiveFilter(value);
+                setActiveCategory(null);
+              }}
               closed={closed}
               onToggleCategory={toggleCategory}
               templates={matchingTemplates}
@@ -355,6 +410,9 @@ export function NodeLibrary() {
         query={query}
         onQuery={setQuery}
         groups={groups}
+        filters={filters}
+        activeFilter={activeFilter}
+        onFilter={setActiveFilter}
         closed={closed}
         onToggleCategory={toggleCategory}
         templates={matchingTemplates}

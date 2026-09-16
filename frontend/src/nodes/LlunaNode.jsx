@@ -24,6 +24,10 @@ import {
   capabilityContract,
   parametersForCapabilities,
 } from "../models/modelCapabilities";
+import {
+  ArtifactThumbnail,
+  ArtifactThumbGrid,
+} from "../preview/ArtifactPreview";
 
 const SETTINGS_CARD_SCHEMAS = new Set(["lluna.input.llava"]);
 
@@ -117,6 +121,7 @@ function PillSelect({ label, value, disabled, options, onChange, stopPointer }) 
  *   min?: number,
  *   max?: number,
  *   step?: number,
+ *   prefix?: string,
  *   disabled?: boolean,
  *   onChange: (value: number) => void,
  *   stopPointer: (event: import("react").SyntheticEvent) => void,
@@ -128,6 +133,7 @@ function QuantityStepper({
   min = 1,
   max = 8,
   step = 1,
+  prefix = "×",
   disabled,
   onChange,
   stopPointer,
@@ -151,7 +157,7 @@ function QuantityStepper({
       >
         <Minus aria-hidden />
       </button>
-      <span aria-label={label}>x{value}</span>
+      <span aria-label={label}>{prefix}{value}</span>
       <button
         type="button"
         aria-label={`Increase ${label}`}
@@ -319,7 +325,7 @@ function LlunaNodeComponent({ id, data, selected }) {
   const isSelectObject = definition.schemaId === "lluna.mask.select_object";
   const quantityParam = visibleParameters.find(isQuantityParam);
   const stepsParam = visibleParameters.find(
-    (parameter) => parameter.id === "steps",
+    (parameter) => /steps$/i.test(parameter.id),
   );
   const footerParams = visibleParameters.filter((parameter) => {
     if (isSettingsCard) return false;
@@ -363,6 +369,16 @@ function LlunaNodeComponent({ id, data, selected }) {
     "lluna.output.preview_",
   );
   const isSaveImage = definition.schemaId === "lluna.output.save_image";
+  const isMediaInput = [
+    "lluna.input.image",
+    "lluna.input.images",
+    "lluna.input.video",
+    "lluna.input.mask",
+  ].includes(definition.schemaId);
+  const showArtifactPreview =
+    supportsPreview &&
+    data.appearance?.showPreview !== false &&
+    (artifactIds.length > 0 || Boolean(state?.previewImage));
   const reportedSaveItems = state
     ? state.saveItems || []
     : persistedResult?.saveItems || [];
@@ -379,7 +395,11 @@ function LlunaNodeComponent({ id, data, selected }) {
           detail: "Saved successfully",
         }))
       : [];
-  const showNodeBody = isSettingsCard || showPromptField || saveItems.length > 0;
+  const showNodeBody =
+    isSettingsCard ||
+    showPromptField ||
+    saveItems.length > 0 ||
+    showArtifactPreview;
   const promptFirst = showPromptField && !isSettingsCard;
   const inputs = definition.inputs || [];
   const outputs = definition.outputs || [];
@@ -430,7 +450,7 @@ function LlunaNodeComponent({ id, data, selected }) {
           ? "Open the media preview or connect another step"
           : "Use the settings button to edit this node"
       }
-      className={`lluna-node ${selected ? "is-selected" : ""} ${data.disabled ? "is-disabled" : ""} ${showPorts ? "is-ports-open" : ""} ${promptFirst ? "is-prompt" : ""} ${isSettingsCard ? "is-settings-card" : ""}`}
+      className={`lluna-node ${selected ? "is-selected" : ""} ${data.disabled ? "is-disabled" : ""} ${showPorts ? "is-ports-open" : ""} ${promptFirst ? "is-prompt" : ""} ${isSettingsCard ? "is-settings-card" : ""} ${isMediaInput && showArtifactPreview ? "is-media-node" : ""}`}
       style={/** @type {import("react").CSSProperties} */ ({ "--node-accent": accent })}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -503,10 +523,47 @@ function LlunaNodeComponent({ id, data, selected }) {
 
       {showNodeBody && (
         <div
-          className={`lluna-node-body ${isSettingsCard ? "is-settings" : ""} ${isSaveImage ? "is-save" : ""} ${promptFirst ? "is-prompt" : ""}`}
+          className={`lluna-node-body ${isSettingsCard ? "is-settings" : ""} ${isSaveImage ? "is-save" : ""} ${showArtifactPreview ? "is-media" : ""} ${promptFirst ? "is-prompt" : ""}`}
         >
           {isSaveImage ? (
             <SaveProgressList items={saveItems} />
+          ) : showArtifactPreview ? (
+            <div
+              className="lluna-node-media nodrag nowheel"
+              onPointerDown={stopPointer}
+              onDoubleClick={(event) => {
+                event.stopPropagation();
+                actions.onPreview?.(id);
+              }}
+            >
+              {state?.previewImage ? (
+                <img
+                  src={state.previewImage}
+                  alt={`${nodeLabel} live preview`}
+                  className="lluna-node-live-preview"
+                />
+              ) : artifactIds.length > 1 ? (
+                <ArtifactThumbGrid
+                  artifactIds={artifactIds}
+                  schemaId={definition.schemaId}
+                  fit={String(data.appearance?.imageFit || "cover")}
+                  label={nodeLabel}
+                />
+              ) : (
+                <ArtifactThumbnail
+                  artifactId={artifactIds[0]}
+                  schemaId={definition.schemaId}
+                  fit={String(data.appearance?.imageFit || "cover")}
+                  ratio={String(data.appearance?.imageRatio || "wide")}
+                  label={`${nodeLabel} preview`}
+                />
+              )}
+              {persistedResult?.sourceName && (
+                <span className="lluna-node-media-name" title={persistedResult.sourceName}>
+                  {persistedResult.sourceName}
+                </span>
+              )}
+            </div>
           ) : isSettingsCard ? (
           <div className="lluna-node-settings">
             {showPromptField && promptParam && (
@@ -708,6 +765,23 @@ function LlunaNodeComponent({ id, data, selected }) {
               onChange={(next) => setParameter(stepsParam.id, Number(next))}
             />
           )}
+          {stepsParam &&
+            stepOptions.length === 0 &&
+            Number.isFinite(stepsValue) &&
+            Number.isFinite(stepsParam.minimum) &&
+            Number.isFinite(stepsParam.maximum) && (
+              <QuantityStepper
+                label={stepsParam.label || "Steps"}
+                value={Math.round(stepsValue)}
+                min={stepsParam.minimum}
+                max={stepsParam.maximum}
+                step={typeof stepsParam.step === "number" ? stepsParam.step : 1}
+                prefix=""
+                disabled={data.disabled || busy}
+                onChange={(value) => setParameter(stepsParam.id, value)}
+                stopPointer={stopPointer}
+              />
+            )}
 
           {footerParams.map((parameter) => {
             const isModel =

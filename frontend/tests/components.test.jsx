@@ -2,7 +2,7 @@ import { expect, test, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ReactFlowProvider } from "@xyflow/react";
-import { Dialog, ProgressBar, Switch } from "../src/components";
+import { Dialog, ProgressBar, Switch, ToastProvider } from "../src/components";
 import { LlunaNode } from "../src/nodes/LlunaNode";
 import { NodeActionsProvider } from "../src/nodes/NodeActionsContext";
 import { NodeParameterField } from "../src/nodes/NodeParameterField";
@@ -303,6 +303,62 @@ test("generate image nodes expose model-supported steps in the toolbar", async (
   expect(onParameterChange).toHaveBeenCalledWith("node-steps", "steps", 20);
 });
 
+test("media input nodes render the selected artifact in the card", () => {
+  const fetchMock = vi
+    .spyOn(globalThis, "fetch")
+    .mockImplementation(() => new Promise(() => {}));
+  const definition = /** @type {any} */ ({
+    schemaId: "lluna.input.image",
+    schemaVersion: 1,
+    name: "Load Image",
+    category: "Input/Media",
+    kind: "input",
+    icon: "image",
+    inputs: [],
+    outputs: [{ id: "image", label: "Image", type: "IMAGE" }],
+    parameters: [],
+    supportsPreview: true,
+  });
+  render(
+    <ToastProvider>
+      <ReactFlowProvider>
+        <NodeActionsProvider value={{ actions: {}, modelInventory: [] }}>
+          <LlunaNode
+          id="image-node"
+          type="lluna"
+          draggable
+          dragging={false}
+          selectable
+          deletable
+          zIndex={0}
+          isConnectable
+          positionAbsoluteX={0}
+          positionAbsoluteY={0}
+          selected={false}
+          data={{
+            schemaId: definition.schemaId,
+            schemaVersion: 1,
+            label: "Load Image",
+            definition,
+            parameters: {},
+            appearance: { cardStyle: "visual", showPreview: true },
+            result: {
+              status: "READY",
+              artifactIds: ["artifact-portrait"],
+              sourceName: "portrait.png",
+            },
+          }}
+          />
+        </NodeActionsProvider>
+      </ReactFlowProvider>
+    </ToastProvider>,
+  );
+  expect(screen.getByLabelText("Loading Load Image preview")).toBeInTheDocument();
+  expect(screen.getByText("portrait.png")).toBeInTheDocument();
+  expect(screen.getByLabelText("Load Image node")).toHaveClass("is-media-node");
+  fetchMock.mockRestore();
+});
+
 test("library nodes use shared icons and can only be added by dragging", () => {
   useDesktopStore.setState({ libraryCollapsed: false });
   useEditorStore.setState({
@@ -314,6 +370,17 @@ test("library nodes use shared icons and can only be added by dragging", () => {
         category: "Image/Test",
         description: "Test image operation",
         icon: "image",
+        inputs: [],
+        outputs: [],
+        parameters: [],
+      },
+      {
+        schemaId: "test.video",
+        schemaVersion: 1,
+        name: "Video Tool",
+        category: "Video/Test",
+        description: "Test video operation",
+        icon: "film",
         inputs: [],
         outputs: [],
         parameters: [],
@@ -335,4 +402,8 @@ test("library nodes use shared icons and can only be added by dragging", () => {
     "application/x-lluna-node",
     "test.image",
   );
+
+  fireEvent.click(screen.getByRole("button", { name: /Video 1/ }));
+  expect(screen.getByText("Video Tool")).toBeInTheDocument();
+  expect(screen.queryByText("Image Tool")).not.toBeInTheDocument();
 });

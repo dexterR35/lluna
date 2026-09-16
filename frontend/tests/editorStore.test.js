@@ -516,6 +516,49 @@ test("changing a node model preserves history and marks its output stale", () =>
   expect(changed.data.result?.status).toBe("STALE");
   expect(changed.data.result?.artifactIds).toEqual(["artifact-1"]);
 });
+test("new nodes start with the selected model's reviewed generation defaults", () => {
+  const generate = /** @type {import("../src/types").NodeDefinition} */ ({
+    ...definition,
+    schemaId: "lluna.generate.image",
+    name: "Generate Image",
+    parameters: [
+      {
+        id: "model",
+        label: "Model",
+        type: "model",
+        default: "base",
+        options: [
+          {
+            value: "base",
+            label: "Base",
+            capabilities: {
+              complete: true,
+              steps: { default: 32, minimum: 20, maximum: 50 },
+              guidance: true,
+              guidanceScale: { default: 4.5, minimum: 0, maximum: 20 },
+              negativePrompt: true,
+              seed: true,
+            },
+          },
+        ],
+      },
+      { id: "steps", label: "Steps", type: "integer", default: 4, capability: "steps" },
+      { id: "guidance", label: "Guidance", type: "number", default: 1, capability: "guidance" },
+    ],
+  });
+  useEditorStore.getState().setDefinitions([generate]);
+  const id = addNode(generate.schemaId, { x: 0, y: 0 });
+  const created = required(
+    useEditorStore.getState().nodes.find((node) => node.id === id),
+  );
+  expect(created.data.parameters).toMatchObject({
+    model: "base",
+    steps: 32,
+    guidance: 4.5,
+    negativePrompt: "",
+    seed: -1,
+  });
+});
 test("switching a node's model resets capability-gated parameters to the new model's defaults", () => {
   const generate = /** @type {import("../src/types").NodeDefinition} */ ({
     ...definition,

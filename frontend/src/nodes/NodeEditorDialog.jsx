@@ -204,7 +204,7 @@ export function NodeEditorDialog({ nodeId, onClose, onManageModels }) {
   function selectModel(/** @type {import("../types").ParameterOption} */ option) {
     const capabilities = capabilityContract(option);
     update(activeNode.id, {
-      parameters: capabilities?.complete
+      parameters: capabilities
         ? applyCapabilityDefaults(activeNode.data.parameters || {}, capabilities, option.value)
         : { ...activeNode.data.parameters, model: option.value },
     });

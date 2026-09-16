@@ -63,18 +63,46 @@ const checkpoint = (state) => {
 /** @param {NodeDefinition[]} definitions */
 const definitionsById = (definitions) =>
   Object.fromEntries(definitions.map((value) => [value.schemaId, value]));
-/** @param {NodeDefinition} definition */
-const defaults = (definition) =>
-  Object.fromEntries(
+/**
+ * Resolve defaults through the selected model's capability contract. Node
+ * manifests intentionally keep broad fallback values (for example four
+ * generation steps), while each model can declare a narrower reviewed range.
+ * A newly-created node should never begin with an already-invalid value.
+ * @param {NodeDefinition} definition
+ * @param {unknown} [selectedModel]
+ */
+const defaults = (definition, selectedModel = undefined) => {
+  const values = Object.fromEntries(
     definition.parameters.map((parameter) => [
       parameter.id,
       structuredClone(parameter.default),
     ]),
   );
+  const modelParameter = definition.parameters.find(
+    (parameter) => parameter.id === "model" || parameter.type === "model",
+  );
+  if (!modelParameter) return values;
+  const model = selectedModel ?? values[modelParameter.id];
+  const normalizedModel =
+    typeof model === "string" || typeof model === "number"
+      ? model
+      : String(model ?? "");
+  const selectedOption = modelParameter.options?.find(
+    (option) => String(option.value) === String(normalizedModel),
+  );
+  const capabilities = capabilityContract(selectedOption);
+  return capabilities
+    ? applyCapabilityDefaults(values, capabilities, normalizedModel)
+    : values;
+};
 /** @param {NodeDefinition | undefined} definition @param {Record<string, unknown>} [saved] */
 const restoredParameters = (definition, saved = {}) => {
   if (!definition) return saved;
-  const values = { ...defaults(definition), ...saved };
+  const modelParameter = definition.parameters.find(
+    (parameter) => parameter.id === "model" || parameter.type === "model",
+  );
+  const savedModel = modelParameter ? saved[modelParameter.id] : undefined;
+  const values = { ...defaults(definition, savedModel), ...saved };
   for (const parameter of definition.parameters)
     if (parameter.type === "model" && !values[parameter.id])
       values[parameter.id] = structuredClone(parameter.default);
@@ -246,7 +274,7 @@ function projectFromDocument(document) {
   };
 }
 
-/** @param {string[]} seedIds @param {EditorEdge[]} edges @param {"upstream" | "downstream"} direction */
+/** @param {string[]} seedIds @param {Array<{source: string, target: string}>} edges @param {"upstream" | "downstream"} direction */
 function traverseNodeIds(seedIds, edges, direction) {
   const included = new Set(seedIds);
   const pending = [...seedIds];
@@ -272,7 +300,7 @@ export function downstreamNodeIds(seedIds, edges) {
   return [...traverseNodeIds(seedIds, edges, "downstream")];
 }
 
-/** @param {string} seedId @param {EditorEdge[]} edges @param {"upstream" | "downstream"} direction */
+/** @param {string} seedId @param {Array<{source: string, target: string}>} edges @param {"upstream" | "downstream"} direction */
 function linkedNodeIds(seedId, edges, direction) {
   return traverseNodeIds([seedId], edges, direction);
 }
@@ -779,7 +807,7 @@ const createEditorState = (set, get) => ({
               // editor dialog's model switcher (NodeEditorDialog.jsx) - this
               // compact footer selector used to only overwrite `model`,
               // leaving every other parameter tuned for the previous model.
-              parameters: capabilities?.complete
+              parameters: capabilities
                 ? applyCapabilityDefaults(node.data.parameters || {}, capabilities, value)
                 : { ...node.data.parameters, model: value },
               result: node.data.result
@@ -1039,6 +1067,7 @@ const createEditorState = (set, get) => ({
       startNodeIds: seeds,
       ...bounds,
       color: "teal",
+      appearance: {},
     };
     set((current) => ({
       ...history(current, {
